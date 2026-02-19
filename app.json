@@ -18,8 +18,10 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "supportedArchitectures": ["arm64-v8a"],
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.unsafe.codexm"
     },
     "web": {
       "output": "static",
@@ -38,7 +40,12 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-dev-client",
+      "./plugins/withNdkPkgPrefabRepo",
+      "./plugins/withExtractNativeLibs",
+      "./plugins/withLegacyPackaging"
     ],
     "experiments": {
       "typedRoutes": true,

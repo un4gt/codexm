@@ -1,98 +1,200 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useMemo } from 'react';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
+import { useRouter } from 'expo-router';
+
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useWorkspaces } from '@/src/workspaces/provider';
 
-export default function HomeScreen() {
+function formatDate(ms: number) {
+  try {
+    return new Date(ms).toLocaleString();
+  } catch {
+    return String(ms);
+  }
+}
+
+export default function WorkspacesScreen() {
+  const router = useRouter();
+  const colorScheme = useColorScheme() ?? 'light';
+  const {
+    loading,
+    error,
+    workspaces,
+    activeWorkspaceId,
+    setActive,
+    remove,
+  } = useWorkspaces();
+
+  const activeLabel = useMemo(() => {
+    const active = workspaces.find((w) => w.id === activeWorkspaceId);
+    return active ? active.name : '未选择';
+  }, [activeWorkspaceId, workspaces]);
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <ThemedView style={styles.container}>
+      <View style={styles.header}>
+        <View style={{ flex: 1 }}>
+          <ThemedText type="title">工作区</ThemedText>
+          <ThemedText type="default" style={styles.muted}>
+            当前：<ThemedText type="defaultSemiBold">{activeLabel}</ThemedText>
+          </ThemedText>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/new-workspace')}
+          style={({ pressed }) => [
+            styles.headerButton,
+            { opacity: pressed ? 0.7 : 1, borderColor: Colors[colorScheme].icon },
+          ]}>
+          <ThemedText type="defaultSemiBold">新建</ThemedText>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            if (!activeWorkspaceId) {
+              Alert.alert('未选择工作区', '请先选择一个工作区。');
+              return;
+            }
+            router.push(`/workspace/${activeWorkspaceId}`);
+          }}
+          style={({ pressed }) => [
+            styles.headerButton,
+            { opacity: pressed ? 0.7 : 1, borderColor: Colors[colorScheme].icon },
+          ]}>
+          <ThemedText type="defaultSemiBold">设置</ThemedText>
+        </Pressable>
+      </View>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
+      {error ? (
+        <ThemedText type="default" style={[styles.error, { color: '#ef4444' }]}>
+          {error}
         </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      ) : null}
+
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator />
+        </View>
+      ) : (
+        <FlatList
+          data={workspaces}
+          keyExtractor={(w) => w.id}
+          contentContainerStyle={{ paddingBottom: 24 }}
+          renderItem={({ item }) => {
+            const isActive = item.id === activeWorkspaceId;
+            return (
+              <Pressable
+                accessibilityRole="button"
+                onPress={async () => {
+                  await setActive(item.id);
+                }}
+                onLongPress={() => {
+                  Alert.alert(item.name, '请选择操作', [
+                    { text: '取消', style: 'cancel' },
+                    { text: '设置', onPress: () => router.push(`/workspace/${item.id}`) },
+                    { text: '删除', style: 'destructive', onPress: async () => remove(item.id) },
+                  ]);
+                }}
+                style={({ pressed }) => [
+                  styles.row,
+                  {
+                    opacity: pressed ? 0.8 : 1,
+                    borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)',
+                    backgroundColor: isActive
+                      ? colorScheme === 'dark'
+                        ? 'rgba(59,130,246,0.18)'
+                        : 'rgba(59,130,246,0.10)'
+                      : 'transparent',
+                  },
+                ]}>
+                <View style={{ flex: 1 }}>
+                  <ThemedText type="defaultSemiBold">{item.name}</ThemedText>
+                  <ThemedText type="default" style={styles.muted}>
+                    {formatDate(item.createdAt)}
+                  </ThemedText>
+                </View>
+                <ThemedText type="default" style={styles.muted}>
+                  {isActive ? '当前' : ' '}
+                </ThemedText>
+              </Pressable>
+            );
+          }}
+          ListEmptyComponent={
+            <ThemedText type="default" style={styles.muted}>
+              还没有工作区。可以在上方创建一个。
+            </ThemedText>
+          }
+        />
+      )}
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+    paddingTop: 24,
+    paddingHorizontal: 16,
+  },
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+    marginBottom: 16,
   },
-  stepContainer: {
-    gap: 8,
+  headerButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderRadius: 10,
+  },
+  card: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 16,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  primaryButton: {
+    minHeight: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  primaryButtonText: {
+    color: '#ffffff',
+  },
+  row: {
+    minHeight: 56,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  muted: {
+    opacity: 0.7,
+  },
+  error: {
     marginBottom: 8,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

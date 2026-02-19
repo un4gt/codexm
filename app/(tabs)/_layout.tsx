@@ -19,15 +19,23 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: '工作区',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="folder.fill" color={color} />,
         }}
       />
       <Tabs.Screen
-        name="explore"
+        name="sessions"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: '会话',
+          tabBarIcon: ({ color }) =>
+            <IconSymbol size={28} name="bubble.left.and.bubble.right.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: '设置',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
         }}
       />
     </Tabs>

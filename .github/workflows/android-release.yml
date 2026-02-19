@@ -1,0 +1,118 @@
+name: Android Release APK
+
+on:
+  push:
+    tags:
+      # 常见语义化版本标签：v1.2.3
+      - 'v*'
+      # 兼容你提到的 “-v” 风格标签（例如：android-v1.2.3）
+      - '*-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.abi }})
+    runs-on: ubuntu-latest
+    env:
+      # 可选：用 GitHub Actions Variables 覆盖默认来源/版本（不配置则脚本使用默认值）
+      # - CODEX_TERMUX_REPO / CODEX_TERMUX_TAG（默认：DioNanos/codex-termux / latest）
+      # - RIPGREP_REPO / RIPGREP_TAG（默认：microsoft/ripgrep-prebuilt / v15.0.0）
+      CODEX_TERMUX_REPO: ${{ vars.CODEX_TERMUX_REPO }}
+      CODEX_TERMUX_TAG: ${{ vars.CODEX_TERMUX_TAG }}
+      RIPGREP_REPO: ${{ vars.RIPGREP_REPO }}
+      RIPGREP_TAG: ${{ vars.RIPGREP_TAG }}
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64-v8a, armeabi-v7a]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK deps (SDK/NDK/CMake)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;27.1.12297006" "cmake;3.22.1"
+          yes | sdkmanager --licenses >/dev/null
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Fetch Codex deps (arm64-v8a only)
+        if: matrix.abi == 'arm64-v8a'
+        shell: bash
+        env:
+          # GitHub API 速率限制：建议保留 token（默认使用 github.token）
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/fetch_android_codex_deps.py --abi arm64-v8a
+
+      - name: Skip Codex deps (armeabi-v7a)
+        if: matrix.abi == 'armeabi-v7a'
+        run: echo "armeabi-v7a 构建不内嵌 Codex 二进制（CodexRuntime 在 32-bit 设备上不可用）"
+
+      - name: Build release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd android
+          ./gradlew :app:assembleRelease -PreactNativeArchitectures=${{ matrix.abi }} --no-daemon
+
+      - name: Collect APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "android/app/build/outputs/apk/release/app-release.apk" "dist/codexm-${{ github.ref_name }}-${{ matrix.abi }}.apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codexm-${{ github.ref_name }}-${{ matrix.abi }}
+          path: dist/codexm-${{ github.ref_name }}-${{ matrix.abi }}.apk
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: List release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -Rlah dist
+
+      - name: Publish GitHub Release (attach APKs)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/**/codexm-*.apk

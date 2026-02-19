@@ -8,6 +8,7 @@ node_modules/
 dist/
 web-build/
 expo-env.d.ts
+.serena/
 
 # Native
 .kotlin/
@@ -17,6 +18,11 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+
+# Codex Android deps（从 GitHub Releases 下载到本地，不入库）
+packages/codexm-native/android/src/main/assets/codex/
+android/app/src/main/assets/codex/
+assets/codex/
 
 # Metro
 .metro-health-check*
@@ -39,5 +45,13 @@ yarn-error.*
 app-example
 
 # generated native folders
-/ios
-/android
+/ios/Pods/
+/ios/build/
+android/.gradle/
+android/.cxx/
+android/**/build/
+android/local.properties
+packages/codexm-native/android/.cxx/
+packages/codexm-native/android/build/
+*.apk
+*.aab
