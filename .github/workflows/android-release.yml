@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        abi: [arm64-v8a, armeabi-v7a]
+        abi: [arm64-v8a]
 
     steps:
       - name: Checkout
@@ -64,19 +64,14 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Fetch Codex deps (arm64-v8a only)
-        if: matrix.abi == 'arm64-v8a'
+      - name: Fetch Codex deps
         shell: bash
         env:
           # GitHub API 速率限制：建议保留 token（默认使用 github.token）
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          python3 scripts/fetch_android_codex_deps.py --abi arm64-v8a
-
-      - name: Skip Codex deps (armeabi-v7a)
-        if: matrix.abi == 'armeabi-v7a'
-        run: echo "armeabi-v7a 构建不内嵌 Codex 二进制（CodexRuntime 在 32-bit 设备上不可用）"
+          python3 scripts/fetch_android_codex_deps.py --abi ${{ matrix.abi }}
 
       - name: Build release APK
         shell: bash
