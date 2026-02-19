@@ -55,7 +55,11 @@ jobs:
         run: |
           set -euo pipefail
           sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;27.1.12297006" "cmake;3.22.1"
-          yes | sdkmanager --licenses >/dev/null
+          # `set -o pipefail` + `yes | ...` 会在 sdkmanager 提前结束时让 yes 收到 SIGPIPE，导致 CI 失败。
+          # 这里临时关闭 pipefail，并静默 yes 的 Broken pipe 提示。
+          set +o pipefail
+          yes 2>/dev/null | sdkmanager --licenses >/dev/null
+          set -o pipefail
 
       - name: Install npm dependencies
         run: npm ci
