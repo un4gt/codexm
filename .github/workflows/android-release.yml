@@ -83,6 +83,9 @@ jobs:
         run: |
           set -euo pipefail
           cd android
+          # Windows 下生成的 gradlew 可能没有可执行位，且可能包含 CRLF；CI 里先修正再执行。
+          chmod +x ./gradlew
+          sed -i 's/\r$//' ./gradlew
           ./gradlew :app:assembleRelease -PreactNativeArchitectures=${{ matrix.abi }} --no-daemon
 
       - name: Collect APK
