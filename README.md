@@ -8,9 +8,25 @@ CodexM 是一个以移动端为主的 Codex 交互与 coding 工作台（当前�
 - **WebDAV 集成**：通过 WebDAV 上传/下载代码（用于对接自定义平台；实现侧优先做 workspace 级别的打包/同步策略）。
 - **Workspace 概念**：每个项目一个 workspace，本地路径 `DocumentDirectory/workspaces/<id>/repo/`；并为 Codex 创建独立 `CODEX_HOME/HOME`，确保在该 workspace 内正确访问项目文件。
 - **Codex 交互**：Android 原生 `CodexRuntimeManager` 拉起 `codex app-server`（stdio JSON-RPC/JSONL），桥接 stdout/stderr 事件流；`src/codex/sessionRunner.ts` 已接入真实流式事件（`item/agentMessage/delta`）。
-- **UI**：底部 Tab：`工作区 / 会话 / 设置`（Codex 的鉴权与配置在「设置」里全局管理；工作区只负责项目目录与元数据）。
+- **MCP**：通过 `codex app-server` 的 `config.toml` 对接 MCP（`mcp_servers`）；支持远程 URL 与本地 Rust 可执行（stdio）。本地 MCP 支持运行时下载安装（`.tar.gz`/`.tgz` 或直接二进制），默认全局登记但不启用，可在新建 workspace/session 时勾选启用。
+- **UI**：底部 Tab：`工作区 / 会话 / MCP / 设置`（Codex 的鉴权与配置在「设置」里全局管理；工作区只负责项目目录与元数据）。
 
 参考实现思路：`codex-termux`（在 Android 上运行 codex 并以 app-server 模式启动）。注意：Android 10+ 且 `targetSdkVersion >= 29` 时，SELinux 会阻止第三方应用从 app 私有可写目录（`/data/data/<pkg>/...`）直接 `execve()` 二进制（常见 `avc: denied { execute_no_trans }`），因此本项目采用“assets 作为输入 → 构建时拷贝为 jniLibs（`.so`）→ 运行时从 `nativeLibraryDir` 执行（filesDir 里只放 symlink）”的方式来兼容。
+
+## MCP（Model Context Protocol）
+
+本项目通过 `codex app-server` 的 `config.toml` 对接 MCP（写入 `[mcp_servers.<name>]`）。
+
+- **远程 MCP（URL）**：在 App 的 `MCP` Tab 新增 `URL` 类型 Server；在新建 workspace / 新建 session 时勾选启用即可。
+- **本地 MCP（Rust 可执行，stdio）**：在 `MCP` Tab 新增 `stdio` 类型 Server。Android 下可填写安装包 URL（`.tar.gz`/`.tgz` 或直接二进制）进行**运行时安装**，安装后会自动把 `command` 指向已安装的可执行文件路径。
+
+限制与注意事项：
+
+- 仅面向 **Rust/可执行式 MCP**（rmcp 生态）；不提供 Node.js / Python runtime 以运行对应 MCP server。
+- `stdio` 会执行本机命令，请只安装/登记你信任来源的可执行文件。
+- 部分 Android 设备/系统策略可能限制从应用可写目录执行下载的 ELF（常见 `Permission denied` / `execute_no_trans`）。如遇该问题，请优先使用远程 MCP，或在你的运行环境中放开限制。
+
+更多细节见：`docs/mcp.md`。
 
 ## Android（Dev Client）运行
 

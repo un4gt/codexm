@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 
 import { Stack, useRouter } from 'expo-router';
@@ -7,6 +7,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useMcp } from '@/src/mcp/provider';
+import { isMcpServerProbablyRunnable } from '@/src/mcp/runnable';
 import { saveAuth } from '@/src/auth/authStore';
 import type { GitHttpsAuth, WebDavStoredAuth } from '@/src/auth/types';
 import { gitClone } from '@/src/git/nativeGit';
@@ -47,12 +49,33 @@ export default function NewWorkspaceScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
   const { refresh } = useWorkspaces();
+  const { loading: mcpLoading, error: mcpError, servers: mcpServers } = useMcp();
+
+  const [mcpRunnable, setMcpRunnable] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        mcpServers.map(async (s) => [s.id, await isMcpServerProbablyRunnable(s)] as const)
+      );
+      if (cancelled) return;
+      setMcpRunnable(Object.fromEntries(entries));
+    })().catch(() => {
+      if (cancelled) return;
+      setMcpRunnable({});
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [mcpServers]);
 
   const [sourceType, setSourceType] = useState<SourceType>('empty');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState('');
+  const [mcpDefaultEnabledServerIds, setMcpDefaultEnabledServerIds] = useState<string[]>([]);
 
   // Git
   const [gitRemoteUrl, setGitRemoteUrl] = useState('');
@@ -368,6 +391,55 @@ export default function NewWorkspaceScreen() {
         </ThemedView>
       ) : null}
 
+      <ThemedView style={styles.card}>
+        <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
+          MCP（可选）
+        </ThemedText>
+        <ThemedText style={styles.muted}>新建会话时将默认启用这些 MCP（也可在新建会话时覆盖）。</ThemedText>
+
+        {mcpLoading ? (
+          <ActivityIndicator style={{ marginTop: 12 }} />
+        ) : (
+          <>
+            {mcpError ? <ThemedText style={[styles.error, { color: '#ef4444' }]}>{mcpError}</ThemedText> : null}
+            {mcpServers.length === 0 ? (
+              <ThemedText style={styles.muted}>暂无已登记的 MCP Server。你可以先到下方 Tab「MCP」里新增。</ThemedText>
+            ) : (
+              <View style={{ marginTop: 10 }}>
+                {mcpServers.map((s) => {
+                  const enabled = mcpDefaultEnabledServerIds.includes(s.id);
+                  const runnable = mcpRunnable[s.id] ?? true;
+                  return (
+                    <View key={s.id} style={styles.switchRow}>
+                      <View style={{ flex: 1 }}>
+                        <ThemedText type="defaultSemiBold">{s.name}</ThemedText>
+                        <ThemedText style={styles.muted}>
+                          {s.transport === 'url' ? `url: ${s.url ?? ''}` : `command: ${s.command ?? ''}`}
+                        </ThemedText>
+                        {!runnable ? (
+                          <ThemedText style={[styles.muted, { color: '#ef4444' }]}>
+                            未安装/不可执行（请先在底部「MCP」里安装或修正 command）
+                          </ThemedText>
+                        ) : null}
+                      </View>
+                      <Switch
+                        value={enabled}
+                        disabled={!runnable && !enabled}
+                        onValueChange={(next) => {
+                          setMcpDefaultEnabledServerIds((prev) =>
+                            next ? Array.from(new Set([...prev, s.id])) : prev.filter((x) => x !== s.id)
+                          );
+                        }}
+                      />
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </>
+        )}
+      </ThemedView>
+
       {error ? <ThemedText style={[styles.error, { color: '#ef4444' }]}>{error}</ThemedText> : null}
 
       <Pressable
@@ -423,6 +495,7 @@ export default function NewWorkspaceScreen() {
               name: name.trim(),
               git,
               webdav,
+              mcpDefaultEnabledServerIds: mcpDefaultEnabledServerIds.filter(Boolean).length ? mcpDefaultEnabledServerIds : undefined,
             });
 
             await setActiveWorkspace(ws.id);

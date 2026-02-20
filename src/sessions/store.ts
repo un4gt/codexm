@@ -46,6 +46,7 @@ async function readIndex(workspaceId: WorkspaceId): Promise<SessionsIndex> {
     createdAt: s.createdAt,
     updatedAt: s.updatedAt,
     codexThreadId: s.codexThreadId,
+    codexCollaborationMode: s.codexCollaborationMode,
   })) as Session[];
   return { version: 2, sessions };
 }
@@ -66,7 +67,11 @@ export async function getSession(workspaceId: WorkspaceId, sessionId: SessionId)
   return (idx.sessions ?? []).find((s) => s.id === sessionId) ?? null;
 }
 
-export async function createSession(workspaceId: WorkspaceId, title?: string): Promise<Session> {
+export async function createSession(
+  workspaceId: WorkspaceId,
+  title?: string,
+  opts?: { mcpEnabledServerIds?: string[] }
+): Promise<Session> {
   const now = Date.now();
   const session: Session = {
     id: uuidV4(),
@@ -74,6 +79,7 @@ export async function createSession(workspaceId: WorkspaceId, title?: string): P
     title: title?.trim() || '新会话',
     createdAt: now,
     updatedAt: now,
+    mcpEnabledServerIds: opts?.mcpEnabledServerIds,
   };
 
   const idx = await readIndex(workspaceId);
@@ -83,6 +89,12 @@ export async function createSession(workspaceId: WorkspaceId, title?: string): P
   await FileSystem.writeAsStringAsync(messagesPath(workspaceId, session.id), JSON.stringify({ version: 1, messages: [] }, null, 2));
 
   return session;
+}
+
+export async function cloneSessionMessages(workspaceId: WorkspaceId, fromSessionId: SessionId, toSessionId: SessionId) {
+  await ensureSessionsDir(workspaceId);
+  const from = await FileSystem.readAsStringAsync(messagesPath(workspaceId, fromSessionId));
+  await FileSystem.writeAsStringAsync(messagesPath(workspaceId, toSessionId), from);
 }
 
 export async function renameSession(workspaceId: WorkspaceId, sessionId: SessionId, title: string) {
@@ -101,6 +113,22 @@ export async function setSessionCodexThreadId(workspaceId: WorkspaceId, sessionI
       ? threadId
         ? { ...s, codexThreadId: threadId, updatedAt: Date.now() }
         : { ...s, codexThreadId: undefined, updatedAt: Date.now() }
+      : s
+  );
+  await writeIndex(workspaceId, idx);
+}
+
+export async function setSessionCodexCollaborationMode(
+  workspaceId: WorkspaceId,
+  sessionId: SessionId,
+  mode: Session['codexCollaborationMode'] | null
+) {
+  const idx = await readIndex(workspaceId);
+  idx.sessions = (idx.sessions ?? []).map((s) =>
+    s.id === sessionId
+      ? mode
+        ? { ...s, codexCollaborationMode: mode, updatedAt: Date.now() }
+        : { ...s, codexCollaborationMode: undefined, updatedAt: Date.now() }
       : s
   );
   await writeIndex(workspaceId, idx);

@@ -163,3 +163,17 @@ Java_com_codexm_nativemodules_CodexMGitModule_nativeStatus(JNIEnv *env,
     return nullptr;
   }
 }
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_codexm_nativemodules_CodexMGitModule_nativeDiff(JNIEnv *env,
+                                                   jobject /*thiz*/,
+                                                   jstring localPath,
+                                                   jint maxBytes) {
+  try {
+    const auto diff = git_diff_unified(jstring_to_string(env, localPath), static_cast<size_t>(maxBytes));
+    return env->NewStringUTF(diff.c_str());
+  } catch (const GitException &e) {
+    throw_java_runtime(env, e.what());
+    return nullptr;
+  }
+}

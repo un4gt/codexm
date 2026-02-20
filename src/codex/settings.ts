@@ -2,6 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import { deleteAuth, loadAuth, saveAuth } from '@/src/auth/authStore';
 import type { CodexProviderAuth } from '@/src/auth/types';
+import type { McpServer } from '@/src/mcp/types';
 import type { AuthRef } from '@/src/workspaces/types';
 
 export type CodexApprovalPolicy = 'untrusted' | 'on-request' | 'on-failure' | 'never';
@@ -16,6 +17,8 @@ export type CodexSettings = {
   openaiBaseUrl?: string;
   approvalPolicy: CodexApprovalPolicy;
   personality: CodexPersonality;
+  /** 实验特性：多智能体（对应 config.toml 的 [features].multi_agent）。 */
+  featuresMultiAgent?: boolean;
   /** 专家模式：使用自定义 config.toml 文本。 */
   useRawConfigToml?: boolean;
   /** 专家模式：自定义 config.toml 内容（不要在这里粘贴密钥）。 */
@@ -54,6 +57,7 @@ export function defaultCodexSettings(): CodexSettings {
     enabled: true,
     approvalPolicy: 'never',
     personality: 'none',
+    featuresMultiAgent: false,
   };
 }
 
@@ -142,6 +146,28 @@ function tomlString(v: string) {
   return JSON.stringify(v);
 }
 
+function generateMcpServersToml(servers: McpServer[]) {
+  const enabled = (servers ?? []).filter((s) => s && s.configKey?.trim());
+  if (!enabled.length) return '';
+
+  const lines: string[] = [];
+  lines.push('# MCP servers（由 CodexM 按会话自动注入）');
+
+  for (const s of enabled) {
+    const key = s.configKey.trim();
+    lines.push('');
+    lines.push(`[mcp_servers.${key}]`);
+    if (s.transport === 'url') {
+      if (s.url?.trim()) lines.push(`url = ${tomlString(s.url.trim())}`);
+    } else {
+      if (s.command?.trim()) lines.push(`command = ${tomlString(s.command.trim())}`);
+      if (Array.isArray(s.args) && s.args.length) lines.push(`args = ${JSON.stringify(s.args)}`);
+    }
+  }
+
+  return `${lines.join('\n')}\n`;
+}
+
 export function generateCodexConfigToml(s: CodexSettings) {
   const lines: string[] = [];
   lines.push('# 由 CodexM 自动生成');
@@ -154,6 +180,12 @@ export function generateCodexConfigToml(s: CodexSettings) {
   // 默认使用 Codex 内置 OpenAI provider（配合 auth.json 或 keyring）。
   // 在移动端我们会把用户在 SecureStore 里保存的 API Key 同步到 CODEX_HOME/auth.json（见 materializeCodexConfigFiles）。 
   lines.push(`model_provider = ${tomlString('openai')}`);
+
+  if (s.featuresMultiAgent) {
+    lines.push('');
+    lines.push('[features]');
+    lines.push('multi_agent = true');
+  }
 
   // sandbox_mode 暂不在此写入；未来可按会话覆盖。
   // lines.push(`sandbox_mode = ${tomlString('read-only')}`);
@@ -175,10 +207,28 @@ export function generateCodexAuthJson(apiKey: string) {
   return `${JSON.stringify(payload, null, 2)}\n`;
 }
 
-export async function materializeCodexConfigFiles() {
+export async function materializeCodexConfigFiles(opts?: {
+  mcpServers?: McpServer[];
+  enabledMcpServerIds?: string[];
+}) {
   const s = await getCodexSettings();
   await ensureCodexHomeDir();
-  const cfgRaw = s.useRawConfigToml && s.rawConfigToml?.trim() ? s.rawConfigToml : generateCodexConfigToml(s);
+  const usingRaw = Boolean(s.useRawConfigToml && s.rawConfigToml?.trim());
+  let cfgRaw = usingRaw ? (s.rawConfigToml ?? '') : generateCodexConfigToml(s);
+
+  const enabledIds = new Set((opts?.enabledMcpServerIds ?? []).filter(Boolean));
+  let warnings: string[] | undefined = undefined;
+
+  if (!usingRaw && enabledIds.size && (opts?.mcpServers?.length ?? 0) > 0) {
+    const enabledServers = (opts?.mcpServers ?? []).filter((x) => enabledIds.has(x.id));
+    const snippet = generateMcpServersToml(enabledServers);
+    if (snippet.trim()) cfgRaw = `${cfgRaw.trimEnd()}\n\n${snippet.trim()}\n`;
+  }
+
+  if (usingRaw && enabledIds.size) {
+    warnings = ['已启用 rawConfigToml：不会自动注入 MCP 配置，请在 rawConfigToml 中自行配置。'];
+  }
+
   const cfg = cfgRaw.endsWith('\n') ? cfgRaw : `${cfgRaw}\n`;
   const configTomlUri = `${codexHomeUri()}config.toml`;
   await FileSystem.writeAsStringAsync(configTomlUri, cfg);
@@ -204,5 +254,5 @@ export async function materializeCodexConfigFiles() {
     }
   }
 
-  return { settings: s, codexHomeUri: codexHomeUri(), configTomlUri, configToml: cfg, authJsonUri };
+  return { settings: s, codexHomeUri: codexHomeUri(), configTomlUri, configToml: cfg, authJsonUri, warnings };
 }

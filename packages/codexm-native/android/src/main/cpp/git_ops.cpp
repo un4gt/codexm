@@ -390,3 +390,144 @@ GitStatus git_status(const std::string &localPath) {
   git_repository_free(repo);
   return out;
 }
+
+struct DiffBuffer {
+  std::string out;
+  size_t maxBytes = 0;
+  bool truncated = false;
+};
+
+static int diff_print_cb(const git_diff_delta * /*delta*/,
+                         const git_diff_hunk * /*hunk*/,
+                         const git_diff_line *line,
+                         void *payload) {
+  auto *buf = static_cast<DiffBuffer *>(payload);
+  if (!buf || !line) return 0;
+  if (buf->maxBytes > 0 && buf->out.size() >= buf->maxBytes) {
+    buf->truncated = true;
+    return GIT_EUSER;
+  }
+
+  // `git_diff_print(..., GIT_DIFF_FORMAT_PATCH, ...)` provides the line type via `origin` but
+  // does not include the unified-diff prefix in `content` for ordinary lines. Add it so the
+  // output can be parsed/applied and remains readable.
+  if (line->origin == '+' || line->origin == '-' || line->origin == ' ') {
+    buf->out.push_back(line->origin);
+  }
+
+  const size_t want = static_cast<size_t>(line->content_len);
+  const size_t remaining = buf->maxBytes > 0 ? (buf->maxBytes - buf->out.size()) : want;
+  const size_t n = want > remaining ? remaining : want;
+
+  if (n > 0) buf->out.append(line->content, n);
+  if (buf->maxBytes > 0 && n < want) {
+    buf->truncated = true;
+    return GIT_EUSER;
+  }
+  return 0;
+}
+
+static void append_section_header(DiffBuffer &buf, const std::string &title) {
+  buf.out.append(title);
+  if (!title.empty() && title.back() != '\n') buf.out.push_back('\n');
+}
+
+static void print_diff(DiffBuffer &buf, git_diff *diff) {
+  if (!diff) return;
+  const size_t deltas = git_diff_num_deltas(diff);
+  if (deltas == 0) {
+    buf.out.append("（无变更）\n");
+    return;
+  }
+
+  const int rc = git_diff_print(diff, GIT_DIFF_FORMAT_PATCH, diff_print_cb, &buf);
+  if (rc == GIT_EUSER && buf.truncated) {
+    buf.out.append("\n…（diff 已截断）\n");
+    return;
+  }
+  if (rc != 0) throw GitException(last_error_message(rc));
+}
+
+std::string git_diff_unified(const std::string &localPath, size_t maxBytes) {
+  ensure_libgit2();
+
+  git_repository *repo = nullptr;
+  int rc = git_repository_open(&repo, localPath.c_str());
+  if (rc != 0) throw GitException(last_error_message(rc));
+
+  git_index *index = nullptr;
+  rc = git_repository_index(&index, repo);
+  if (rc != 0) {
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+
+  git_tree *headTree = nullptr;
+  git_reference *headRef = nullptr;
+  rc = git_repository_head(&headRef, repo);
+  if (rc == 0) {
+    git_object *headObj = nullptr;
+    rc = git_reference_peel(&headObj, headRef, GIT_OBJECT_COMMIT);
+    if (rc != 0) {
+      git_reference_free(headRef);
+      git_index_free(index);
+      git_repository_free(repo);
+      throw GitException(last_error_message(rc));
+    }
+    rc = git_commit_tree(&headTree, reinterpret_cast<git_commit *>(headObj));
+    git_object_free(headObj);
+    git_reference_free(headRef);
+    if (rc != 0) {
+      git_index_free(index);
+      git_repository_free(repo);
+      throw GitException(last_error_message(rc));
+    }
+  } else if (rc == GIT_ENOTFOUND || rc == GIT_EUNBORNBRANCH) {
+    // Repo has no commits yet; treat HEAD tree as empty.
+  } else {
+    git_index_free(index);
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+
+  DiffBuffer buf;
+  buf.maxBytes = maxBytes;
+
+  git_diff *diffStaged = nullptr;
+  git_diff_options stagedOpts = GIT_DIFF_OPTIONS_INIT;
+  rc = git_diff_tree_to_index(&diffStaged, repo, headTree, index, &stagedOpts);
+  if (rc != 0) {
+    if (headTree) git_tree_free(headTree);
+    git_index_free(index);
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+
+  git_diff *diffWorkdir = nullptr;
+  git_diff_options workOpts = GIT_DIFF_OPTIONS_INIT;
+  workOpts.flags = GIT_DIFF_INCLUDE_UNTRACKED | GIT_DIFF_RECURSE_UNTRACKED_DIRS |
+                   GIT_DIFF_INCLUDE_UNTRACKED_CONTENT;
+  rc = git_diff_index_to_workdir(&diffWorkdir, repo, index, &workOpts);
+  if (rc != 0) {
+    git_diff_free(diffStaged);
+    if (headTree) git_tree_free(headTree);
+    git_index_free(index);
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+
+  append_section_header(buf, "# Staged (HEAD..INDEX)");
+  print_diff(buf, diffStaged);
+  buf.out.push_back('\n');
+  append_section_header(buf, "# Workdir (INDEX..WORKDIR, include untracked)");
+  print_diff(buf, diffWorkdir);
+
+  git_diff_free(diffWorkdir);
+  git_diff_free(diffStaged);
+  if (headTree) git_tree_free(headTree);
+  git_index_free(index);
+  git_repository_free(repo);
+
+  if (buf.out.empty()) return "（无变更）\n";
+  return buf.out;
+}

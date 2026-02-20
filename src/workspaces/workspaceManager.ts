@@ -9,6 +9,7 @@ export async function createWorkspace(params: {
     name: string;
     git?: Workspace['git'];
     webdav?: Workspace['webdav'];
+    mcpDefaultEnabledServerIds?: Workspace['mcpDefaultEnabledServerIds'];
 }): Promise<Workspace> {
     const id: WorkspaceId = uuidV4();
     const ws: Workspace = {
@@ -18,6 +19,7 @@ export async function createWorkspace(params: {
         localPath: workspaceRoot(id),
         git: params.git,
         webdav: params.webdav,
+        mcpDefaultEnabledServerIds: params.mcpDefaultEnabledServerIds,
     };
     await initWorkspace(ws);
     return ws;

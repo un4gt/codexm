@@ -61,6 +61,7 @@ class CodexMGitModule(private val reactContext: ReactApplicationContext) :
   )
 
   private external fun nativeStatus(localPath: String): WritableMap
+  private external fun nativeDiff(localPath: String, maxBytes: Int): String
 
   @ReactMethod
   fun clone(params: ReadableMap, promise: Promise) {
@@ -156,6 +157,21 @@ class CodexMGitModule(private val reactContext: ReactApplicationContext) :
         promise.resolve(res)
       } catch (e: Throwable) {
         promise.reject("E_GIT_STATUS", e.message, e)
+      }
+    }
+  }
+
+  @ReactMethod
+  fun diff(params: ReadableMap, promise: Promise) {
+    ioExecutor.execute {
+      try {
+        val localRepoDirUri =
+          params.getString("localRepoDirUri") ?: throw IllegalArgumentException("localRepoDirUri is required")
+        val maxBytes = if (params.hasKey("maxBytes") && !params.isNull("maxBytes")) params.getInt("maxBytes") else 400000
+        val res = nativeDiff(uriToFilePath(localRepoDirUri), maxBytes)
+        promise.resolve(res)
+      } catch (e: Throwable) {
+        promise.reject("E_GIT_DIFF", e.message, e)
       }
     }
   }

@@ -1,6 +1,7 @@
 import type { Workspace } from '@/src/workspaces/types';
 import { Platform } from 'react-native';
 
+import { listMcpServers } from '@/src/mcp/store';
 import { getSession, setSessionCodexThreadId } from '@/src/sessions/store';
 import { ensureWorkspaceDirs, workspaceRepoPath } from '@/src/workspaces/paths';
 
@@ -13,6 +14,7 @@ import { getCodexApiKey, getCodexSettings, materializeCodexConfigFiles } from '.
 export type CodexTurnEvent =
   | { type: 'text'; text: string }
   | { type: 'error'; message: string }
+  | { type: 'rpc_result'; method: string; result: any }
   | { type: 'done' };
 
 /**
@@ -23,7 +25,22 @@ export type CodexTurnEvent =
 export async function* runCodexTurn(_params: {
   workspace: Workspace;
   sessionId: string;
-  input: string;
+  input?: string;
+  kind?: 'turn' | 'review' | 'rpc';
+  reviewTarget?: any;
+  collaborationMode?: 'code' | 'plan';
+  rpcCalls?: Array<{
+    method: string;
+    params?: any;
+    /**
+     * 是否需要自动解析/确保 threadId。为 true 时，如果 params.threadId 未提供，将自动注入当前会话 threadId。
+     */
+    requiresThread?: boolean;
+    /** 是否把结果序列化为文本输出（默认 true）。 */
+    emitText?: boolean;
+    /** 可选：输出时的标题。 */
+    title?: string;
+  }>;
 }): AsyncGenerator<CodexTurnEvent> {
   if (Platform.OS !== 'android') {
     yield { type: 'error', message: '当前仅实现 Android 端内嵌 codex app-server（stdio JSON-RPC）。' };
@@ -31,7 +48,19 @@ export async function* runCodexTurn(_params: {
     return;
   }
 
-  const { workspace, sessionId, input } = _params;
+  const { workspace, sessionId } = _params;
+  const kind = _params.kind ?? 'turn';
+  const inputText = _params.input ?? '';
+  if (kind === 'turn' && !inputText.trim()) {
+    yield { type: 'error', message: '输入为空。' };
+    yield { type: 'done' };
+    return;
+  }
+  if (kind === 'rpc' && (!_params.rpcCalls || _params.rpcCalls.length === 0)) {
+    yield { type: 'error', message: 'rpcCalls 为空：无法执行 RPC 命令。' };
+    yield { type: 'done' };
+    return;
+  }
 
   class AsyncQueue<T> {
     private items: T[] = [];
@@ -50,10 +79,35 @@ export async function* runCodexTurn(_params: {
       while (this.waiters.length) this.waiters.shift()?.(null);
     }
 
-    async shift(): Promise<T | null> {
+    isClosed() {
+      return this.closed;
+    }
+
+    async shift(timeoutMs?: number): Promise<T | null> {
       if (this.items.length) return this.items.shift() ?? null;
       if (this.closed) return null;
-      return await new Promise<T | null>((resolve) => this.waiters.push(resolve));
+      const ms = typeof timeoutMs === 'number' ? timeoutMs : null;
+      if (ms == null || !Number.isFinite(ms) || ms <= 0) {
+        return await new Promise<T | null>((resolve) => this.waiters.push(resolve));
+      }
+
+      return await new Promise<T | null>((resolve) => {
+        let waiter: ((v: T | null) => void) | null = null;
+        const timer = setTimeout(() => {
+          if (waiter) {
+            const idx = this.waiters.indexOf(waiter);
+            if (idx !== -1) this.waiters.splice(idx, 1);
+          }
+          resolve(null);
+        }, ms);
+
+        waiter = (v: T | null) => {
+          clearTimeout(timer);
+          resolve(v);
+        };
+
+        this.waiters.push(waiter);
+      });
     }
   }
 
@@ -108,7 +162,19 @@ export async function* runCodexTurn(_params: {
     return;
   }
 
-  const { codexHomeUri } = await materializeCodexConfigFiles();
+  const session = await getSession(workspace.id, sessionId);
+  const enabledMcpServerIdsRaw = session?.mcpEnabledServerIds ?? workspace.mcpDefaultEnabledServerIds ?? [];
+  const enabledMcpServerIds = Array.from(new Set((enabledMcpServerIdsRaw ?? []).filter(Boolean)));
+  let mcpServers: Awaited<ReturnType<typeof listMcpServers>> = [];
+  if (enabledMcpServerIds.length) {
+    try {
+      mcpServers = await listMcpServers();
+    } catch {
+      mcpServers = [];
+    }
+  }
+
+  const { codexHomeUri } = await materializeCodexConfigFiles({ mcpServers, enabledMcpServerIds });
 
   const env: Record<string, string> = {
     CODEX_HOME: fileUriToPath(codexHomeUri),
@@ -143,6 +209,66 @@ export async function* runCodexTurn(_params: {
 
   let pump: Promise<void> | null = null;
 
+  // UI-friendly streaming: Codex may emit very frequent deltas (token-level). Updating UI for every
+  // delta can freeze React Native and make it appear "non-streaming". We coalesce deltas and flush
+  // at most ~30fps, or when the buffer grows large, and always flush on terminal events.
+  const FLUSH_INTERVAL_MS = 33;
+  const FLUSH_CHUNK_CHARS = 512;
+  let pendingText = '';
+  let sawAnyDelta = false;
+  let lastFlushMs = Date.now();
+
+  function takeFlush(force = false): string | null {
+    if (!pendingText) return null;
+    const now = Date.now();
+    if (force || now - lastFlushMs >= FLUSH_INTERVAL_MS || pendingText.length >= FLUSH_CHUNK_CHARS) {
+      const out = pendingText;
+      pendingText = '';
+      lastFlushMs = now;
+      return out;
+    }
+    return null;
+  }
+
+  function pushDelta(delta: string): string | null {
+    pendingText += delta;
+    return takeFlush(false);
+  }
+
+  function extractDelta(delta: unknown): string | null {
+    if (typeof delta === 'string') return delta;
+    if (delta && typeof delta === 'object') {
+      const t = (delta as any).text;
+      if (typeof t === 'string') return t;
+    }
+    return null;
+  }
+
+  function extractCompletedItemText(item: unknown): string | null {
+    if (!item || typeof item !== 'object') return null;
+    const anyItem = item as any;
+
+    const direct = anyItem.text ?? anyItem.message ?? anyItem.content;
+    if (typeof direct === 'string' && direct) return direct;
+
+    const maybeParts = anyItem.output ?? anyItem.message?.output ?? anyItem.message?.content ?? anyItem.content;
+    if (!Array.isArray(maybeParts)) return null;
+
+    let out = '';
+    for (const part of maybeParts) {
+      if (!part) continue;
+      if (typeof part === 'string') {
+        out += part;
+        continue;
+      }
+      if (typeof part === 'object') {
+        if (typeof (part as any).text === 'string') out += (part as any).text;
+        else if (typeof (part as any).content === 'string') out += (part as any).content;
+      }
+    }
+    return out || null;
+  }
+
   try {
     unsubscribe = onCodexRuntimeLine((ev) => {
       if (ev.runtimeId !== runtimeId) return;
@@ -174,11 +300,14 @@ export async function* runCodexTurn(_params: {
     });
     await rpc.notify('initialized', {});
 
-    // Thread
-    const s = await getSession(workspace.id, sessionId);
-    let threadId = s?.codexThreadId ?? null;
+    // Thread (only if needed)
+    const needsThread =
+      kind !== 'rpc' || (_params.rpcCalls ?? []).some((c) => Boolean(c.requiresThread));
 
-    if (threadId) {
+    const s = needsThread ? session : null;
+    let threadId = needsThread ? s?.codexThreadId ?? null : null;
+
+    if (needsThread && threadId) {
       try {
         await rpc.request('thread/resume', {
           threadId,
@@ -197,7 +326,7 @@ export async function* runCodexTurn(_params: {
       }
     }
 
-    if (!threadId) {
+    if (needsThread && !threadId) {
       const res = await rpc.request<any>('thread/start', {
         cwd: fileUriToPath(cwdUri),
         approvalPolicy: settings.approvalPolicy,
@@ -207,40 +336,110 @@ export async function* runCodexTurn(_params: {
       if (threadId) await setSessionCodexThreadId(workspace.id, sessionId, threadId);
     }
 
-    if (!threadId) throw new Error('Codex threadId 缺失：thread/start 或 thread/resume 返回异常。');
+    if (needsThread && !threadId) throw new Error('Codex threadId 缺失：thread/start 或 thread/resume 返回异常。');
+
+    if (kind === 'rpc') {
+      const calls = _params.rpcCalls ?? [];
+      for (const call of calls) {
+        const params: any = call.params ? { ...call.params } : {};
+        if (call.requiresThread && params.threadId == null) params.threadId = threadId;
+
+        const result = await rpc.request<any>(call.method, params);
+        yield { type: 'rpc_result', method: call.method, result };
+
+        if (call.emitText ?? true) {
+          if (call.title?.trim()) yield { type: 'text', text: `${call.title.trim()}\n` };
+          yield { type: 'text', text: JSON.stringify(result, null, 2) };
+          yield { type: 'text', text: '\n' };
+        }
+
+        // Special-case: thread/compact/start triggers async work; keep the server alive until it finishes.
+        if (call.method === 'thread/compact/start') {
+          let done = false;
+          while (!done) {
+            const n = await notifQueue.shift();
+            if (!n) break;
+            if (n.method === 'item/completed') {
+              const item = n.params?.item;
+              if (item && typeof item === 'object' && (item as any).type === 'contextCompaction') {
+                done = true;
+                continue;
+              }
+            }
+            if (n.method === 'turn/completed') {
+              done = true;
+            }
+          }
+        }
+      }
+      const tail = takeFlush(true);
+      if (tail) yield { type: 'text', text: tail };
+      return;
+    }
 
     // Start turn
-    const turnRes = await rpc.request<any>('turn/start', {
-      threadId,
-      cwd: fileUriToPath(cwdUri),
-      approvalPolicy: settings.approvalPolicy,
-      input: [{ type: 'text', text: input }],
-    });
-    const turnId: string | null = turnRes?.turn?.id ?? null;
+    let turnId: string | null = null;
+    if (kind === 'review') {
+      const reviewRes = await rpc.request<any>('review/start', {
+        threadId,
+        delivery: 'inline',
+        target: _params.reviewTarget ?? { type: 'uncommittedChanges' },
+      });
+      turnId = reviewRes?.turn?.id ?? null;
+    } else {
+      const turnParams: any = {
+        threadId,
+        cwd: fileUriToPath(cwdUri),
+        approvalPolicy: settings.approvalPolicy,
+        input: [{ type: 'text', text: inputText }],
+      };
+      if (_params.collaborationMode) turnParams.collaborationMode = _params.collaborationMode;
+      const turnRes = await rpc.request<any>('turn/start', turnParams);
+      turnId = turnRes?.turn?.id ?? null;
+    }
 
     // Stream events until this turn completes
     let completed = false;
     while (!completed) {
-      const n = await notifQueue.shift();
-      if (!n) break;
+      // 如果 Codex 在短时间内把输出一次性写完（尤其是短回答），可能不会再有新的通知来触发 takeFlush，
+      // 导致 UI 只能在 turn/completed 时“一次性出现”。这里用超时轮询把 pendingText 定期刷出来。
+      if (pendingText && Date.now() - lastFlushMs >= FLUSH_INTERVAL_MS) {
+        const chunk = takeFlush(true);
+        if (chunk) yield { type: 'text', text: chunk };
+      }
+
+      const timeoutMs = pendingText ? Math.max(1, FLUSH_INTERVAL_MS - (Date.now() - lastFlushMs)) : undefined;
+      const n = await notifQueue.shift(timeoutMs);
+      if (!n) {
+        const chunk = takeFlush(true);
+        if (chunk) yield { type: 'text', text: chunk };
+        if (notifQueue.isClosed()) break;
+        continue;
+      }
 
       if (n.method === 'item/agentMessage/delta') {
-        const delta = n.params?.delta;
-        if (typeof delta === 'string' && delta) {
-          yield { type: 'text', text: delta };
+        const delta = extractDelta(n.params?.delta);
+        if (delta) {
+          sawAnyDelta = true;
+          const chunk = pushDelta(delta);
+          if (chunk) yield { type: 'text', text: chunk };
         }
         continue;
       }
 
       if (typeof n.method === 'string' && n.method.endsWith('/outputDelta')) {
-        const delta = n.params?.delta;
-        if (typeof delta === 'string' && delta) {
-          yield { type: 'text', text: delta };
+        const delta = extractDelta(n.params?.delta);
+        if (delta) {
+          sawAnyDelta = true;
+          const chunk = pushDelta(delta);
+          if (chunk) yield { type: 'text', text: chunk };
         }
         continue;
       }
 
       if (n.method === 'error') {
+        const chunk = takeFlush(true);
+        if (chunk) yield { type: 'text', text: chunk };
         const err = n.params?.error;
         const msg = err?.message ?? n.params?.message ?? 'Codex 运行出错。';
         const parts: string[] = [String(msg)];
@@ -260,7 +459,35 @@ export async function* runCodexTurn(_params: {
         continue;
       }
 
+      if (n.method === 'item/completed') {
+        const item = n.params?.item;
+        if (item && typeof item === 'object' && item.type === 'exitedReviewMode') {
+          const review = (item as any).review;
+          if (typeof review === 'string' && review.trim()) {
+            const chunk = takeFlush(true);
+            if (chunk) yield { type: 'text', text: chunk };
+            yield { type: 'text', text: review };
+          }
+        }
+        // 兼容：某些版本可能不发 delta，而是在 item/completed 里直接给出完整 agent message。
+        if (!sawAnyDelta && item && typeof item === 'object') {
+          const t = (item as any).type;
+          if (t === 'agentMessage' || t === 'assistantMessage') {
+            const full = extractCompletedItemText(item);
+            if (typeof full === 'string' && full) {
+              const chunk = takeFlush(true);
+              if (chunk) yield { type: 'text', text: chunk };
+              yield { type: 'text', text: full };
+              sawAnyDelta = true;
+            }
+          }
+        }
+        continue;
+      }
+
       if (n.method === 'turn/completed') {
+        const chunk = takeFlush(true);
+        if (chunk) yield { type: 'text', text: chunk };
         const t = n.params?.turn;
         const id = t?.id ?? n.params?.turnId;
         if (!turnId || id === turnId) {
@@ -273,8 +500,14 @@ export async function* runCodexTurn(_params: {
         continue;
       }
     }
+
+    // If the turn ended without a terminal event we recognized, flush any pending deltas.
+    const tail = takeFlush(true);
+    if (tail) yield { type: 'text', text: tail };
   } catch (e) {
     rpc.rejectAllPending(e);
+    const tail = takeFlush(true);
+    if (tail) yield { type: 'text', text: tail };
     const message = formatRpcError(e);
     yield { type: 'error', message };
   } finally {
@@ -292,6 +525,8 @@ export async function* runCodexTurn(_params: {
     } catch {
       // ignore
     }
+    const tail = takeFlush(true);
+    if (tail) yield { type: 'text', text: tail };
     yield { type: 'done' };
   }
 }

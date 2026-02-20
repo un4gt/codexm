@@ -17,6 +17,8 @@ type NativeCodexRuntimeManager = {
   }): Promise<string>;
   stop(params?: { runtimeId: string }): Promise<void>;
   send(params: { runtimeId: string; line: string }): Promise<void>;
+  chmod(params: { path: string }): Promise<void>;
+  extractTarGz(params: { archivePath: string; destDir: string }): Promise<void>;
 };
 
 function getNativeRuntime(): NativeCodexRuntimeManager {
@@ -44,4 +46,12 @@ export async function stopCodexRuntime(runtimeId: string) {
 
 export async function sendCodexLine(runtimeId: string, line: string) {
   return await getNativeRuntime().send({ runtimeId, line });
+}
+
+export async function chmodPath(pathOrUri: string) {
+  return await getNativeRuntime().chmod({ path: pathOrUri });
+}
+
+export async function extractTarGz(archivePathOrUri: string, destDirUri: string) {
+  return await getNativeRuntime().extractTarGz({ archivePath: archivePathOrUri, destDir: destDirUri });
 }

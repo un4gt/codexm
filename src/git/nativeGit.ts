@@ -13,6 +13,7 @@ type NativeGitModule = {
   pull(params: GitPullParams & { auth?: NativeGitAuth; allowInsecure?: boolean }): Promise<void>;
   push(params: GitPushParams & { auth?: NativeGitAuth; allowInsecure?: boolean }): Promise<void>;
   status(params: { localRepoDirUri: string }): Promise<GitStatus>;
+  diff(params: { localRepoDirUri: string; maxBytes?: number }): Promise<string>;
 };
 
 function getNativeGit(): NativeGitModule {
@@ -53,4 +54,8 @@ export async function gitPush(params: GitPushParams) {
 
 export async function gitStatus(params: { localRepoDirUri: string }): Promise<GitStatus> {
   return await getNativeGit().status(params);
+}
+
+export async function gitDiff(params: { localRepoDirUri: string; maxBytes?: number }): Promise<string> {
+  return await getNativeGit().diff(params);
 }

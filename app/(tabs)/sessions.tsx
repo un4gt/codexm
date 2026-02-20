@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
+import { useFocusEffect } from '@react-navigation/native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useWorkspaces } from '@/src/workspaces/provider';
-import { createSession, deleteSession, listSessions } from '@/src/sessions/store';
+import { deleteSession, listSessions } from '@/src/sessions/store';
 import type { Session } from '@/src/sessions/types';
 import { useRouter } from 'expo-router';
 
@@ -19,11 +20,13 @@ export default function SessionsScreen() {
   const [sessions, setSessions] = useState<Session[]>([]);
 
   const active = useMemo(() => workspaces.find((w) => w.id === activeWorkspaceId) ?? null, [activeWorkspaceId, workspaces]);
+  const activeId = active?.id ?? null;
 
-  useEffect(() => {
+  useFocusEffect(
+    useCallback(() => {
     let cancelled = false;
     async function run() {
-      if (!active) {
+      if (!activeId) {
         setSessions([]);
         setError(null);
         return;
@@ -31,7 +34,7 @@ export default function SessionsScreen() {
       setLoading(true);
       setError(null);
       try {
-        const all = await listSessions(active.id);
+        const all = await listSessions(activeId);
         if (!cancelled) setSessions(all);
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
@@ -44,7 +47,8 @@ export default function SessionsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [active]);
+    }, [activeId])
+  );
 
   if (!active) {
     return (
@@ -67,21 +71,7 @@ export default function SessionsScreen() {
         <Pressable
           accessibilityRole="button"
           style={[styles.button, { borderColor: Colors[colorScheme].icon }]}
-          onPress={async () => {
-            setLoading(true);
-            setError(null);
-            try {
-              const s = await createSession(active.id);
-              const all = await listSessions(active.id);
-              setSessions(all);
-              router.push(`/session/${s.id}`);
-            } catch (e) {
-              const message = e instanceof Error ? e.message : String(e);
-              setError(message);
-            } finally {
-              setLoading(false);
-            }
-          }}>
+          onPress={() => router.push('/new-session' as any)}>
           <ThemedText type="defaultSemiBold">新建</ThemedText>
         </Pressable>
       </View>

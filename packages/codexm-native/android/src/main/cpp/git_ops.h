@@ -53,3 +53,4 @@ void git_checkout_ref(const GitCheckoutOptions &opts);
 void git_pull_ff_only(const GitPullOptions &opts);
 void git_push_branch(const GitPushOptions &opts);
 GitStatus git_status(const std::string &localPath);
+std::string git_diff_unified(const std::string &localPath, size_t maxBytes);

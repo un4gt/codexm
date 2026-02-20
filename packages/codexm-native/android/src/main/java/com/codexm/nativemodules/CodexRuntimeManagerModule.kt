@@ -10,8 +10,11 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule.RCTDeviceEventEmitter
+import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.nio.charset.StandardCharsets
@@ -19,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.zip.GZIPInputStream
 
 class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
@@ -376,6 +380,154 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
       promise.resolve(null)
     } catch (e: Throwable) {
       promise.reject("E_CODEX_RUNTIME_SEND", e.message, e)
+    }
+  }
+
+  private fun tarString(buf: ByteArray, offset: Int, len: Int): String {
+    var end = offset
+    val max = offset + len
+    while (end < max && buf[end].toInt() != 0) end++
+    return String(buf, offset, end - offset, StandardCharsets.UTF_8)
+  }
+
+  private fun tarOctal(buf: ByteArray, offset: Int, len: Int): Long {
+    val s = tarString(buf, offset, len).trim()
+    if (s.isBlank()) return 0
+    return try {
+      s.toLong(8)
+    } catch (_: Throwable) {
+      0
+    }
+  }
+
+  private fun readFully(input: java.io.InputStream, buf: ByteArray, len: Int): Int {
+    var total = 0
+    while (total < len) {
+      val n = input.read(buf, total, len - total)
+      if (n <= 0) break
+      total += n
+    }
+    return total
+  }
+
+  private fun skipFully(input: java.io.InputStream, bytes: Long) {
+    var remaining = bytes
+    while (remaining > 0) {
+      val skipped = try {
+        input.skip(remaining)
+      } catch (_: Throwable) {
+        0
+      }
+      if (skipped > 0) {
+        remaining -= skipped
+        continue
+      }
+      val b = input.read()
+      if (b == -1) break
+      remaining -= 1
+    }
+  }
+
+  @ReactMethod
+  fun chmod(params: ReadableMap, promise: Promise) {
+    try {
+      val p0 = params.getString("path") ?: throw IllegalArgumentException("path is required")
+      val p = uriToFilePath(p0)
+      chmodExecutable(p)
+      val f = File(p)
+      f.setExecutable(true, false)
+      f.setReadable(true, false)
+      f.setWritable(true, true)
+      promise.resolve(null)
+    } catch (e: Throwable) {
+      promise.reject("E_CHMOD", e.message, e)
+    }
+  }
+
+  @ReactMethod
+  fun extractTarGz(params: ReadableMap, promise: Promise) {
+    try {
+      val archive0 = params.getString("archivePath") ?: throw IllegalArgumentException("archivePath is required")
+      val destDir0 = params.getString("destDir") ?: throw IllegalArgumentException("destDir is required")
+      val archivePath = uriToFilePath(archive0)
+      val destDirPath = uriToFilePath(destDir0)
+
+      val destRoot = File(destDirPath).apply { mkdirs() }.canonicalFile
+      val destRootPrefix = destRoot.absolutePath + File.separator
+
+      val header = ByteArray(512)
+      val buf = ByteArray(32 * 1024)
+
+      FileInputStream(File(archivePath)).use { fis ->
+        GZIPInputStream(BufferedInputStream(fis)).use { input ->
+          while (true) {
+            val n = readFully(input, header, 512)
+            if (n == 0) break
+            if (n < 512) throw IllegalStateException("invalid tar header: truncated")
+
+            var allZero = true
+            for (b in header) {
+              if (b.toInt() != 0) {
+                allZero = false
+                break
+              }
+            }
+            if (allZero) break
+
+            val name = tarString(header, 0, 100).trim()
+            val prefix = tarString(header, 345, 155).trim()
+            val fullName = when {
+              prefix.isNotBlank() && name.isNotBlank() -> "$prefix/$name"
+              name.isNotBlank() -> name
+              else -> ""
+            }
+
+            val size = tarOctal(header, 124, 12)
+            val typeFlag = header[156].toInt().toChar()
+            val normalized = fullName.replace('\\', '/')
+
+            val padding = ((512 - (size % 512)) % 512)
+
+            if (normalized.isBlank()) {
+              skipFully(input, size + padding)
+              continue
+            }
+
+            // Prevent path traversal.
+            val out = File(destRoot, normalized).canonicalFile
+            val outPath = out.absolutePath
+            if (!(outPath == destRoot.absolutePath || outPath.startsWith(destRootPrefix))) {
+              skipFully(input, size + padding)
+              continue
+            }
+
+            val isDir = typeFlag == '5' || normalized.endsWith("/")
+            if (isDir) {
+              out.mkdirs()
+              skipFully(input, size + padding)
+              continue
+            }
+
+            // Regular file
+            out.parentFile?.mkdirs()
+            FileOutputStream(out).use { fos ->
+              var remaining = size
+              while (remaining > 0) {
+                val toRead = kotlin.math.min(buf.size.toLong(), remaining).toInt()
+                val r = input.read(buf, 0, toRead)
+                if (r <= 0) throw IllegalStateException("invalid tar entry: truncated")
+                fos.write(buf, 0, r)
+                remaining -= r.toLong()
+              }
+            }
+            skipFully(input, padding)
+          }
+        }
+      }
+
+      promise.resolve(null)
+    } catch (e: Throwable) {
+      promise.reject("E_TAR_GZ", e.message, e)
     }
   }
 }

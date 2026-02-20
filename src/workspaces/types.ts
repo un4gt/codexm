@@ -26,4 +26,6 @@ export type Workspace = {
     localPath: string;
     git?: WorkspaceGitConfig;
     webdav?: WorkspaceWebDavConfig;
+    /** 可选：新建会话时默认启用的 MCP server（按 id）。 */
+    mcpDefaultEnabledServerIds?: string[];
 };
