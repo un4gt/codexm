@@ -506,7 +506,7 @@ std::string git_diff_unified(const std::string &localPath, size_t maxBytes) {
   git_diff *diffWorkdir = nullptr;
   git_diff_options workOpts = GIT_DIFF_OPTIONS_INIT;
   workOpts.flags = GIT_DIFF_INCLUDE_UNTRACKED | GIT_DIFF_RECURSE_UNTRACKED_DIRS |
-                   GIT_DIFF_INCLUDE_UNTRACKED_CONTENT;
+                   GIT_DIFF_SHOW_UNTRACKED_CONTENT;
   rc = git_diff_index_to_workdir(&diffWorkdir, repo, index, &workOpts);
   if (rc != 0) {
     git_diff_free(diffStaged);
