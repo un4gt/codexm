@@ -99,7 +99,7 @@ export default function NewSessionScreen() {
           <>
             {mcpError ? <ThemedText style={[styles.error, { color: '#ef4444' }]}>{mcpError}</ThemedText> : null}
             {servers.length === 0 ? (
-              <ThemedText style={styles.muted}>暂无已登记的 MCP Server。你可以先到下方 Tab「MCP」里新增。</ThemedText>
+              <ThemedText style={styles.muted}>暂无已登记的 MCP 服务器。你可以先到下方 Tab「MCP」里新增。</ThemedText>
             ) : (
               <View style={{ marginTop: 10 }}>
                 {servers.map((s) => {
@@ -129,7 +129,7 @@ export default function NewSessionScreen() {
                       <View style={{ flex: 1 }}>
                         <ThemedText type="defaultSemiBold">{s.name}</ThemedText>
                         <ThemedText style={styles.muted}>
-                          {s.transport === 'url' ? `url: ${s.url ?? ''}` : `command: ${s.command ?? ''}`}
+                          {s.transport === 'url' ? `地址：${s.url ?? ''}` : `路径：${s.command ?? ''}`}
                         </ThemedText>
                         {!runnable ? (
                           <ThemedText style={[styles.muted, { color: '#ef4444' }]}>

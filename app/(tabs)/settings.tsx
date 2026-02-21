@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -122,7 +131,7 @@ export default function SettingsScreen() {
 
   if (loading) {
     return (
-      <ThemedView style={styles.container}>
+      <ThemedView style={styles.screen}>
         <View style={styles.center}>
           <ActivityIndicator />
         </View>
@@ -131,7 +140,12 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView style={styles.screen}>
+      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag">
       <View style={styles.header}>
         <ThemedText type="title">设置</ThemedText>
         <ThemedText style={styles.muted}>全局设置（所有工作区共用）。</ThemedText>
@@ -180,7 +194,7 @@ export default function SettingsScreen() {
         <TextInput
           value={model}
           onChangeText={setModel}
-          placeholder="例如：gpt-5.2-codex"
+          placeholder="留空使用默认"
           placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
           autoCapitalize="none"
           autoCorrect={false}
@@ -317,7 +331,7 @@ export default function SettingsScreen() {
             <TextInput
               value={rawConfigToml}
               onChangeText={setRawConfigToml}
-              placeholder="在这里编辑 config.toml"
+              placeholder="在这里编辑配置内容"
               placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
               autoCapitalize="none"
               autoCorrect={false}
@@ -425,15 +439,20 @@ export default function SettingsScreen() {
         ]}>
         <ThemedText style={styles.muted}>删除密钥</ThemedText>
       </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
+  },
+  container: {
     paddingTop: 24,
     paddingHorizontal: 16,
+    paddingBottom: 24,
   },
   header: {
     marginBottom: 12,

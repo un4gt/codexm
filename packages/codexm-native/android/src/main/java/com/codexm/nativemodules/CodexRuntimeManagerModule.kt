@@ -153,53 +153,31 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
       // binaries from the APK native library directory (/data/app/.../lib/<abi>), which is allowed.
       tryResolveFromNativeLibs()?.let { return it }
 
-      // On Android 10+ with targetSdk>=29, falling back to extracting the ELF into filesDir will
-      // reliably fail with "Permission denied" (avc: denied { execute_no_trans }). If we couldn't
-      // resolve extracted native libs, fail fast with actionable guidance instead of copying assets.
       val targetSdk = try {
         reactContext.applicationInfo?.targetSdkVersion ?: 0
       } catch (_: Throwable) {
         0
       }
-      if (Build.VERSION.SDK_INT >= 29 && targetSdk >= 29) {
-        val nativeDirPath = reactContext.applicationInfo?.nativeLibraryDir ?: ""
-        val nativeDirListing = try {
-          val dir = File(nativeDirPath)
-          if (!dir.exists()) "(missing)"
-          else (dir.list()?.joinToString(", ") ?: "(empty)")
-        } catch (_: Throwable) {
-          "(unreadable)"
-        }
-        throw IllegalStateException(
-          "未能从 nativeLibraryDir 解析 codex 可执行文件（libcodex.so）。\n" +
-            "- targetSdkVersion: $targetSdk\n" +
-            "- nativeLibraryDir: $nativeDirPath\n" +
-            "- nativeLibraryDir contents: $nativeDirListing\n" +
-            "\n" +
-            "这是 Android >= 10 / targetSdk >= 29 的已知限制：app 私有可写目录（filesDir）中的 ELF 无法 exec（avc: denied { execute_no_trans }）。\n" +
-            "请确认：\n" +
-            "1) `android/gradle.properties` 设置 `expo.useLegacyPackaging=true`（确保 .so 提取到磁盘）\n" +
-            "2) Manifest 设置 `android:extractNativeLibs=\"true\"`\n" +
-            "3) APK 内包含 `lib/<abi>/libcodex.so`、`libcodex_exec.so`、`librg.so`\n"
-        )
-      }
 
-      val assetPathRaw = params.getString("assetPath")!!
-      val execFile = ensureExecutableFromAssets(assetPathRaw)
-
-      // Place helper executables next to the main binary and prepend that directory to PATH so
-      // Codex can locate them (e.g. codex-exec, rg).
-      try {
-        val assetDir = assetPathRaw.substringBeforeLast('/', "")
-        if (assetDir.isNotEmpty()) {
-          ensureExecutableFromAssets("$assetDir/codex-exec")
-          ensureExecutableFromAssets("$assetDir/rg")
-        }
+      val nativeDirPath = reactContext.applicationInfo?.nativeLibraryDir ?: ""
+      val nativeDirListing = try {
+        val dir = File(nativeDirPath)
+        if (!dir.exists()) "(missing)"
+        else (dir.list()?.joinToString(", ") ?: "(empty)")
       } catch (_: Throwable) {
-        // ignore: helper asset may be missing
+        "(unreadable)"
       }
-
-      return ResolvedExecutable(execFile.absolutePath, execFile.parentFile, "assets")
+      throw IllegalStateException(
+        "未能从 nativeLibraryDir 解析 codex 可执行文件（libcodex.so）。\n" +
+          "- targetSdkVersion: $targetSdk\n" +
+          "- nativeLibraryDir: $nativeDirPath\n" +
+          "- nativeLibraryDir contents: $nativeDirListing\n" +
+          "\n" +
+          "请确认：\n" +
+          "1) `android/gradle.properties` 设置 `expo.useLegacyPackaging=true`（确保 .so 提取到磁盘）\n" +
+          "2) Manifest 设置 `android:extractNativeLibs=\"true\"`\n" +
+          "3) APK 内包含 `lib/<abi>/libcodex.so`、`libcodex_exec.so`、`librg.so`\n"
+      )
     }
 
     throw IllegalArgumentException("executablePath or assetPath is required")

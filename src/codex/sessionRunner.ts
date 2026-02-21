@@ -296,7 +296,7 @@ export async function* runCodexTurn(_params: {
 
     // Handshake
     await rpc.request('initialize', {
-      clientInfo: { name: 'codexm_android', title: 'CodexM Android', version: '0.0.1' },
+      clientInfo: { name: 'codexm_android', title: 'CodexM Android', version: '0.0.3' },
     });
     await rpc.notify('initialized', {});
 

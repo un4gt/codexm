@@ -66,7 +66,7 @@ export default function McpScreen() {
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <ThemedText type="title">MCP</ThemedText>
-          <ThemedText style={styles.muted}>全局登记 MCP Server（默认不启用），可在新建会话时选择启用。</ThemedText>
+          <ThemedText style={styles.muted}>全局登记 MCP 服务器（默认不启用），可在新建会话时选择启用。</ThemedText>
         </View>
       </View>
 
@@ -80,7 +80,7 @@ export default function McpScreen() {
 
           <ThemedView style={[styles.card, { borderColor: Colors[colorScheme].icon }]}>
             <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
-              新增 Server
+              新增服务器
             </ThemedText>
 
             <View style={styles.segments}>
@@ -116,7 +116,7 @@ export default function McpScreen() {
                   },
                 ]}
                 onPress={() => setTransport('stdio')}>
-                <ThemedText type="defaultSemiBold">stdio</ThemedText>
+                <ThemedText type="defaultSemiBold">本地</ThemedText>
               </Pressable>
             </View>
 
@@ -140,7 +140,7 @@ export default function McpScreen() {
             ) : (
               <>
                 <TextInput
-                  placeholder="command（本机可执行文件路径）"
+                  placeholder="可执行文件路径（本机）"
                   placeholderTextColor={Colors[colorScheme].icon}
                   value={command}
                   onChangeText={setCommand}
@@ -148,7 +148,7 @@ export default function McpScreen() {
                   style={[styles.input, { color: Colors[colorScheme].text, borderColor: Colors[colorScheme].icon }]}
                 />
                 <TextInput
-                  placeholder={'args（每行一个参数，可选）\n例如：--foo\nbar'}
+                  placeholder={'可选参数（每行一条）'}
                   placeholderTextColor={Colors[colorScheme].icon}
                   value={argsText}
                   onChangeText={setArgsText}
@@ -159,7 +159,7 @@ export default function McpScreen() {
                   ]}
                 />
                 <TextInput
-                  placeholder={'安装包 URL（.tar.gz/.tgz 或直接二进制，可选）'}
+                  placeholder={'安装地址（可选）'}
                   placeholderTextColor={Colors[colorScheme].icon}
                   value={installUrl}
                   onChangeText={setInstallUrl}
@@ -235,20 +235,17 @@ export default function McpScreen() {
             </Pressable>
 
             <ThemedText style={styles.muted}>
-              提示：stdio 类型会在启动 Codex 时执行本机命令，请仅添加你信任的可执行文件。对于 Rust-based 本地 MCP，你可以先运行时安装
-              （下载 `.tar.gz`/二进制）后自动填入 command，或手动填写可执行文件的绝对路径。注意：部分 Android 设备可能限制从应用可写目录
-              执行下载的 ELF；如遇 Permission denied，请改用远程 MCP 或在你的运行环境中放开限制。
+              提示：本地类型会执行本机程序，请只添加你信任的来源。可选填“安装地址”以自动安装，也可以手动填写可执行文件路径。
+              若无法启动，请尝试使用远程服务器。
             </ThemedText>
           </ThemedView>
 
           <ThemedView style={[styles.card, { borderColor: Colors[colorScheme].icon }]}>
             <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
-              已登记的 Servers
+              已添加的服务器
             </ThemedText>
 
-            {servers.length === 0 ? (
-              <ThemedText style={styles.muted}>暂无。你可以先新增一个 URL 或 stdio Server。</ThemedText>
-            ) : null}
+            {servers.length === 0 ? <ThemedText style={styles.muted}>暂无。你可以先新增一个服务器。</ThemedText> : null}
 
             {servers.map((s) => {
               const isEditing = editingId === s.id;
@@ -265,7 +262,7 @@ export default function McpScreen() {
                   <View style={{ flex: 1 }}>
                     <ThemedText type="defaultSemiBold">{s.name}</ThemedText>
                     <ThemedText style={styles.muted}>
-                      {s.transport === 'url' ? `url: ${s.url ?? ''}` : `command: ${s.command ?? ''}`}
+                      {s.transport === 'url' ? `地址：${s.url ?? ''}` : `路径：${s.command ?? ''}`}
                     </ThemedText>
                     <ThemedText style={styles.muted}>configKey: {s.configKey}</ThemedText>
                   </View>
@@ -287,7 +284,7 @@ export default function McpScreen() {
                       { borderColor: Colors[colorScheme].icon, backgroundColor: 'transparent' },
                     ]}
                     onPress={() => {
-                      Alert.alert('删除 MCP Server', `确定删除「${s.name}」？`, [
+                      Alert.alert('删除 MCP 服务器', `确定删除「${s.name}」？`, [
                         { text: '取消', style: 'cancel' },
                         {
                           text: '删除',
@@ -343,7 +340,7 @@ export default function McpScreen() {
                             },
                           ]}
                           onPress={() => setEditTransport('stdio')}>
-                          <ThemedText type="defaultSemiBold">stdio</ThemedText>
+                          <ThemedText type="defaultSemiBold">本地</ThemedText>
                         </Pressable>
                       </View>
 
@@ -370,7 +367,7 @@ export default function McpScreen() {
                       ) : (
                         <>
                           <TextInput
-                            placeholder="command"
+                            placeholder="可执行文件路径（本机）"
                             placeholderTextColor={Colors[colorScheme].icon}
                             value={editCommand}
                             onChangeText={setEditCommand}
@@ -381,7 +378,7 @@ export default function McpScreen() {
                             ]}
                           />
                           <TextInput
-                            placeholder={'args（每行一个参数，可选）'}
+                            placeholder={'可选参数（每行一条）'}
                             placeholderTextColor={Colors[colorScheme].icon}
                             value={editArgsText}
                             onChangeText={setEditArgsText}
@@ -392,7 +389,7 @@ export default function McpScreen() {
                             ]}
                           />
                           <TextInput
-                            placeholder={'安装包 URL（.tar.gz/.tgz 或直接二进制）'}
+                            placeholder={'安装地址（可选）'}
                             placeholderTextColor={Colors[colorScheme].icon}
                             value={editInstallUrl}
                             onChangeText={setEditInstallUrl}
@@ -412,7 +409,7 @@ export default function McpScreen() {
                               ]}
                               onPress={async () => {
                                 const u = editInstallUrl.trim();
-                                if (!u) return Alert.alert('缺少 URL', '请填写安装包 URL（.tar.gz/.tgz 或直接二进制）。');
+                                if (!u) return Alert.alert('缺少 URL', '请填写安装地址。');
                                 setBusy(true);
                                 try {
                                   const installed = await installManagedMcpFromUrl(s.id, u);
@@ -441,7 +438,7 @@ export default function McpScreen() {
                                 { borderColor: Colors[colorScheme].icon, backgroundColor: 'transparent', opacity: busy ? 0.7 : 1 },
                               ]}
                               onPress={() => {
-                                Alert.alert('卸载本地文件', '将删除该 Server 的本地安装文件，但不会删除 Server 登记。', [
+                                Alert.alert('卸载本地文件', '将删除该服务器的本地安装文件，但不会删除服务器记录。', [
                                   { text: '取消', style: 'cancel' },
                                   {
                                     text: '卸载',

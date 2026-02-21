@@ -26,6 +26,10 @@
 - Keep formatting consistent with existing files: single quotes; UI code typically uses 2-space indentation.
 - Recommended editor setup: enable ESLint fixes and import organization on save (see `.vscode/settings.json`).
 
+## 用户界面文案规范
+- 面向用户的 UI（标题、说明、placeholder、按钮、错误提示等）严格禁止出现开发者教学/调试内容，例如：命令行参数（如 `--foo`）、内部文件名/扩展名（如 `config.toml`、`.tar.gz`）、内部命令（如 `/debug-config`）等。
+- 技术细节、示例与排错指引请放在 `docs/` 或代码注释中，不得出现在用户可见文案里。
+
 ## Testing Guidelines
 - No test framework is configured yet. Keep business logic in `src/` as pure helpers to make future unit tests easy.
 - If adding tests, use `*.test.ts(x)` or `__tests__/` and add an `npm test` script in the same PR.

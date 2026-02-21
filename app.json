@@ -2,7 +2,7 @@
   "expo": {
     "name": "codexm",
     "slug": "codexm",
-    "version": "1.1.0",
+    "version": "0.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "codexm",
@@ -45,7 +45,8 @@
       "expo-dev-client",
       "./plugins/withNdkPkgPrefabRepo",
       "./plugins/withExtractNativeLibs",
-      "./plugins/withLegacyPackaging"
+      "./plugins/withLegacyPackaging",
+      "./plugins/withIgnoreCodexAssets"
     ],
     "experiments": {
       "typedRoutes": true,

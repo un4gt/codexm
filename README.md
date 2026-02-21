@@ -59,6 +59,7 @@ python scripts/fetch_android_codex_deps.py --abi arm64-v8a
 
 说明：
 - `packages/codexm-native/android/build.gradle` 会在构建时把这些 assets 复制到 jniLibs 并重命名为：`libcodex.so` / `libcodex_exec.so` / `librg.so`，从而进入 APK native library 目录（`ApplicationInfo.nativeLibraryDir`）。
+- 为避免 APK 体积重复打包，打包阶段会忽略 `assets/codex/`（由 `plugins/withIgnoreCodexAssets.js` 保证）。这些文件仅作为构建输入用于生成 jniLibs；运行时只从 `nativeLibraryDir` 解析并执行。
 - `CodexRuntimeManager` 启动时会在 `filesDir/codexm/bin/<abi>/` 创建 `codex/codex-exec/rg` 的 symlink 指向上述 native libs，并把该目录 prepend 到 `PATH`，让 Codex 在运行时能找到 helper。
 
 ### 3) 生成原生工程（prebuild）
@@ -89,7 +90,7 @@ npx expo start --dev-client
 
 - Gradle 报 `Namespace ... 'native' is a Java keyword`：避免使用 `com.*.native` 作为 `namespace/package`；本项目原生模块使用 `com.codexm.nativemodules`，改完后请 `npx expo prebuild --platform android --clean` 再构建。
 - 运行时 `error=13 Permission denied`（无法执行 `codex`）且 logcat 出现 `avc: denied { execute_no_trans } ... tcontext=app_data_file`：这是 Android 10+（且 `targetSdkVersion >= 29`）的预期限制，**仅 chmod +x 不会生效**。确认是否已走 “nativeLibraryDir 执行” 路径：
-  - `android/gradle.properties` 需设置 `expo.useLegacyPackaging=true`（否则 native libs 可能不落盘，`nativeLibraryDir` 下找不到 `libcodex.so`，从而回退到 filesDir 触发 Permission denied）
+  - `android/gradle.properties` 需设置 `expo.useLegacyPackaging=true`（否则 native libs 可能不落盘，`nativeLibraryDir` 下找不到 `libcodex.so`，启动会直接失败）
   - `adb shell run-as com.unsafe.codexm ls -l files/codexm/bin/arm64-v8a/`（应看到 `codex -> .../libcodex.so` 这类 symlink）
   - 如仍是普通文件而非 symlink：检查 `plugins/withExtractNativeLibs.js` 是否生效（重新 `npx expo prebuild --platform android --clean`），并确认 assets 下的 `codex/codex-exec/rg` 存在。
 - 运行时出现 `401 Unauthorized / 缺少 API Key`：Codex 内置 OpenAI provider 依赖 `CODEX_HOME/auth.json`（或 keyring）进行鉴权；本项目会在保存设置时把 SecureStore 中的 Key 同步到 `DocumentDirectory/codex-home/auth.json`。请确保已更新到最新代码并在 App「设置」里点一次“保存”以重写配置与鉴权文件。
