@@ -6,6 +6,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  Share,
   StyleSheet,
   TextInput,
   View,
@@ -104,25 +105,73 @@ export default function SessionDetailScreen() {
     });
   }
 
+  async function getSessionDiagnosticsTextOrAlert() {
+    if (!active || !sessionId) return null;
+    const s = await getCodexSettings();
+    if (!s.debugLogToFile) {
+      Alert.alert('未开启调试日志', '请先到「设置」的高级选项中开启并保存，然后复现问题后再导出。');
+      return null;
+    }
+    const text = await readSessionDebugLogTail({ workspaceId: active.id, sessionId, maxChars: 200_000 });
+    if (!text.trim()) {
+      Alert.alert('暂无日志', '还没有可导出的诊断信息。');
+      return null;
+    }
+    return text;
+  }
+
+  function formatStampForFileName(d: Date) {
+    const pad2 = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(
+      d.getMinutes()
+    )}${pad2(d.getSeconds())}`;
+  }
+
   async function copySessionDiagnostics() {
-    if (!active || !sessionId) return;
     try {
-      const s = await getCodexSettings();
-      if (!s.debugLogToFile) {
-        Alert.alert('未开启调试日志', '请先到「设置」的高级选项中开启并保存，然后复现问题后再复制。');
-        return;
-      }
-      const text = await readSessionDebugLogTail({ workspaceId: active.id, sessionId, maxChars: 20_000 });
-      if (!text.trim()) {
-        Alert.alert('暂无日志', '还没有可复制的诊断信息。');
-        return;
-      }
+      const text = await getSessionDiagnosticsTextOrAlert();
+      if (!text) return;
       await Clipboard.setStringAsync(text);
       Alert.alert('已复制', '诊断信息已复制到剪贴板。');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       Alert.alert('复制失败', msg);
     }
+  }
+
+  async function exportSessionDiagnostics() {
+    try {
+      const text = await getSessionDiagnosticsTextOrAlert();
+      if (!text) return;
+
+      if (Platform.OS === 'android' && FileSystem.StorageAccessFramework) {
+        try {
+          const perms = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+          if (perms.granted) {
+            const fileName = `codexm-会话诊断-${formatStampForFileName(new Date())}`;
+            const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(perms.directoryUri, fileName, 'text/plain');
+            await FileSystem.writeAsStringAsync(fileUri, text);
+            Alert.alert('已导出', '诊断信息已保存到你选择的目录。');
+            return;
+          }
+        } catch {
+          // ignore and fall back
+        }
+      }
+
+      await Share.share({ title: '诊断信息', message: text });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert('导出失败', msg);
+    }
+  }
+
+  function openDiagnosticsActions() {
+    Alert.alert('诊断信息', '选择操作：', [
+      { text: '复制到剪贴板', onPress: () => void copySessionDiagnostics() },
+      { text: Platform.OS === 'android' ? '导出为文件' : '分享', onPress: () => void exportSessionDiagnostics() },
+      { text: '取消', style: 'cancel' },
+    ]);
   }
 
   useEffect(() => {
@@ -790,7 +839,7 @@ export default function SessionDetailScreen() {
           <ThemedText style={[styles.error, { color: Colors[colorScheme].danger }]}>{error}</ThemedText>
           <Pressable
             accessibilityRole="button"
-            onPress={copySessionDiagnostics}
+            onPress={openDiagnosticsActions}
             android_ripple={{ color: rippleColor }}
             style={({ pressed }) => [
               styles.copyDiagButton,
@@ -852,7 +901,7 @@ export default function SessionDetailScreen() {
                     </View>
                     <Pressable
                       accessibilityRole="button"
-                      onPress={copySessionDiagnostics}
+                      onPress={openDiagnosticsActions}
                       android_ripple={{ color: rippleColor }}
                       style={({ pressed }) => [
                         styles.copyDiagButton,

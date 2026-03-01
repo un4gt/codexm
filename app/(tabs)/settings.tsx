@@ -7,12 +7,14 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
 
 import * as Clipboard from 'expo-clipboard';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -105,22 +107,70 @@ export default function SettingsScreen() {
     return null;
   }
 
-  async function copyRecentDebugLog() {
+  async function getRecentDebugLogTextOrAlert() {
     if (!debugLogToFile) {
-      Alert.alert('未开启调试日志', '请先在高级选项中开启并保存，然后复现问题后再复制。');
-      return;
+      Alert.alert('未开启调试日志', '请先在高级选项中开启并保存，然后复现问题后再导出。');
+      return null;
     }
     if (!activeWorkspaceId) {
       Alert.alert('未选择工作区', '请先创建或选择一个工作区后重试。');
-      return;
+      return null;
     }
-    const text = await readLatestDebugLogTail({ workspaceId: activeWorkspaceId, maxChars: 20_000 });
+    const text = await readLatestDebugLogTail({ workspaceId: activeWorkspaceId, maxChars: 200_000 });
     if (!text.trim()) {
-      Alert.alert('暂无日志', '还没有可复制的诊断信息。');
-      return;
+      Alert.alert('暂无日志', '还没有可导出的诊断信息。');
+      return null;
     }
+    return text;
+  }
+
+  function formatStampForFileName(d: Date) {
+    const pad2 = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(
+      d.getMinutes()
+    )}${pad2(d.getSeconds())}`;
+  }
+
+  async function copyRecentDebugLog() {
+    const text = await getRecentDebugLogTextOrAlert();
+    if (!text) return;
     await Clipboard.setStringAsync(text);
     Alert.alert('已复制', '诊断信息已复制到剪贴板。');
+  }
+
+  async function exportRecentDebugLog() {
+    const text = await getRecentDebugLogTextOrAlert();
+    if (!text) return;
+
+    if (Platform.OS === 'android' && FileSystem.StorageAccessFramework) {
+      try {
+        const perms = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (perms.granted) {
+          const fileName = `codexm-诊断日志-${formatStampForFileName(new Date())}`;
+          const fileUri = await FileSystem.StorageAccessFramework.createFileAsync(perms.directoryUri, fileName, 'text/plain');
+          await FileSystem.writeAsStringAsync(fileUri, text);
+          Alert.alert('已导出', '诊断信息已保存到你选择的目录。');
+          return;
+        }
+      } catch {
+        // ignore and fall back
+      }
+    }
+
+    try {
+      await Share.share({ title: '诊断信息', message: text });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert('导出失败', msg);
+    }
+  }
+
+  function openDiagnosticsActions() {
+    Alert.alert('诊断信息', '用于排查连接超时、卡住等问题。', [
+      { text: '复制到剪贴板', onPress: () => void copyRecentDebugLog() },
+      { text: Platform.OS === 'android' ? '导出为文件' : '分享', onPress: () => void exportRecentDebugLog() },
+      { text: '取消', style: 'cancel' },
+    ]);
   }
 
   function resolveModelsListUrl() {
@@ -446,9 +496,9 @@ export default function SettingsScreen() {
               <Pressable
                 accessibilityRole="button"
                 android_ripple={{ color: rippleColor }}
-                onPress={copyRecentDebugLog}
+                onPress={openDiagnosticsActions}
                 style={({ pressed }) => [styles.linkButton, { opacity: pressed ? 0.86 : 1 }]}>
-                <ThemedText style={styles.muted}>复制诊断信息</ThemedText>
+                <ThemedText style={styles.muted}>导出日志</ThemedText>
               </Pressable>
             </View>
 
