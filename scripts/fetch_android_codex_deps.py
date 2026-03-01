@@ -124,6 +124,20 @@ def _github_release_json(repo: str, *, tag: str) -> dict:
   return json.loads(_http_get_bytes(url, headers=headers).decode('utf-8'))
 
 
+def _github_releases_json(repo: str, *, per_page: int = 30) -> list[dict]:
+  token = _github_token()
+  headers = {
+    'User-Agent': USER_AGENT,
+    'Accept': 'application/vnd.github+json',
+  }
+  if token:
+    headers['Authorization'] = f'Bearer {token}'
+
+  url = f'{GITHUB_API_BASE}/repos/{repo}/releases?per_page={per_page}'
+  data = json.loads(_http_get_bytes(url, headers=headers).decode('utf-8'))
+  return data if isinstance(data, list) else []
+
+
 def _is_elf_header(b: bytes) -> bool:
   return b.startswith(b'\x7fELF')
 
@@ -289,6 +303,27 @@ def main(argv: list[str]) -> int:
       rel = _github_release_json(args.codex_termux_repo, tag=args.codex_termux_tag)
       assets = rel.get('assets') or []
       tgz_assets = [a for a in assets if str(a.get('name') or '').endswith('.tgz')]
+      picked_tag = str(rel.get('tag_name') or args.codex_termux_tag)
+
+      # GitHub 的 latest release 可能先发布（assets 还没上传），此时自动回退到最近一个包含 .tgz 的 release。
+      if not tgz_assets and args.codex_termux_tag == 'latest':
+        try:
+          rels = _github_releases_json(args.codex_termux_repo)
+        except Exception:
+          rels = []
+        for r in rels:
+          if r.get('draft') or r.get('prerelease'):
+            continue
+          r_assets = r.get('assets') or []
+          r_tgz = [a for a in r_assets if str(a.get('name') or '').endswith('.tgz')]
+          if r_tgz:
+            picked_tag = str(r.get('tag_name') or picked_tag)
+            assets = r_assets
+            tgz_assets = r_tgz
+            print(
+              f'提示：{args.codex_termux_repo}@latest 未包含 .tgz 资产，已回退到 {args.codex_termux_repo}@{picked_tag}',
+            )
+            break
       if not tgz_assets:
         available = ', '.join([str(a.get('name')) for a in assets]) or '<none>'
         raise RuntimeError(
