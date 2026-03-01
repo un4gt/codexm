@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -10,21 +12,26 @@ import {
   View,
 } from 'react-native';
 
+import * as Clipboard from 'expo-clipboard';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors, Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { readLatestDebugLogTail } from '@/src/codex/debugLog';
 import {
   defaultCodexSettings,
   generateCodexConfigToml,
+  getCodexApiKey,
   getCodexSettings,
   hasCodexApiKey,
   materializeCodexConfigFiles,
   setCodexApiKey,
   updateCodexSettings,
-  type CodexApprovalPolicy,
   type CodexPersonality,
 } from '@/src/codex/settings';
+import { useWorkspaces } from '@/src/workspaces/provider';
 
 function Segment({
   label,
@@ -60,15 +67,20 @@ function Segment({
 
 export default function SettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
+  const { activeWorkspaceId } = useWorkspaces();
+  const insets = useSafeAreaInsets();
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [enabled, setEnabled] = useState(defaultCodexSettings().enabled);
   const [model, setModel] = useState('');
   const [openaiBaseUrl, setOpenaiBaseUrl] = useState('');
-  const [approvalPolicy, setApprovalPolicy] = useState<CodexApprovalPolicy>(defaultCodexSettings().approvalPolicy);
+  const [models, setModels] = useState<string[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [modelQuery, setModelQuery] = useState('');
   const [personality, setPersonality] = useState<CodexPersonality>(defaultCodexSettings().personality);
   const [uiShowThinking, setUiShowThinking] = useState(Boolean(defaultCodexSettings().uiShowThinking));
 
@@ -93,6 +105,69 @@ export default function SettingsScreen() {
     return null;
   }
 
+  async function copyRecentDebugLog() {
+    if (!debugLogToFile) {
+      Alert.alert('未开启调试日志', '请先在高级选项中开启并保存，然后复现问题后再复制。');
+      return;
+    }
+    if (!activeWorkspaceId) {
+      Alert.alert('未选择工作区', '请先创建或选择一个工作区后重试。');
+      return;
+    }
+    const text = await readLatestDebugLogTail({ workspaceId: activeWorkspaceId, maxChars: 20_000 });
+    if (!text.trim()) {
+      Alert.alert('暂无日志', '还没有可复制的诊断信息。');
+      return;
+    }
+    await Clipboard.setStringAsync(text);
+    Alert.alert('已复制', '诊断信息已复制到剪贴板。');
+  }
+
+  function resolveModelsListUrl() {
+    const raw = openaiBaseUrl.trim();
+    const baseInput = raw || 'https://api.openai.com/v1';
+    const base = baseInput.replace(/\/+$/, '');
+    if (raw && !(base.startsWith('http://') || base.startsWith('https://'))) {
+      throw new Error('服务器地址格式不正确（需以 http:// 或 https:// 开头）。');
+    }
+    if (base.endsWith('/models')) return base;
+    if (base.endsWith('/v1')) return `${base}/models`;
+    return `${base}/v1/models`;
+  }
+
+  async function refreshModels(opts?: { openPicker?: boolean }) {
+    setModelsError(null);
+    setModelsLoading(true);
+    try {
+      const apiKey = newApiKey.trim() || (await getCodexApiKey());
+      if (!apiKey) throw new Error('请先设置密钥。');
+
+      const url = resolveModelsListUrl();
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+      });
+      if (!res.ok) throw new Error('无法获取模型列表：请检查服务器地址与密钥。');
+
+      const json = (await res.json()) as any;
+      const data = Array.isArray(json?.data) ? (json.data as any[]) : [];
+      const ids = data
+        .map((x) => (x && typeof x === 'object' && typeof x.id === 'string' ? x.id : null))
+        .filter((x): x is string => Boolean(x));
+      setModels(Array.from(new Set(ids)).sort((a, b) => a.localeCompare(b)));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setModelsError(msg);
+      setModels([]);
+    } finally {
+      setModelsLoading(false);
+      if (opts?.openPicker) setModelPickerOpen(true);
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
     async function run() {
@@ -102,10 +177,8 @@ export default function SettingsScreen() {
         const s = await getCodexSettings();
         const hasKey = await hasCodexApiKey();
         if (cancelled) return;
-        setEnabled(s.enabled);
         setModel(s.model ?? '');
         setOpenaiBaseUrl(s.openaiBaseUrl ?? '');
-        setApprovalPolicy(s.approvalPolicy);
         setPersonality(s.personality);
         setUiShowThinking(Boolean(s.uiShowThinking));
         setDebugLogToFile(Boolean(s.debugLogToFile));
@@ -126,18 +199,24 @@ export default function SettingsScreen() {
     };
   }, []);
 
+  const filteredModels = useMemo(() => {
+    const q = modelQuery.trim().toLowerCase();
+    if (!q) return models;
+    return models.filter((m) => m.toLowerCase().includes(q));
+  }, [modelQuery, models]);
+
   const generatedToml = useMemo(() => {
     return generateCodexConfigToml({
       version: 1,
-      enabled,
+      enabled: true,
       model: model.trim() || undefined,
       openaiBaseUrl: openaiBaseUrl.trim() || undefined,
-      approvalPolicy,
+      approvalPolicy: 'never',
       personality,
       useRawConfigToml,
       rawConfigToml,
     });
-  }, [approvalPolicy, enabled, model, openaiBaseUrl, personality, rawConfigToml, useRawConfigToml]);
+  }, [model, openaiBaseUrl, personality, rawConfigToml, useRawConfigToml]);
 
   const effectiveToml = useMemo(() => {
     if (useRawConfigToml && rawConfigToml.trim()) return rawConfigToml;
@@ -183,9 +262,9 @@ export default function SettingsScreen() {
 
   return (
     <ThemedView style={styles.screen}>
-      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
-          contentContainerStyle={styles.container}
+          contentContainerStyle={[styles.container, { paddingTop: 16 + insets.top }]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag">
           <View style={styles.header}>
@@ -197,14 +276,6 @@ export default function SettingsScreen() {
             <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
               Codex
             </ThemedText>
-
-            <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
-              启用
-            </ThemedText>
-            <View style={styles.segments}>
-              <Segment label="开启" active={enabled} onPress={() => setEnabled(true)} colorScheme={colorScheme} />
-              <Segment label="关闭" active={!enabled} onPress={() => setEnabled(false)} colorScheme={colorScheme} />
-            </View>
 
             <View style={{ height: 12 }} />
 
@@ -225,11 +296,17 @@ export default function SettingsScreen() {
             />
 
             <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
-              模型（可选）
+              服务器地址（可选）
             </ThemedText>
             <TextInput
-              value={model}
-              onChangeText={setModel}
+              value={openaiBaseUrl}
+              onChangeText={(v) => {
+                setOpenaiBaseUrl(v);
+                setModels([]);
+                setModelsError(null);
+                setModelPickerOpen(false);
+                setModelQuery('');
+              }}
               placeholder="留空使用默认"
               placeholderTextColor={placeholderTextColor}
               autoCapitalize="none"
@@ -237,6 +314,124 @@ export default function SettingsScreen() {
               selectionColor={Colors[colorScheme].tint}
               style={[styles.input, inputStyle]}
             />
+
+            <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
+              模型
+            </ThemedText>
+            <Pressable
+              accessibilityRole="button"
+              android_ripple={{ color: rippleColor }}
+              onPress={() => {
+                setModelPickerOpen((v) => !v);
+                if (!models.length && !modelsLoading) void refreshModels();
+              }}
+              style={({ pressed }) => [
+                styles.input,
+                inputStyle,
+                {
+                  justifyContent: 'center',
+                  opacity: pressed ? 0.92 : 1,
+                },
+              ]}>
+              <ThemedText
+                numberOfLines={1}
+                style={{
+                  color: model ? Colors[colorScheme].text : placeholderTextColor,
+                }}>
+                {model || '使用默认模型'}
+              </ThemedText>
+            </Pressable>
+            <View style={styles.row2}>
+              <Pressable
+                accessibilityRole="button"
+                android_ripple={{ color: rippleColor }}
+                disabled={modelsLoading}
+                onPress={() => {
+                  void refreshModels({ openPicker: true });
+                }}
+                style={({ pressed }) => [
+                  styles.smallButton,
+                  {
+                    opacity: modelsLoading ? 0.5 : pressed ? 0.92 : 1,
+                    borderColor: Colors[colorScheme].outline,
+                    backgroundColor: Colors[colorScheme].surface2,
+                  },
+                ]}>
+                <ThemedText type="defaultSemiBold">{modelsLoading ? '刷新中…' : '刷新列表'}</ThemedText>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                android_ripple={{ color: rippleColor }}
+                disabled={!model}
+                onPress={() => setModel('')}
+                style={({ pressed }) => [
+                  styles.smallButton,
+                  {
+                    opacity: !model ? 0.4 : pressed ? 0.92 : 1,
+                    borderColor: Colors[colorScheme].outline,
+                    backgroundColor: Colors[colorScheme].surface2,
+                  },
+                ]}>
+                <ThemedText type="defaultSemiBold">使用默认</ThemedText>
+              </Pressable>
+            </View>
+            {modelsError ? (
+              <ThemedText style={[styles.error, { color: Colors[colorScheme].danger }]}>{modelsError}</ThemedText>
+            ) : null}
+            {modelPickerOpen ? (
+              <View
+                style={[
+                  styles.modelPicker,
+                  {
+                    borderColor: Colors[colorScheme].outline,
+                    backgroundColor: Colors[colorScheme].surface2,
+                  },
+                ]}>
+                <TextInput
+                  value={modelQuery}
+                  onChangeText={setModelQuery}
+                  placeholder="搜索模型"
+                  placeholderTextColor={placeholderTextColor}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  selectionColor={Colors[colorScheme].tint}
+                  style={[styles.input, inputStyle, { marginBottom: 8 }]}
+                />
+                <FlatList
+                  data={filteredModels}
+                  keyExtractor={(id) => id}
+                  keyboardShouldPersistTaps="handled"
+                  style={{ maxHeight: 220 }}
+                  renderItem={({ item }) => (
+                    <Pressable
+                      accessibilityRole="button"
+                      android_ripple={{ color: rippleColor }}
+                      onPress={() => {
+                        setModel(item);
+                        setModelPickerOpen(false);
+                      }}
+                      style={({ pressed }) => [
+                        styles.modelRow,
+                        {
+                          borderColor: Colors[colorScheme].outlineMuted,
+                          backgroundColor: pressed
+                            ? colorScheme === 'dark'
+                              ? 'rgba(255,255,255,0.08)'
+                              : 'rgba(0,0,0,0.06)'
+                            : 'transparent',
+                        },
+                      ]}>
+                      <ThemedText numberOfLines={1} style={{ flex: 1 }}>
+                        {item}
+                      </ThemedText>
+                    </Pressable>
+                  )}
+                  ListEmptyComponent={
+                    <ThemedText style={styles.muted}>{modelsLoading ? '正在获取…' : '未找到匹配的模型。'}</ThemedText>
+                  }
+                />
+              </View>
+            ) : null}
 
             <Pressable
               accessibilityRole="button"
@@ -248,52 +443,6 @@ export default function SettingsScreen() {
 
             {showAdvanced ? (
               <View style={{ marginTop: 10 }}>
-                <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
-                  服务地址（可选）
-                </ThemedText>
-                <TextInput
-                  value={openaiBaseUrl}
-                  onChangeText={setOpenaiBaseUrl}
-                  placeholder="留空使用默认"
-                  placeholderTextColor={placeholderTextColor}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  selectionColor={Colors[colorScheme].tint}
-                  style={[styles.input, inputStyle]}
-                />
-
-                <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
-                  确认级别
-                </ThemedText>
-                <View style={styles.segments}>
-                  <Segment
-                    label="无需确认"
-                    active={approvalPolicy === 'never'}
-                    onPress={() => setApprovalPolicy('never')}
-                    colorScheme={colorScheme}
-                  />
-                  <Segment
-                    label="按需确认"
-                    active={approvalPolicy === 'on-request'}
-                    onPress={() => setApprovalPolicy('on-request')}
-                    colorScheme={colorScheme}
-                  />
-                </View>
-                <View style={[styles.segments, { marginTop: 10 }]}>
-                  <Segment
-                    label="失败后确认"
-                    active={approvalPolicy === 'on-failure'}
-                    onPress={() => setApprovalPolicy('on-failure')}
-                    colorScheme={colorScheme}
-                  />
-                  <Segment
-                    label="每次确认"
-                    active={approvalPolicy === 'untrusted'}
-                    onPress={() => setApprovalPolicy('untrusted')}
-                    colorScheme={colorScheme}
-                  />
-                </View>
-
                 <View style={{ height: 12 }} />
 
                 <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
@@ -363,6 +512,25 @@ export default function SettingsScreen() {
                     colorScheme={colorScheme}
                   />
                 </View>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={!debugLogToFile || !activeWorkspaceId}
+                  onPress={copyRecentDebugLog}
+                  android_ripple={{ color: rippleColor }}
+                  style={({ pressed }) => [
+                    styles.secondaryButton,
+                    {
+                      marginTop: 10,
+                      borderColor: Colors[colorScheme].outline,
+                      backgroundColor: Colors[colorScheme].surface,
+                      opacity: !debugLogToFile || !activeWorkspaceId ? 0.5 : pressed ? 0.9 : 1,
+                    },
+                  ]}>
+                  <ThemedText type="defaultSemiBold">复制最近日志</ThemedText>
+                </Pressable>
+                <ThemedText style={styles.muted}>
+                  复制到剪贴板后，可粘贴到问题反馈中帮助排查。
+                </ThemedText>
                 <View style={{ height: 12 }} />
                 <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
                   保留天数
@@ -504,10 +672,10 @@ export default function SettingsScreen() {
               throw new Error('保留天数需要是 1–90 的整数。');
             }
             await updateCodexSettings({
-              enabled,
+              enabled: true,
               model: model.trim() || undefined,
               openaiBaseUrl: openaiBaseUrl.trim() || undefined,
-              approvalPolicy,
+              approvalPolicy: 'never',
               personality,
               uiShowThinking,
               debugLogToFile,
@@ -521,6 +689,7 @@ export default function SettingsScreen() {
               setApiKeyConfigured(true);
             }
             await materializeCodexConfigFiles();
+            Alert.alert('已保存', '设置已更新。');
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             setError(msg);
@@ -640,6 +809,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     flexWrap: 'wrap',
+  },
+  modelPicker: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 10,
+    padding: 10,
+  },
+  modelRow: {
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    marginBottom: 8,
+    overflow: 'hidden',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
   },
   smallButton: {
     flex: 1,

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useRouter } from 'expo-router';
 
@@ -26,6 +27,7 @@ type WorkspaceListItem =
 export default function WorkspacesScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
+  const insets = useSafeAreaInsets();
   const {
     loading,
     error,
@@ -63,7 +65,7 @@ export default function WorkspacesScreen() {
 
   return (
     <ThemedView style={styles.screen}>
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: 16 + insets.top }]}>
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <ThemedText type="title">工作区</ThemedText>

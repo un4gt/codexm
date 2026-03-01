@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useFocusEffect } from '@react-navigation/native';
 import { ThemedText } from '@/components/themed-text';
@@ -55,6 +56,7 @@ function buildSessionListItems(sessions: Session[]): SessionListItem[] {
 export default function SessionsScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
+  const insets = useSafeAreaInsets();
   const { workspaces, activeWorkspaceId } = useWorkspaces();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,7 +113,7 @@ export default function SessionsScreen() {
 
   return (
     <ThemedView style={styles.screen}>
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: 16 + insets.top }]}>
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <ThemedText type="title">会话</ThemedText>

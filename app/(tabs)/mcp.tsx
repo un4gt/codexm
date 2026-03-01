@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -32,6 +33,7 @@ function parseArgsText(v: string) {
 
 export default function McpScreen() {
   const colorScheme = useColorScheme() ?? 'light';
+  const insets = useSafeAreaInsets();
   const { loading, error, servers, add, update, remove } = useMcp();
 
   const [transport, setTransport] = useState<Transport>('url');
@@ -100,9 +102,9 @@ export default function McpScreen() {
 
   return (
     <ThemedView style={styles.screen}>
-      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
-          contentContainerStyle={styles.container}
+          contentContainerStyle={[styles.container, { paddingTop: 16 + insets.top }]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag">
           <View style={styles.header}>

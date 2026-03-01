@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -12,6 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { MarkdownView } from '@/components/markdown/MarkdownView';
@@ -20,6 +22,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { readSessionDebugLogTail } from '@/src/codex/debugLog';
 import { CODEX_SLASH_COMMANDS } from '@/src/codex/slashCommands';
 import { getCodexSettings, materializeCodexConfigFiles, setCodexApiKey, updateCodexSettings } from '@/src/codex/settings';
 import { runCodexTurn } from '@/src/codex/sessionRunner';
@@ -99,6 +102,27 @@ export default function SessionDetailScreen() {
       if (firstWhitespaceIdx === -1) return `${leadingWhitespace}${command} `;
       return `${leadingWhitespace}${command}${trimmed.slice(firstWhitespaceIdx)}`;
     });
+  }
+
+  async function copySessionDiagnostics() {
+    if (!active || !sessionId) return;
+    try {
+      const s = await getCodexSettings();
+      if (!s.debugLogToFile) {
+        Alert.alert('未开启调试日志', '请先到「设置」的高级选项中开启并保存，然后复现问题后再复制。');
+        return;
+      }
+      const text = await readSessionDebugLogTail({ workspaceId: active.id, sessionId, maxChars: 20_000 });
+      if (!text.trim()) {
+        Alert.alert('暂无日志', '还没有可复制的诊断信息。');
+        return;
+      }
+      await Clipboard.setStringAsync(text);
+      Alert.alert('已复制', '诊断信息已复制到剪贴板。');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert('复制失败', msg);
+    }
   }
 
   useEffect(() => {
@@ -724,7 +748,7 @@ export default function SessionDetailScreen() {
         }}
       />
 
-      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.container}>
           <ThemedView
             style={[
@@ -802,9 +826,27 @@ export default function SessionDetailScreen() {
                 </ThemedText>
 
                 {item.id === pendingAssistantId && waitingFirstToken ? (
-                  <View style={styles.thinkingRow}>
-                    <ActivityIndicator />
-                    <ThemedText style={styles.muted}>正在等待 Codex 返回…</ThemedText>
+                  <View>
+                    <View style={styles.thinkingRow}>
+                      <ThemedText style={[styles.muted, { flex: 1 }]}>正在等待 Codex 返回…</ThemedText>
+                      <ActivityIndicator size="small" />
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={copySessionDiagnostics}
+                      android_ripple={{ color: rippleColor }}
+                      style={({ pressed }) => [
+                        styles.copyDiagButton,
+                        {
+                          borderColor: Colors[colorScheme].outline,
+                          backgroundColor: Colors[colorScheme].surface,
+                          opacity: pressed ? 0.9 : 1,
+                        },
+                      ]}>
+                      <ThemedText type="defaultSemiBold" style={styles.copyDiagText}>
+                        复制诊断信息
+                      </ThemedText>
+                    </Pressable>
                   </View>
                 ) : (
                   <>
@@ -851,15 +893,12 @@ export default function SessionDetailScreen() {
                       colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
                   },
                 ]}>
-                <ThemedText type="defaultSemiBold" style={styles.slashCommand} numberOfLines={2}>
+                <ThemedText type="defaultSemiBold" style={styles.slashCommand} numberOfLines={1}>
                   {item.command}
                 </ThemedText>
                 <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.slashPurpose} numberOfLines={2}>
+                  <ThemedText style={styles.slashPurpose} numberOfLines={1}>
                     {item.purpose}
-                  </ThemedText>
-                  <ThemedText style={[styles.slashWhen, styles.muted]} numberOfLines={2}>
-                    {item.when}
                   </ThemedText>
                 </View>
               </Pressable>
@@ -946,7 +985,22 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 10,
   },
+  copyDiagButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginTop: 6,
+    overflow: 'hidden',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  copyDiagText: {
+    fontSize: 13,
+  },
   thinkingRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     paddingVertical: 6,
   },
   composer: {
