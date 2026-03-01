@@ -124,18 +124,55 @@ def _github_release_json(repo: str, *, tag: str) -> dict:
   return json.loads(_http_get_bytes(url, headers=headers).decode('utf-8'))
 
 
-def _github_releases_json(repo: str, *, per_page: int = 30) -> list[dict]:
-  token = _github_token()
-  headers = {
-    'User-Agent': USER_AGENT,
-    'Accept': 'application/vnd.github+json',
-  }
-  if token:
-    headers['Authorization'] = f'Bearer {token}'
+def _raw_file_url(repo: str, *, ref: str, path: str) -> str:
+  owner, name = repo.split('/', 1)
+  p = path.lstrip('/')
+  return f'https://raw.githubusercontent.com/{owner}/{name}/{ref}/{p}'
 
-  url = f'{GITHUB_API_BASE}/repos/{repo}/releases?per_page={per_page}'
-  data = json.loads(_http_get_bytes(url, headers=headers).decode('utf-8'))
-  return data if isinstance(data, list) else []
+
+def _download_codex_termux_binaries_from_repo_tag(
+  repo: str,
+  *,
+  tag: str,
+  out_dir: Path,
+  download_headers: dict[str, str],
+) -> None:
+  candidates = [
+    ('npm-package/bin/codex', out_dir / 'codex'),
+  ]
+  exec_candidates = [
+    'npm-package/bin/codex-exec',
+    'npm-package/bin/codex_exec',
+  ]
+
+  for src, dst in candidates:
+    url = _raw_file_url(repo, ref=tag, path=src)
+    print(f'下载 codex-termux（tag 文件）: {url}')
+    _http_download(url, dst, headers=download_headers)
+    with open(dst, 'rb') as f:
+      head = f.read(4)
+    if not _is_elf_header(head):
+      raise RuntimeError(f'下载到的 codex 不是 ELF：{repo}@{tag} / {src}')
+
+  exec_ok = False
+  last_err: Optional[Exception] = None
+  for src in exec_candidates:
+    url = _raw_file_url(repo, ref=tag, path=src)
+    dst = out_dir / 'codex-exec'
+    try:
+      print(f'下载 codex-termux（tag 文件）: {url}')
+      _http_download(url, dst, headers=download_headers)
+      with open(dst, 'rb') as f:
+        head = f.read(4)
+      if not _is_elf_header(head):
+        raise RuntimeError(f'下载到的 codex-exec 不是 ELF：{repo}@{tag} / {src}')
+      exec_ok = True
+      break
+    except Exception as e:
+      last_err = e
+
+  if not exec_ok:
+    raise RuntimeError(f'无法从 {repo}@{tag} 下载 codex-exec：{last_err}')
 
 
 def _is_elf_header(b: bytes) -> bool:
@@ -303,49 +340,35 @@ def main(argv: list[str]) -> int:
       rel = _github_release_json(args.codex_termux_repo, tag=args.codex_termux_tag)
       assets = rel.get('assets') or []
       tgz_assets = [a for a in assets if str(a.get('name') or '').endswith('.tgz')]
-      picked_tag = str(rel.get('tag_name') or args.codex_termux_tag)
+      picked_tag = str(rel.get('tag_name') or (args.codex_termux_tag if args.codex_termux_tag != 'latest' else 'main'))
 
-      # GitHub 的 latest release 可能先发布（assets 还没上传），此时自动回退到最近一个包含 .tgz 的 release。
-      if not tgz_assets and args.codex_termux_tag == 'latest':
-        try:
-          rels = _github_releases_json(args.codex_termux_repo)
-        except Exception:
-          rels = []
-        for r in rels:
-          if r.get('draft') or r.get('prerelease'):
-            continue
-          r_assets = r.get('assets') or []
-          r_tgz = [a for a in r_assets if str(a.get('name') or '').endswith('.tgz')]
-          if r_tgz:
-            picked_tag = str(r.get('tag_name') or picked_tag)
-            assets = r_assets
-            tgz_assets = r_tgz
-            print(
-              f'提示：{args.codex_termux_repo}@latest 未包含 .tgz 资产，已回退到 {args.codex_termux_repo}@{picked_tag}',
-            )
-            break
-      if not tgz_assets:
-        available = ', '.join([str(a.get('name')) for a in assets]) or '<none>'
-        raise RuntimeError(
-          f'无法在 {args.codex_termux_repo}@{args.codex_termux_tag} 找到 .tgz 资产（当前 assets: {available}）',
+      if tgz_assets:
+        a = tgz_assets[0]
+        codex_asset = ReleaseAsset(
+          name=a['name'],
+          url=a['browser_download_url'],
+          sha256=_parse_sha256_digest(a.get('digest')),
         )
 
-      a = tgz_assets[0]
-      codex_asset = ReleaseAsset(
-        name=a['name'],
-        url=a['browser_download_url'],
-        sha256=_parse_sha256_digest(a.get('digest')),
-      )
+        with tempfile.TemporaryDirectory() as tmpdir:
+          tmp = Path(tmpdir)
+          codex_tgz = tmp / codex_asset.name
+          print(f'下载 codex-termux: {codex_asset.url}')
+          got_sha = _http_download(codex_asset.url, codex_tgz, headers=download_headers)
+          if codex_asset.sha256 and got_sha.lower() != codex_asset.sha256.lower():
+            raise RuntimeError(f'codex-termux sha256 校验失败：got {got_sha} expected {codex_asset.sha256}')
 
-      with tempfile.TemporaryDirectory() as tmpdir:
-        tmp = Path(tmpdir)
-        codex_tgz = tmp / codex_asset.name
-        print(f'下载 codex-termux: {codex_asset.url}')
-        got_sha = _http_download(codex_asset.url, codex_tgz, headers=download_headers)
-        if codex_asset.sha256 and got_sha.lower() != codex_asset.sha256.lower():
-          raise RuntimeError(f'codex-termux sha256 校验失败：got {got_sha} expected {codex_asset.sha256}')
-
-        _extract_codex_termux_binaries(codex_tgz, out_dir)
+          _extract_codex_termux_binaries(codex_tgz, out_dir)
+      else:
+        # 兼容：latest release 可能暂时没有 .tgz 资产；此时改为直接从 tag 对应仓库文件下载二进制。
+        available = ', '.join([str(a.get('name')) for a in assets]) or '<none>'
+        print(f'提示：{args.codex_termux_repo}@{args.codex_termux_tag} 未提供 .tgz 资产（当前 assets: {available}），改为从 tag 下载二进制。')
+        _download_codex_termux_binaries_from_repo_tag(
+          args.codex_termux_repo,
+          tag=picked_tag,
+          out_dir=out_dir,
+          download_headers=download_headers,
+        )
 
     else:
       print(f'跳过 codex/codex-exec：当前未提供 {abi} 的可用 codex-termux 二进制来源（仍可构建 APK）')
