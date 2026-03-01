@@ -19,6 +19,12 @@ export type CodexSettings = {
   personality: CodexPersonality;
   /** 实验特性：多智能体（对应 config.toml 的 [features].multi_agent）。 */
   featuresMultiAgent?: boolean;
+  /** UI：是否在消息中显示思考内容（默认隐藏）。 */
+  uiShowThinking?: boolean;
+  /** 调试：是否把关键日志写入本机文件（默认关闭）。 */
+  debugLogToFile?: boolean;
+  /** 调试：日志保留天数（全局）。 */
+  debugLogRetentionDays?: number;
   /** 专家模式：使用自定义 config.toml 文本。 */
   useRawConfigToml?: boolean;
   /** 专家模式：自定义 config.toml 内容（不要在这里粘贴密钥）。 */
@@ -58,6 +64,9 @@ export function defaultCodexSettings(): CodexSettings {
     approvalPolicy: 'never',
     personality: 'none',
     featuresMultiAgent: false,
+    uiShowThinking: false,
+    debugLogToFile: false,
+    debugLogRetentionDays: 7,
   };
 }
 

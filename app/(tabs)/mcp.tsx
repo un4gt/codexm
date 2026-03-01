@@ -1,5 +1,15 @@
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -61,110 +71,141 @@ export default function McpScreen() {
     setEditInstallUrl('');
   };
 
+  const cardStyle = useMemo(
+    () => ({
+      backgroundColor: Colors[colorScheme].surface,
+      borderColor: Colors[colorScheme].outline,
+    }),
+    [colorScheme]
+  );
+
+  const inputStyle = useMemo(
+    () => ({
+      color: Colors[colorScheme].text,
+      borderColor: Colors[colorScheme].outline,
+      backgroundColor: Colors[colorScheme].surface2,
+    }),
+    [colorScheme]
+  );
+
+  const placeholderTextColor = useMemo(
+    () => (colorScheme === 'dark' ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.38)'),
+    [colorScheme]
+  );
+
+  const rippleColor = useMemo(
+    () => (colorScheme === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(2,6,23,0.08)'),
+    [colorScheme]
+  );
+
   return (
-    <ThemedView style={styles.container}>
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <ThemedText type="title">MCP</ThemedText>
-          <ThemedText style={styles.muted}>全局登记 MCP 服务器（默认不启用），可在新建会话时选择启用。</ThemedText>
-        </View>
-      </View>
-
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator />
-        </View>
-      ) : (
-        <>
-          {error ? <ThemedText style={[styles.error, { color: '#ef4444' }]}>{error}</ThemedText> : null}
-
-          <ThemedView style={[styles.card, { borderColor: Colors[colorScheme].icon }]}>
-            <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
-              新增服务器
-            </ThemedText>
-
-            <View style={styles.segments}>
-              <Pressable
-                accessibilityRole="button"
-                style={[
-                  styles.segment,
-                  {
-                    borderColor: Colors[colorScheme].icon,
-                    backgroundColor:
-                      transport === 'url'
-                        ? colorScheme === 'dark'
-                          ? 'rgba(255,255,255,0.06)'
-                          : 'rgba(0,0,0,0.06)'
-                        : 'transparent',
-                  },
-                ]}
-                onPress={() => setTransport('url')}>
-                <ThemedText type="defaultSemiBold">URL</ThemedText>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                style={[
-                  styles.segment,
-                  {
-                    borderColor: Colors[colorScheme].icon,
-                    backgroundColor:
-                      transport === 'stdio'
-                        ? colorScheme === 'dark'
-                          ? 'rgba(255,255,255,0.06)'
-                          : 'rgba(0,0,0,0.06)'
-                        : 'transparent',
-                  },
-                ]}
-                onPress={() => setTransport('stdio')}>
-                <ThemedText type="defaultSemiBold">本地</ThemedText>
-              </Pressable>
+    <ThemedView style={styles.screen}>
+      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag">
+          <View style={styles.header}>
+            <View style={{ flex: 1 }}>
+              <ThemedText type="title">MCP</ThemedText>
+              <ThemedText style={styles.muted}>全局登记 MCP 服务器（默认不启用），可在新建会话时选择启用。</ThemedText>
             </View>
+          </View>
+
+          {loading ? (
+            <View style={styles.center}>
+              <ActivityIndicator />
+            </View>
+          ) : (
+            <>
+              {error ? <ThemedText style={[styles.error, { color: Colors[colorScheme].danger }]}>{error}</ThemedText> : null}
+
+              <ThemedView style={[styles.card, cardStyle]}>
+                <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
+                  新增服务器
+                </ThemedText>
+
+                <View style={styles.segments}>
+                  <Pressable
+                    accessibilityRole="button"
+                    android_ripple={{ color: rippleColor }}
+                    style={({ pressed }) => [
+                      styles.segment,
+                      {
+                        opacity: pressed ? 0.92 : 1,
+                        borderColor: transport === 'url' ? Colors[colorScheme].tint : Colors[colorScheme].outline,
+                        backgroundColor: transport === 'url' ? Colors[colorScheme].surface2 : 'transparent',
+                      },
+                    ]}
+                    onPress={() => setTransport('url')}>
+                    <ThemedText type="defaultSemiBold">URL</ThemedText>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    android_ripple={{ color: rippleColor }}
+                    style={({ pressed }) => [
+                      styles.segment,
+                      {
+                        opacity: pressed ? 0.92 : 1,
+                        borderColor: transport === 'stdio' ? Colors[colorScheme].tint : Colors[colorScheme].outline,
+                        backgroundColor: transport === 'stdio' ? Colors[colorScheme].surface2 : 'transparent',
+                      },
+                    ]}
+                    onPress={() => setTransport('stdio')}>
+                    <ThemedText type="defaultSemiBold">本地</ThemedText>
+                  </Pressable>
+                </View>
 
             <TextInput
               placeholder="名称（展示用）"
-              placeholderTextColor={Colors[colorScheme].icon}
+              placeholderTextColor={placeholderTextColor}
               value={name}
               onChangeText={setName}
-              style={[styles.input, { color: Colors[colorScheme].text, borderColor: Colors[colorScheme].icon }]}
+              selectionColor={Colors[colorScheme].tint}
+              style={[styles.input, inputStyle]}
             />
 
             {transport === 'url' ? (
               <TextInput
                 placeholder="URL（https://...）"
-                placeholderTextColor={Colors[colorScheme].icon}
+                placeholderTextColor={placeholderTextColor}
                 value={url}
                 onChangeText={setUrl}
                 autoCapitalize="none"
-                style={[styles.input, { color: Colors[colorScheme].text, borderColor: Colors[colorScheme].icon }]}
+                selectionColor={Colors[colorScheme].tint}
+                style={[styles.input, inputStyle]}
               />
             ) : (
               <>
                 <TextInput
                   placeholder="可执行文件路径（本机）"
-                  placeholderTextColor={Colors[colorScheme].icon}
+                  placeholderTextColor={placeholderTextColor}
                   value={command}
                   onChangeText={setCommand}
                   autoCapitalize="none"
-                  style={[styles.input, { color: Colors[colorScheme].text, borderColor: Colors[colorScheme].icon }]}
+                  selectionColor={Colors[colorScheme].tint}
+                  style={[styles.input, inputStyle]}
                 />
                 <TextInput
                   placeholder={'可选参数（每行一条）'}
-                  placeholderTextColor={Colors[colorScheme].icon}
+                  placeholderTextColor={placeholderTextColor}
                   value={argsText}
                   onChangeText={setArgsText}
                   multiline
                   style={[
                     styles.input,
-                    { color: Colors[colorScheme].text, borderColor: Colors[colorScheme].icon, minHeight: 96 },
+                    inputStyle,
+                    { minHeight: 112, textAlignVertical: 'top' },
                   ]}
                 />
                 <TextInput
                   placeholder={'安装地址（可选）'}
-                  placeholderTextColor={Colors[colorScheme].icon}
+                  placeholderTextColor={placeholderTextColor}
                   value={installUrl}
                   onChangeText={setInstallUrl}
                   autoCapitalize="none"
-                  style={[styles.input, { color: Colors[colorScheme].text, borderColor: Colors[colorScheme].icon }]}
+                  selectionColor={Colors[colorScheme].tint}
+                  style={[styles.input, inputStyle]}
                 />
               </>
             )}
@@ -172,11 +213,12 @@ export default function McpScreen() {
             <Pressable
               accessibilityRole="button"
               disabled={busy}
-              style={[
+              android_ripple={{ color: rippleColor }}
+              style={({ pressed }) => [
                 styles.primaryButton,
                 {
                   backgroundColor: Colors[colorScheme].tint,
-                  opacity: busy ? 0.7 : 1,
+                  opacity: busy ? 0.6 : pressed ? 0.92 : 1,
                 },
               ]}
               onPress={async () => {
@@ -229,7 +271,7 @@ export default function McpScreen() {
                   setBusy(false);
                 }
               }}>
-              <ThemedText type="defaultSemiBold" style={{ color: '#fff' }}>
+              <ThemedText type="defaultSemiBold" style={{ color: colorScheme === 'dark' ? '#0b1220' : '#ffffff' }}>
                 {transport === 'stdio' && installUrl.trim() ? '下载并新增' : '新增'}
               </ThemedText>
             </Pressable>
@@ -240,7 +282,7 @@ export default function McpScreen() {
             </ThemedText>
           </ThemedView>
 
-          <ThemedView style={[styles.card, { borderColor: Colors[colorScheme].icon }]}>
+          <ThemedView style={[styles.card, cardStyle]}>
             <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
               已添加的服务器
             </ThemedText>
@@ -255,8 +297,8 @@ export default function McpScreen() {
                   style={[
                     styles.row,
                     {
-                      borderColor: Colors[colorScheme].icon,
-                      backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+                      borderColor: Colors[colorScheme].outline,
+                      backgroundColor: Colors[colorScheme].surface2,
                     },
                   ]}>
                   <View style={{ flex: 1 }}>
@@ -264,14 +306,19 @@ export default function McpScreen() {
                     <ThemedText style={styles.muted}>
                       {s.transport === 'url' ? `地址：${s.url ?? ''}` : `路径：${s.command ?? ''}`}
                     </ThemedText>
-                    <ThemedText style={styles.muted}>configKey: {s.configKey}</ThemedText>
+                    <ThemedText style={styles.muted}>标识：{s.configKey}</ThemedText>
                   </View>
 
                   <Pressable
                     accessibilityRole="button"
-                    style={[
+                    android_ripple={{ color: rippleColor }}
+                    style={({ pressed }) => [
                       styles.smallButton,
-                      { borderColor: Colors[colorScheme].icon, backgroundColor: 'transparent' },
+                      {
+                        borderColor: Colors[colorScheme].outline,
+                        backgroundColor: 'transparent',
+                        opacity: pressed ? 0.92 : 1,
+                      },
                     ]}
                     onPress={() => (isEditing ? stopEdit() : startEdit(s))}>
                     <ThemedText type="defaultSemiBold">{isEditing ? '取消' : '编辑'}</ThemedText>
@@ -279,9 +326,14 @@ export default function McpScreen() {
 
                   <Pressable
                     accessibilityRole="button"
-                    style={[
+                    android_ripple={{ color: rippleColor }}
+                    style={({ pressed }) => [
                       styles.smallButton,
-                      { borderColor: Colors[colorScheme].icon, backgroundColor: 'transparent' },
+                      {
+                        borderColor: Colors[colorScheme].outline,
+                        backgroundColor: 'transparent',
+                        opacity: pressed ? 0.92 : 1,
+                      },
                     ]}
                     onPress={() => {
                       Alert.alert('删除 MCP 服务器', `确定删除「${s.name}」？`, [
@@ -310,16 +362,13 @@ export default function McpScreen() {
                       <View style={styles.segments}>
                         <Pressable
                           accessibilityRole="button"
-                          style={[
+                          android_ripple={{ color: rippleColor }}
+                          style={({ pressed }) => [
                             styles.segment,
                             {
-                              borderColor: Colors[colorScheme].icon,
-                              backgroundColor:
-                                editTransport === 'url'
-                                  ? colorScheme === 'dark'
-                                    ? 'rgba(255,255,255,0.06)'
-                                    : 'rgba(0,0,0,0.06)'
-                                  : 'transparent',
+                              opacity: pressed ? 0.92 : 1,
+                              borderColor: editTransport === 'url' ? Colors[colorScheme].tint : Colors[colorScheme].outline,
+                              backgroundColor: editTransport === 'url' ? Colors[colorScheme].surface2 : 'transparent',
                             },
                           ]}
                           onPress={() => setEditTransport('url')}>
@@ -327,16 +376,13 @@ export default function McpScreen() {
                         </Pressable>
                         <Pressable
                           accessibilityRole="button"
-                          style={[
+                          android_ripple={{ color: rippleColor }}
+                          style={({ pressed }) => [
                             styles.segment,
                             {
-                              borderColor: Colors[colorScheme].icon,
-                              backgroundColor:
-                                editTransport === 'stdio'
-                                  ? colorScheme === 'dark'
-                                    ? 'rgba(255,255,255,0.06)'
-                                    : 'rgba(0,0,0,0.06)'
-                                  : 'transparent',
+                              opacity: pressed ? 0.92 : 1,
+                              borderColor: editTransport === 'stdio' ? Colors[colorScheme].tint : Colors[colorScheme].outline,
+                              backgroundColor: editTransport === 'stdio' ? Colors[colorScheme].surface2 : 'transparent',
                             },
                           ]}
                           onPress={() => setEditTransport('stdio')}>
@@ -346,70 +392,74 @@ export default function McpScreen() {
 
                       <TextInput
                         placeholder="名称"
-                        placeholderTextColor={Colors[colorScheme].icon}
+                        placeholderTextColor={placeholderTextColor}
                         value={editName}
                         onChangeText={setEditName}
-                        style={[styles.input, { color: Colors[colorScheme].text, borderColor: Colors[colorScheme].icon }]}
+                        selectionColor={Colors[colorScheme].tint}
+                        style={[styles.input, inputStyle]}
                       />
 
                       {editTransport === 'url' ? (
                         <TextInput
                           placeholder="URL（https://...）"
-                          placeholderTextColor={Colors[colorScheme].icon}
+                          placeholderTextColor={placeholderTextColor}
                           value={editUrl}
                           onChangeText={setEditUrl}
                           autoCapitalize="none"
-                          style={[
-                            styles.input,
-                            { color: Colors[colorScheme].text, borderColor: Colors[colorScheme].icon },
-                          ]}
+                          selectionColor={Colors[colorScheme].tint}
+                          style={[styles.input, inputStyle]}
                         />
                       ) : (
                         <>
                           <TextInput
                             placeholder="可执行文件路径（本机）"
-                            placeholderTextColor={Colors[colorScheme].icon}
+                            placeholderTextColor={placeholderTextColor}
                             value={editCommand}
                             onChangeText={setEditCommand}
                             autoCapitalize="none"
-                            style={[
-                              styles.input,
-                              { color: Colors[colorScheme].text, borderColor: Colors[colorScheme].icon },
-                            ]}
+                            selectionColor={Colors[colorScheme].tint}
+                            style={[styles.input, inputStyle]}
                           />
                           <TextInput
                             placeholder={'可选参数（每行一条）'}
-                            placeholderTextColor={Colors[colorScheme].icon}
+                            placeholderTextColor={placeholderTextColor}
                             value={editArgsText}
                             onChangeText={setEditArgsText}
                             multiline
                             style={[
                               styles.input,
-                              { color: Colors[colorScheme].text, borderColor: Colors[colorScheme].icon, minHeight: 96 },
+                              inputStyle,
+                              { minHeight: 112, textAlignVertical: 'top' },
                             ]}
                           />
                           <TextInput
                             placeholder={'安装地址（可选）'}
-                            placeholderTextColor={Colors[colorScheme].icon}
+                            placeholderTextColor={placeholderTextColor}
                             value={editInstallUrl}
                             onChangeText={setEditInstallUrl}
                             autoCapitalize="none"
+                            selectionColor={Colors[colorScheme].tint}
                             style={[
                               styles.input,
-                              { color: Colors[colorScheme].text, borderColor: Colors[colorScheme].icon },
+                              inputStyle,
                             ]}
                           />
                           <View style={styles.segments}>
-                            <Pressable
-                              accessibilityRole="button"
-                              disabled={busy}
-                              style={[
-                                styles.smallButton,
-                                { borderColor: Colors[colorScheme].icon, backgroundColor: 'transparent', opacity: busy ? 0.7 : 1 },
-                              ]}
-                              onPress={async () => {
-                                const u = editInstallUrl.trim();
-                                if (!u) return Alert.alert('缺少 URL', '请填写安装地址。');
+                             <Pressable
+                               accessibilityRole="button"
+                               disabled={busy}
+                               android_ripple={{ color: rippleColor }}
+                               style={({ pressed }) => [
+                                 styles.smallButton,
+                                 {
+                                   borderColor: Colors[colorScheme].outline,
+                                   backgroundColor: 'transparent',
+                                   opacity: busy ? 0.6 : pressed ? 0.92 : 1,
+                                 },
+                               ]}
+                               onPress={async () => {
+                                 const u = editInstallUrl.trim();
+                                 if (!u) return Alert.alert('缺少 URL', '请填写安装地址。');
                                 setBusy(true);
                                 try {
                                   const installed = await installManagedMcpFromUrl(s.id, u);
@@ -430,16 +480,21 @@ export default function McpScreen() {
                               }}>
                               <ThemedText type="defaultSemiBold">下载并安装</ThemedText>
                             </Pressable>
-                            <Pressable
-                              accessibilityRole="button"
-                              disabled={busy}
-                              style={[
-                                styles.smallButton,
-                                { borderColor: Colors[colorScheme].icon, backgroundColor: 'transparent', opacity: busy ? 0.7 : 1 },
-                              ]}
-                              onPress={() => {
-                                Alert.alert('卸载本地文件', '将删除该服务器的本地安装文件，但不会删除服务器记录。', [
-                                  { text: '取消', style: 'cancel' },
+                             <Pressable
+                               accessibilityRole="button"
+                               disabled={busy}
+                               android_ripple={{ color: rippleColor }}
+                               style={({ pressed }) => [
+                                 styles.smallButton,
+                                 {
+                                   borderColor: Colors[colorScheme].outline,
+                                   backgroundColor: 'transparent',
+                                   opacity: busy ? 0.6 : pressed ? 0.92 : 1,
+                                 },
+                               ]}
+                               onPress={() => {
+                                 Alert.alert('卸载本地文件', '将删除该服务器的本地安装文件，但不会删除服务器记录。', [
+                                   { text: '取消', style: 'cancel' },
                                   {
                                     text: '卸载',
                                     style: 'destructive',
@@ -464,11 +519,13 @@ export default function McpScreen() {
 
                       <Pressable
                         accessibilityRole="button"
-                        style={[
+                        android_ripple={{ color: rippleColor }}
+                        style={({ pressed }) => [
                           styles.secondaryButton,
                           {
-                            borderColor: Colors[colorScheme].icon,
-                            backgroundColor: 'transparent',
+                            borderColor: Colors[colorScheme].outline,
+                            backgroundColor: Colors[colorScheme].surface,
+                            opacity: pressed ? 0.92 : 1,
                           },
                         ]}
                         onPress={async () => {
@@ -493,50 +550,98 @@ export default function McpScreen() {
                 </View>
               );
             })}
-          </ThemedView>
-        </>
-      )}
+              </ThemedView>
+            </>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 16, paddingTop: 16 },
-  header: { alignItems: 'flex-start', flexDirection: 'row', gap: 12, marginBottom: 12 },
+  screen: { flex: 1 },
+  container: {
+    flexGrow: 1,
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 32,
+  },
+  header: { alignItems: 'flex-start', flexDirection: 'row', gap: 12, marginBottom: 16 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   muted: { opacity: 0.8 },
   error: { marginBottom: 12 },
-  card: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 12 },
+  card: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
   row: {
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     marginBottom: 10,
     flexDirection: 'row',
     gap: 10,
     flexWrap: 'wrap',
     alignItems: 'flex-start',
+    overflow: 'hidden',
   },
-  segments: { flexDirection: 'row', gap: 10, marginBottom: 10 },
-  segment: { flex: 1, borderRadius: 10, borderWidth: 1, minHeight: 36, alignItems: 'center', justifyContent: 'center' },
-  input: { borderWidth: 1, borderRadius: 12, fontSize: 16, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 10 },
-  primaryButton: { alignItems: 'center', justifyContent: 'center', borderRadius: 12, minHeight: 44, paddingHorizontal: 12 },
+  segments: { flexDirection: 'row', gap: 10, marginBottom: 10, flexWrap: 'wrap' },
+  segment: {
+    flex: 1,
+    borderRadius: 999,
+    borderWidth: 1,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 12,
+    minHeight: 48,
+    fontSize: 16,
+    lineHeight: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+  },
+  primaryButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    minHeight: 48,
+    paddingHorizontal: 16,
+    overflow: 'hidden',
+  },
   secondaryButton: {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 12,
-    minHeight: 44,
-    paddingHorizontal: 12,
+    minHeight: 48,
+    paddingHorizontal: 16,
     borderWidth: 1,
     marginTop: 8,
+    overflow: 'hidden',
   },
   smallButton: {
     borderWidth: 1,
-    borderRadius: 10,
-    minHeight: 34,
-    paddingHorizontal: 10,
+    borderRadius: 12,
+    minHeight: 44,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
 });

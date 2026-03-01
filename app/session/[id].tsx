@@ -1,9 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
 
+import { MarkdownView } from '@/components/markdown/MarkdownView';
+import { ThinkingBlock } from '@/components/markdown/ThinkingBlock';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
@@ -12,6 +24,7 @@ import { CODEX_SLASH_COMMANDS } from '@/src/codex/slashCommands';
 import { getCodexSettings, materializeCodexConfigFiles, setCodexApiKey, updateCodexSettings } from '@/src/codex/settings';
 import { runCodexTurn } from '@/src/codex/sessionRunner';
 import { gitDiff } from '@/src/git/nativeGit';
+import { splitThinking } from '@/src/markdown/thinking';
 import {
   appendMessage,
   cloneSessionMessages,
@@ -33,6 +46,7 @@ export default function SessionDetailScreen() {
   const sessionId = typeof id === 'string' ? id : '';
 
   const colorScheme = useColorScheme() ?? 'light';
+  const insets = useSafeAreaInsets();
   const { workspaces, activeWorkspaceId } = useWorkspaces();
 
   const active = useMemo(
@@ -54,6 +68,7 @@ export default function SessionDetailScreen() {
   const [waitingFirstToken, setWaitingFirstToken] = useState(false);
   const [pendingAssistantId, setPendingAssistantId] = useState<string | null>(null);
   const [collaborationMode, setCollaborationMode] = useState<Session['codexCollaborationMode']>('code');
+  const [uiShowThinking, setUiShowThinking] = useState(false);
 
   const slashToken = useMemo(() => {
     const trimmed = input.trimStart();
@@ -69,6 +84,11 @@ export default function SessionDetailScreen() {
     if (!query) return CODEX_SLASH_COMMANDS;
     return CODEX_SLASH_COMMANDS.filter((c) => c.command.slice(1).toLowerCase().startsWith(query));
   }, [slashToken]);
+
+  const rippleColor = useMemo(
+    () => (colorScheme === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(2,6,23,0.08)'),
+    [colorScheme]
+  );
 
   function applySlashCommand(command: string) {
     setInput((prev) => {
@@ -113,6 +133,22 @@ export default function SessionDetailScreen() {
       cancelled = true;
     };
   }, [active, sessionId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function run() {
+      try {
+        const s = await getCodexSettings();
+        if (!cancelled) setUiShowThinking(Boolean(s.uiShowThinking));
+      } catch {
+        // ignore
+      }
+    }
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function onSend() {
     if (!active || !sessionId) return;
@@ -665,16 +701,18 @@ export default function SessionDetailScreen() {
 
   if (!active) {
     return (
-      <ThemedView style={styles.container}>
+      <ThemedView style={styles.screen}>
         <Stack.Screen options={{ title: '会话' }} />
-        <ThemedText type="title">会话</ThemedText>
-        <ThemedText style={styles.muted}>请先选择一个工作区。</ThemedText>
+        <View style={styles.container}>
+          <ThemedText type="title">会话</ThemedText>
+          <ThemedText style={styles.muted}>请先选择一个工作区。</ThemedText>
+        </View>
       </ThemedView>
     );
   }
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView style={styles.screen}>
       <Stack.Screen
         options={{
           title: session?.title ?? '会话',
@@ -686,7 +724,13 @@ export default function SessionDetailScreen() {
         }}
       />
 
-      <ThemedView style={styles.topCard}>
+      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={styles.container}>
+          <ThemedView
+            style={[
+              styles.topCard,
+              { backgroundColor: Colors[colorScheme].surface, borderColor: Colors[colorScheme].outline },
+            ]}>
         <ThemedText style={styles.muted}>
           工作区：<ThemedText type="defaultSemiBold">{active.name}</ThemedText>
         </ThemedText>
@@ -700,8 +744,8 @@ export default function SessionDetailScreen() {
             styles.titleInput,
             {
               color: Colors[colorScheme].text,
-              borderColor: Colors[colorScheme].icon,
-              backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+              borderColor: Colors[colorScheme].outline,
+              backgroundColor: Colors[colorScheme].surface2,
             },
           ]}
           onBlur={async () => {
@@ -718,7 +762,7 @@ export default function SessionDetailScreen() {
       </ThemedView>
 
       {error ? (
-        <ThemedText style={[styles.error, { color: '#ef4444' }]}>{error}</ThemedText>
+        <ThemedText style={[styles.error, { color: Colors[colorScheme].danger }]}>{error}</ThemedText>
       ) : null}
 
       {loading ? (
@@ -728,31 +772,56 @@ export default function SessionDetailScreen() {
       ) : (
         <FlatList
           ref={listRef}
+          style={{ flex: 1 }}
           data={messages}
           keyExtractor={(m) => m.id}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: 16 }}
-          renderItem={({ item }) => (
-            <ThemedView
-              style={[
-                styles.msg,
-                item.role === 'user' ? styles.msgUser : styles.msgAssistant,
-                {
-                  borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)',
-                },
-              ]}>
-              <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
-                {item.role === 'user' ? '你' : item.role === 'assistant' ? 'Codex' : '系统'}
-              </ThemedText>
-              {item.id === pendingAssistantId && waitingFirstToken ? (
-                <View style={styles.thinkingRow}>
-                  <ActivityIndicator />
-                  <ThemedText style={styles.muted}>正在等待 Codex 返回…</ThemedText>
-                </View>
-              ) : (
-                <ThemedText>{item.content}</ThemedText>
-              )}
-            </ThemedView>
-          )}
+          renderItem={({ item }) => {
+            const { visible, thinking } = splitThinking(item.content);
+            const roleLabel = item.role === 'user' ? '你' : item.role === 'assistant' ? 'Codex' : '系统';
+            const showHiddenThinkingPlaceholder = !uiShowThinking && !visible && Boolean(thinking);
+
+            return (
+              <ThemedView
+                style={[
+                  styles.msg,
+                  {
+                    borderColor: Colors[colorScheme].outlineMuted,
+                    backgroundColor:
+                      item.role === 'user'
+                        ? colorScheme === 'dark'
+                          ? 'rgba(34,211,238,0.14)'
+                          : 'rgba(10,126,164,0.08)'
+                        : Colors[colorScheme].surface,
+                  },
+                ]}>
+                <ThemedText type="defaultSemiBold" style={{ marginBottom: 8 }}>
+                  {roleLabel}
+                </ThemedText>
+
+                {item.id === pendingAssistantId && waitingFirstToken ? (
+                  <View style={styles.thinkingRow}>
+                    <ActivityIndicator />
+                    <ThemedText style={styles.muted}>正在等待 Codex 返回…</ThemedText>
+                  </View>
+                ) : (
+                  <>
+                    {visible ? <MarkdownView markdown={visible} selectable /> : null}
+                    {showHiddenThinkingPlaceholder ? (
+                      <ThemedText style={styles.muted}>思考内容已隐藏</ThemedText>
+                    ) : null}
+                    {uiShowThinking && thinking ? (
+                      <View style={{ marginTop: 10 }}>
+                        <ThinkingBlock thinking={thinking} />
+                      </View>
+                    ) : null}
+                  </>
+                )}
+              </ThemedView>
+            );
+          }}
           ListEmptyComponent={<ThemedText style={styles.muted}>还没有消息。</ThemedText>}
         />
       )}
@@ -762,8 +831,8 @@ export default function SessionDetailScreen() {
           style={[
             styles.slashPopup,
             {
-              backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-              borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)',
+              backgroundColor: Colors[colorScheme].surface,
+              borderColor: Colors[colorScheme].outline,
             },
           ]}>
           <FlatList
@@ -802,7 +871,10 @@ export default function SessionDetailScreen() {
       <View
         style={[
           styles.composer,
-          { borderColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)' },
+          {
+            borderColor: Colors[colorScheme].outline,
+            paddingBottom: Math.max(10, 10 + insets.bottom),
+          },
         ]}>
         <TextInput
           value={input}
@@ -813,13 +885,14 @@ export default function SessionDetailScreen() {
             styles.composerInput,
             {
               color: Colors[colorScheme].text,
-              backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+              backgroundColor: Colors[colorScheme].surface2,
             },
           ]}
           multiline
         />
         <Pressable
           accessibilityRole="button"
+          android_ripple={{ color: rippleColor }}
           disabled={sending || !input.trim()}
           onPress={onSend}
           style={({ pressed }) => [
@@ -834,19 +907,27 @@ export default function SessionDetailScreen() {
           </ThemedText>
         </Pressable>
       </View>
+        </View>
+      </KeyboardAvoidingView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     paddingTop: 12,
     paddingHorizontal: 12,
+    paddingBottom: 12,
+    width: '100%',
+    maxWidth: 980,
+    alignSelf: 'center',
   },
   topCard: {
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
     borderRadius: 14,
     padding: 12,
     marginBottom: 10,
@@ -865,22 +946,19 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 10,
   },
-  msgUser: {
-    backgroundColor: 'rgba(59,130,246,0.10)',
-  },
-  msgAssistant: {
-    backgroundColor: 'rgba(0,0,0,0.02)',
-  },
   thinkingRow: {
     paddingVertical: 6,
   },
   composer: {
     borderTopWidth: 1,
     paddingTop: 10,
-    paddingBottom: 6,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
     gap: 10,
   },
   composerInput: {
+    flex: 1,
     minHeight: 44,
     maxHeight: 140,
     borderRadius: 12,
@@ -917,6 +995,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 14,
   },
   muted: {
     opacity: 0.7,

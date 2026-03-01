@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { Stack, useRouter } from 'expo-router';
 
@@ -23,21 +33,27 @@ function Segment({
   label,
   active,
   onPress,
+  colorScheme,
 }: {
   label: string;
   active: boolean;
   onPress: () => void;
+  colorScheme: 'light' | 'dark';
 }) {
+  const tint = Colors[colorScheme].tint;
+  const activeBg = colorScheme === 'dark' ? 'rgba(34,211,238,0.16)' : 'rgba(10,126,164,0.12)';
+  const rippleColor = colorScheme === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(2,6,23,0.08)';
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
+      android_ripple={{ color: rippleColor }}
       style={({ pressed }) => [
         styles.segment,
         {
-          opacity: pressed ? 0.85 : 1,
-          backgroundColor: active ? 'rgba(59,130,246,0.18)' : 'transparent',
-          borderColor: active ? 'rgba(59,130,246,0.55)' : 'rgba(255,255,255,0.12)',
+          opacity: pressed ? 0.92 : 1,
+          backgroundColor: active ? activeBg : 'transparent',
+          borderColor: active ? tint : Colors[colorScheme].outline,
         },
       ]}>
       <ThemedText type="defaultSemiBold">{label}</ThemedText>
@@ -101,47 +117,83 @@ export default function NewWorkspaceScreen() {
     return !loading;
   }, [gitRemoteUrl, loading, name, sourceType, webdavEndpoint]);
 
+  const cardStyle = useMemo(
+    () => ({
+      backgroundColor: Colors[colorScheme].surface,
+      borderColor: Colors[colorScheme].outline,
+    }),
+    [colorScheme]
+  );
+
+  const inputStyle = useMemo(
+    () => ({
+      color: Colors[colorScheme].text,
+      borderColor: Colors[colorScheme].outline,
+      backgroundColor: Colors[colorScheme].surface2,
+    }),
+    [colorScheme]
+  );
+
+  const placeholderTextColor = useMemo(
+    () => (colorScheme === 'dark' ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.38)'),
+    [colorScheme]
+  );
+
+  const rippleColor = useMemo(
+    () => (colorScheme === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(2,6,23,0.08)'),
+    [colorScheme]
+  );
+
   return (
-    <ThemedView style={styles.container}>
-      <Stack.Screen options={{ title: '新建工作区' }} />
+    <ThemedView style={styles.screen}>
+      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag">
+          <Stack.Screen options={{ title: '新建工作区' }} />
 
-      <View style={styles.header}>
-        <ThemedText type="title">新建工作区</ThemedText>
-      </View>
+          <View style={styles.header}>
+            <ThemedText type="title">新建工作区</ThemedText>
+          </View>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
-          来源
-        </ThemedText>
-        <View style={styles.segments}>
-          <Segment label="空白" active={sourceType === 'empty'} onPress={() => setSourceType('empty')} />
-          <Segment label="Git" active={sourceType === 'git'} onPress={() => setSourceType('git')} />
-          <Segment label="WebDAV" active={sourceType === 'webdav'} onPress={() => setSourceType('webdav')} />
-        </View>
-      </ThemedView>
+          <ThemedView style={[styles.card, cardStyle]}>
+            <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
+              来源
+            </ThemedText>
+            <View style={styles.segments}>
+              <Segment
+                label="空白"
+                active={sourceType === 'empty'}
+                onPress={() => setSourceType('empty')}
+                colorScheme={colorScheme}
+              />
+              <Segment label="Git" active={sourceType === 'git'} onPress={() => setSourceType('git')} colorScheme={colorScheme} />
+              <Segment
+                label="WebDAV"
+                active={sourceType === 'webdav'}
+                onPress={() => setSourceType('webdav')}
+                colorScheme={colorScheme}
+              />
+            </View>
+          </ThemedView>
 
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
-          基础信息
-        </ThemedText>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          placeholder="工作区名称"
-          placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
-          style={[
-            styles.input,
-            {
-              color: Colors[colorScheme].text,
-              borderColor: Colors[colorScheme].icon,
-              backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-            },
-          ]}
-        />
-      </ThemedView>
+          <ThemedView style={[styles.card, cardStyle]}>
+            <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
+              基础信息
+            </ThemedText>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="工作区名称"
+              placeholderTextColor={placeholderTextColor}
+              selectionColor={Colors[colorScheme].tint}
+              style={[styles.input, inputStyle]}
+            />
+          </ThemedView>
 
       {sourceType === 'git' ? (
-        <ThemedView style={styles.card}>
+        <ThemedView style={[styles.card, cardStyle]}>
           <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
             Git
           </ThemedText>
@@ -153,17 +205,11 @@ export default function NewWorkspaceScreen() {
             value={gitRemoteUrl}
             onChangeText={setGitRemoteUrl}
             placeholder="https://github.com/user/repo.git"
-            placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+            placeholderTextColor={placeholderTextColor}
+            selectionColor={Colors[colorScheme].tint}
             autoCapitalize="none"
             autoCorrect={false}
-            style={[
-              styles.input,
-              {
-                color: Colors[colorScheme].text,
-                borderColor: Colors[colorScheme].icon,
-                backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-              },
-            ]}
+            style={[styles.input, inputStyle]}
           />
 
           <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
@@ -173,17 +219,11 @@ export default function NewWorkspaceScreen() {
             value={gitBranch}
             onChangeText={setGitBranch}
             placeholder="main"
-            placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+            placeholderTextColor={placeholderTextColor}
+            selectionColor={Colors[colorScheme].tint}
             autoCapitalize="none"
             autoCorrect={false}
-            style={[
-              styles.input,
-              {
-                color: Colors[colorScheme].text,
-                borderColor: Colors[colorScheme].icon,
-                backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-              },
-            ]}
+            style={[styles.input, inputStyle]}
           />
 
           <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
@@ -193,18 +233,12 @@ export default function NewWorkspaceScreen() {
             value={gitToken}
             onChangeText={setGitToken}
             placeholder="用于私有仓库"
-            placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+            placeholderTextColor={placeholderTextColor}
+            selectionColor={Colors[colorScheme].tint}
             autoCapitalize="none"
             autoCorrect={false}
             secureTextEntry
-            style={[
-              styles.input,
-              {
-                color: Colors[colorScheme].text,
-                borderColor: Colors[colorScheme].icon,
-                backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-              },
-            ]}
+            style={[styles.input, inputStyle]}
           />
 
           <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
@@ -215,36 +249,22 @@ export default function NewWorkspaceScreen() {
               value={gitUserName}
               onChangeText={setGitUserName}
               placeholder="user.name"
-              placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+              placeholderTextColor={placeholderTextColor}
+              selectionColor={Colors[colorScheme].tint}
               autoCapitalize="none"
               autoCorrect={false}
-              style={[
-                styles.input,
-                styles.half,
-                {
-                  color: Colors[colorScheme].text,
-                  borderColor: Colors[colorScheme].icon,
-                  backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-                },
-              ]}
+              style={[styles.input, styles.half, inputStyle]}
             />
             <TextInput
               value={gitUserEmail}
               onChangeText={setGitUserEmail}
               placeholder="user.email"
-              placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+              placeholderTextColor={placeholderTextColor}
+              selectionColor={Colors[colorScheme].tint}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
-              style={[
-                styles.input,
-                styles.half,
-                {
-                  color: Colors[colorScheme].text,
-                  borderColor: Colors[colorScheme].icon,
-                  backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-                },
-              ]}
+              style={[styles.input, styles.half, inputStyle]}
             />
           </View>
 
@@ -256,7 +276,7 @@ export default function NewWorkspaceScreen() {
       ) : null}
 
       {sourceType === 'webdav' ? (
-        <ThemedView style={styles.card}>
+        <ThemedView style={[styles.card, cardStyle]}>
           <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
             WebDAV
           </ThemedText>
@@ -268,17 +288,11 @@ export default function NewWorkspaceScreen() {
             value={webdavEndpoint}
             onChangeText={setWebdavEndpoint}
             placeholder="https://example.com/dav/"
-            placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+            placeholderTextColor={placeholderTextColor}
+            selectionColor={Colors[colorScheme].tint}
             autoCapitalize="none"
             autoCorrect={false}
-            style={[
-              styles.input,
-              {
-                color: Colors[colorScheme].text,
-                borderColor: Colors[colorScheme].icon,
-                backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-              },
-            ]}
+            style={[styles.input, inputStyle]}
           />
 
           <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
@@ -288,17 +302,11 @@ export default function NewWorkspaceScreen() {
             value={webdavBasePath}
             onChangeText={setWebdavBasePath}
             placeholder="/"
-            placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+            placeholderTextColor={placeholderTextColor}
+            selectionColor={Colors[colorScheme].tint}
             autoCapitalize="none"
             autoCorrect={false}
-            style={[
-              styles.input,
-              {
-                color: Colors[colorScheme].text,
-                borderColor: Colors[colorScheme].icon,
-                backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-              },
-            ]}
+            style={[styles.input, inputStyle]}
           />
 
           <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
@@ -308,25 +316,29 @@ export default function NewWorkspaceScreen() {
             value={webdavRemoteRoot}
             onChangeText={setWebdavRemoteRoot}
             placeholder="repo/"
-            placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+            placeholderTextColor={placeholderTextColor}
+            selectionColor={Colors[colorScheme].tint}
             autoCapitalize="none"
             autoCorrect={false}
-            style={[
-              styles.input,
-              {
-                color: Colors[colorScheme].text,
-                borderColor: Colors[colorScheme].icon,
-                backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-              },
-            ]}
+            style={[styles.input, inputStyle]}
           />
 
           <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
             认证
           </ThemedText>
           <View style={styles.segments}>
-            <Segment label="令牌" active={webdavAuthType === 'bearer'} onPress={() => setWebdavAuthType('bearer')} />
-            <Segment label="账号密码" active={webdavAuthType === 'basic'} onPress={() => setWebdavAuthType('basic')} />
+            <Segment
+              label="令牌"
+              active={webdavAuthType === 'bearer'}
+              onPress={() => setWebdavAuthType('bearer')}
+              colorScheme={colorScheme}
+            />
+            <Segment
+              label="账号密码"
+              active={webdavAuthType === 'basic'}
+              onPress={() => setWebdavAuthType('basic')}
+              colorScheme={colorScheme}
+            />
           </View>
 
           <View style={{ height: 10 }} />
@@ -336,18 +348,12 @@ export default function NewWorkspaceScreen() {
               value={webdavBearerToken}
               onChangeText={setWebdavBearerToken}
               placeholder="访问令牌（可选）"
-              placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+              placeholderTextColor={placeholderTextColor}
+              selectionColor={Colors[colorScheme].tint}
               autoCapitalize="none"
               autoCorrect={false}
               secureTextEntry
-              style={[
-                styles.input,
-                {
-                  color: Colors[colorScheme].text,
-                  borderColor: Colors[colorScheme].icon,
-                  backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-                },
-              ]}
+              style={[styles.input, inputStyle]}
             />
           ) : (
             <View style={styles.row2}>
@@ -355,43 +361,29 @@ export default function NewWorkspaceScreen() {
                 value={webdavBasicUser}
                 onChangeText={setWebdavBasicUser}
                 placeholder="用户名（可选）"
-                placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+                placeholderTextColor={placeholderTextColor}
+                selectionColor={Colors[colorScheme].tint}
                 autoCapitalize="none"
                 autoCorrect={false}
-                style={[
-                  styles.input,
-                  styles.half,
-                  {
-                    color: Colors[colorScheme].text,
-                    borderColor: Colors[colorScheme].icon,
-                    backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-                  },
-                ]}
+                style={[styles.input, styles.half, inputStyle]}
               />
               <TextInput
                 value={webdavBasicPass}
                 onChangeText={setWebdavBasicPass}
                 placeholder="密码（可选）"
-                placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+                placeholderTextColor={placeholderTextColor}
+                selectionColor={Colors[colorScheme].tint}
                 autoCapitalize="none"
                 autoCorrect={false}
                 secureTextEntry
-                style={[
-                  styles.input,
-                  styles.half,
-                  {
-                    color: Colors[colorScheme].text,
-                    borderColor: Colors[colorScheme].icon,
-                    backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-                  },
-                ]}
+                style={[styles.input, styles.half, inputStyle]}
               />
             </View>
           )}
         </ThemedView>
       ) : null}
 
-      <ThemedView style={styles.card}>
+      <ThemedView style={[styles.card, cardStyle]}>
         <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
           MCP（可选）
         </ThemedText>
@@ -401,7 +393,9 @@ export default function NewWorkspaceScreen() {
           <ActivityIndicator style={{ marginTop: 12 }} />
         ) : (
           <>
-            {mcpError ? <ThemedText style={[styles.error, { color: '#ef4444' }]}>{mcpError}</ThemedText> : null}
+            {mcpError ? (
+              <ThemedText style={[styles.error, { color: Colors[colorScheme].danger }]}>{mcpError}</ThemedText>
+            ) : null}
             {mcpServers.length === 0 ? (
               <ThemedText style={styles.muted}>暂无已登记的 MCP 服务器。你可以先到下方 Tab「MCP」里新增。</ThemedText>
             ) : (
@@ -417,8 +411,8 @@ export default function NewWorkspaceScreen() {
                           {s.transport === 'url' ? `地址：${s.url ?? ''}` : `路径：${s.command ?? ''}`}
                         </ThemedText>
                         {!runnable ? (
-                          <ThemedText style={[styles.muted, { color: '#ef4444' }]}>
-                            未安装/不可执行（请先在底部「MCP」里安装或修正 command）
+                          <ThemedText style={[styles.muted, { color: Colors[colorScheme].danger }]}>
+                            未安装/不可执行（请先在底部「MCP」里完成安装或修正启动方式）
                           </ThemedText>
                         ) : null}
                       </View>
@@ -440,11 +434,12 @@ export default function NewWorkspaceScreen() {
         )}
       </ThemedView>
 
-      {error ? <ThemedText style={[styles.error, { color: '#ef4444' }]}>{error}</ThemedText> : null}
+      {error ? <ThemedText style={[styles.error, { color: Colors[colorScheme].danger }]}>{error}</ThemedText> : null}
 
       <Pressable
         accessibilityRole="button"
         disabled={!canCreate}
+        android_ripple={{ color: rippleColor }}
         onPress={async () => {
           setLoading(true);
           setError(null);
@@ -523,7 +518,7 @@ export default function NewWorkspaceScreen() {
         style={({ pressed }) => [
           styles.primaryButton,
           {
-            opacity: !canCreate ? 0.4 : pressed ? 0.85 : 1,
+            opacity: !canCreate ? 0.5 : pressed ? 0.92 : 1,
             backgroundColor: Colors[colorScheme].tint,
           },
         ]}>
@@ -536,53 +531,82 @@ export default function NewWorkspaceScreen() {
         )}
       </Pressable>
 
-      <Pressable accessibilityRole="button" style={styles.secondaryButton} onPress={() => router.back()}>
+      <Pressable
+        accessibilityRole="button"
+        android_ripple={{ color: rippleColor }}
+        onPress={() => router.back()}
+        style={({ pressed }) => [
+          styles.secondaryButton,
+          {
+            opacity: pressed ? 0.92 : 1,
+            borderColor: Colors[colorScheme].outline,
+            backgroundColor: Colors[colorScheme].surface,
+          },
+        ]}>
         <ThemedText style={styles.muted}>取消</ThemedText>
       </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    paddingTop: 16,
+  },
+  container: {
+    flexGrow: 1,
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
+    paddingTop: 20,
     paddingHorizontal: 16,
+    paddingBottom: 32,
   },
   header: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
   card: {
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   segments: {
     flexDirection: 'row',
     gap: 10,
+    flexWrap: 'wrap',
   },
   segment: {
     flex: 1,
     minHeight: 44,
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 10,
+    overflow: 'hidden',
   },
   input: {
     borderWidth: 1,
     borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    minHeight: 48,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     fontSize: 16,
-    marginBottom: 10,
+    lineHeight: 20,
+    marginBottom: 12,
   },
   row2: {
     flexDirection: 'row',
     gap: 10,
+    flexWrap: 'wrap',
   },
   switchRow: {
     flexDirection: 'row',
@@ -592,22 +616,26 @@ const styles = StyleSheet.create({
   },
   half: {
     flex: 1,
+    minWidth: 160,
   },
   primaryButton: {
-    minHeight: 44,
+    minHeight: 48,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    marginTop: 4,
+    paddingHorizontal: 16,
+    marginTop: 8,
+    overflow: 'hidden',
   },
   secondaryButton: {
-    minHeight: 44,
+    minHeight: 48,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    marginTop: 6,
+    paddingHorizontal: 16,
+    marginTop: 10,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
   muted: {
     opacity: 0.7,

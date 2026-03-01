@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
@@ -68,6 +79,33 @@ export default function WorkspaceSettingsScreen() {
     return true;
   }, [busy, name, ws]);
 
+  const cardStyle = useMemo(
+    () => ({
+      backgroundColor: Colors[colorScheme].surface,
+      borderColor: Colors[colorScheme].outline,
+    }),
+    [colorScheme]
+  );
+
+  const inputStyle = useMemo(
+    () => ({
+      color: Colors[colorScheme].text,
+      borderColor: Colors[colorScheme].outline,
+      backgroundColor: Colors[colorScheme].surface2,
+    }),
+    [colorScheme]
+  );
+
+  const placeholderTextColor = useMemo(
+    () => (colorScheme === 'dark' ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.38)'),
+    [colorScheme]
+  );
+
+  const rippleColor = useMemo(
+    () => (colorScheme === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(2,6,23,0.08)'),
+    [colorScheme]
+  );
+
   async function onSave() {
     if (!ws) return;
     const trimmedName = name.trim();
@@ -132,7 +170,7 @@ export default function WorkspaceSettingsScreen() {
 
   if (!ws) {
     return (
-      <ThemedView style={styles.container}>
+      <ThemedView style={[styles.screen, styles.container]}>
         <Stack.Screen options={{ title: '工作区设置' }} />
         <ThemedText type="title">工作区设置</ThemedText>
         <ThemedText style={styles.muted}>未找到该工作区。</ThemedText>
@@ -143,19 +181,28 @@ export default function WorkspaceSettingsScreen() {
   const repoUri = workspaceRepoPath(ws.id);
 
   return (
-    <ThemedView style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: '工作区设置',
-          headerRight: () => (
-            <Pressable accessibilityRole="button" onPress={() => router.back()} style={{ paddingHorizontal: 12 }}>
-              <ThemedText type="defaultSemiBold">关闭</ThemedText>
-            </Pressable>
-          ),
-        }}
-      />
+    <ThemedView style={styles.screen}>
+      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag">
+          <Stack.Screen
+            options={{
+              title: '工作区设置',
+              headerRight: () => (
+                <Pressable
+                  accessibilityRole="button"
+                  android_ripple={{ color: rippleColor }}
+                  onPress={() => router.back()}
+                  style={{ paddingHorizontal: 12 }}>
+                  <ThemedText type="defaultSemiBold">关闭</ThemedText>
+                </Pressable>
+              ),
+            }}
+          />
 
-      <ThemedView style={styles.card}>
+      <ThemedView style={[styles.card, cardStyle]}>
         <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
           基础信息
         </ThemedText>
@@ -163,15 +210,9 @@ export default function WorkspaceSettingsScreen() {
           value={name}
           onChangeText={setName}
           placeholder="工作区名称"
-          placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
-          style={[
-            styles.input,
-            {
-              color: Colors[colorScheme].text,
-              borderColor: Colors[colorScheme].icon,
-              backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-            },
-          ]}
+          placeholderTextColor={placeholderTextColor}
+          selectionColor={Colors[colorScheme].tint}
+          style={[styles.input, inputStyle]}
         />
         <ThemedText style={styles.muted}>
           代码目录：<ThemedText type="defaultSemiBold">{repoUri}</ThemedText>
@@ -184,19 +225,25 @@ export default function WorkspaceSettingsScreen() {
           <Pressable
             accessibilityRole="button"
             disabled={busy || ws.id === activeWorkspaceId}
+            android_ripple={{ color: rippleColor }}
             onPress={async () => {
               await setActive(ws.id);
               await refresh();
             }}
             style={({ pressed }) => [
               styles.secondaryButton,
-              { opacity: busy || ws.id === activeWorkspaceId ? 0.4 : pressed ? 0.85 : 1, borderColor: Colors[colorScheme].icon },
+              {
+                opacity: busy || ws.id === activeWorkspaceId ? 0.5 : pressed ? 0.92 : 1,
+                borderColor: Colors[colorScheme].outline,
+                backgroundColor: Colors[colorScheme].surface,
+              },
             ]}>
             <ThemedText type="defaultSemiBold">设为当前</ThemedText>
           </Pressable>
           <Pressable
             accessibilityRole="button"
             disabled={busy}
+            android_ripple={{ color: rippleColor }}
             onPress={() => {
               Alert.alert('删除工作区？', ws.name, [
                 { text: '取消', style: 'cancel' },
@@ -212,16 +259,20 @@ export default function WorkspaceSettingsScreen() {
             }}
             style={({ pressed }) => [
               styles.secondaryButton,
-              { opacity: busy ? 0.4 : pressed ? 0.85 : 1, borderColor: '#ef4444' },
+              {
+                opacity: busy ? 0.5 : pressed ? 0.92 : 1,
+                borderColor: Colors[colorScheme].danger,
+                backgroundColor: Colors[colorScheme].surface,
+              },
             ]}>
-            <ThemedText type="defaultSemiBold" style={{ color: '#ef4444' }}>
+            <ThemedText type="defaultSemiBold" style={{ color: Colors[colorScheme].danger }}>
               删除
             </ThemedText>
           </Pressable>
         </View>
       </ThemedView>
 
-      <ThemedView style={styles.card}>
+      <ThemedView style={[styles.card, cardStyle]}>
         <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
           Git（可选）
         </ThemedText>
@@ -229,50 +280,32 @@ export default function WorkspaceSettingsScreen() {
           value={gitRemoteUrl}
           onChangeText={setGitRemoteUrl}
           placeholder="https://github.com/user/repo.git"
-          placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+          placeholderTextColor={placeholderTextColor}
+          selectionColor={Colors[colorScheme].tint}
           autoCapitalize="none"
           autoCorrect={false}
-          style={[
-            styles.input,
-            {
-              color: Colors[colorScheme].text,
-              borderColor: Colors[colorScheme].icon,
-              backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-            },
-          ]}
+          style={[styles.input, inputStyle]}
         />
         <TextInput
           value={gitBranch}
           onChangeText={setGitBranch}
           placeholder="默认分支（可选）"
-          placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+          placeholderTextColor={placeholderTextColor}
+          selectionColor={Colors[colorScheme].tint}
           autoCapitalize="none"
           autoCorrect={false}
-          style={[
-            styles.input,
-            {
-              color: Colors[colorScheme].text,
-              borderColor: Colors[colorScheme].icon,
-              backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-            },
-          ]}
+          style={[styles.input, inputStyle]}
         />
         <TextInput
           value={gitToken}
           onChangeText={setGitToken}
           placeholder="访问令牌（留空保持不变）"
-          placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+          placeholderTextColor={placeholderTextColor}
+          selectionColor={Colors[colorScheme].tint}
           autoCapitalize="none"
           autoCorrect={false}
           secureTextEntry
-          style={[
-            styles.input,
-            {
-              color: Colors[colorScheme].text,
-              borderColor: Colors[colorScheme].icon,
-              backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-            },
-          ]}
+          style={[styles.input, inputStyle]}
         />
 
         <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
@@ -283,36 +316,22 @@ export default function WorkspaceSettingsScreen() {
             value={gitUserName}
             onChangeText={setGitUserName}
             placeholder="user.name"
-            placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+            placeholderTextColor={placeholderTextColor}
+            selectionColor={Colors[colorScheme].tint}
             autoCapitalize="none"
             autoCorrect={false}
-            style={[
-              styles.input,
-              styles.half,
-              {
-                color: Colors[colorScheme].text,
-                borderColor: Colors[colorScheme].icon,
-                backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-              },
-            ]}
+            style={[styles.input, styles.half, inputStyle]}
           />
           <TextInput
             value={gitUserEmail}
             onChangeText={setGitUserEmail}
             placeholder="user.email"
-            placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+            placeholderTextColor={placeholderTextColor}
+            selectionColor={Colors[colorScheme].tint}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
-            style={[
-              styles.input,
-              styles.half,
-              {
-                color: Colors[colorScheme].text,
-                borderColor: Colors[colorScheme].icon,
-                backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-              },
-            ]}
+            style={[styles.input, styles.half, inputStyle]}
           />
         </View>
 
@@ -322,7 +341,7 @@ export default function WorkspaceSettingsScreen() {
         </View>
       </ThemedView>
 
-      <ThemedView style={styles.card}>
+      <ThemedView style={[styles.card, cardStyle]}>
         <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
           WebDAV（可选）
         </ThemedText>
@@ -330,59 +349,39 @@ export default function WorkspaceSettingsScreen() {
           value={webdavEndpoint}
           onChangeText={setWebdavEndpoint}
           placeholder="https://example.com/dav/"
-          placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+          placeholderTextColor={placeholderTextColor}
+          selectionColor={Colors[colorScheme].tint}
           autoCapitalize="none"
           autoCorrect={false}
-          style={[
-            styles.input,
-            {
-              color: Colors[colorScheme].text,
-              borderColor: Colors[colorScheme].icon,
-              backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-            },
-          ]}
+          style={[styles.input, inputStyle]}
         />
         <View style={styles.row2}>
           <TextInput
             value={webdavBasePath}
             onChangeText={setWebdavBasePath}
             placeholder="基础路径（可选）"
-            placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+            placeholderTextColor={placeholderTextColor}
+            selectionColor={Colors[colorScheme].tint}
             autoCapitalize="none"
             autoCorrect={false}
-            style={[
-              styles.input,
-              styles.half,
-              {
-                color: Colors[colorScheme].text,
-                borderColor: Colors[colorScheme].icon,
-                backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-              },
-            ]}
+            style={[styles.input, styles.half, inputStyle]}
           />
           <TextInput
             value={webdavRemoteRoot}
             onChangeText={setWebdavRemoteRoot}
             placeholder="远端目录（可选）"
-            placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
+            placeholderTextColor={placeholderTextColor}
+            selectionColor={Colors[colorScheme].tint}
             autoCapitalize="none"
             autoCorrect={false}
-            style={[
-              styles.input,
-              styles.half,
-              {
-                color: Colors[colorScheme].text,
-                borderColor: Colors[colorScheme].icon,
-                backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-              },
-            ]}
+            style={[styles.input, styles.half, inputStyle]}
           />
         </View>
         <ThemedText style={styles.muted}>认证信息在创建工作区时设置（后续会单独补齐编辑入口）。</ThemedText>
       </ThemedView>
 
       {error ? (
-        <ThemedText type="default" style={[styles.error, { color: '#ef4444' }]}>
+        <ThemedText type="default" style={[styles.error, { color: Colors[colorScheme].danger }]}>
           {error}
         </ThemedText>
       ) : null}
@@ -390,11 +389,12 @@ export default function WorkspaceSettingsScreen() {
       <Pressable
         accessibilityRole="button"
         disabled={!canSave}
+        android_ripple={{ color: rippleColor }}
         onPress={onSave}
         style={({ pressed }) => [
           styles.primaryButton,
           {
-            opacity: !canSave ? 0.4 : pressed ? 0.8 : 1,
+            opacity: !canSave ? 0.5 : pressed ? 0.92 : 1,
             backgroundColor: Colors[colorScheme].tint,
           },
         ]}>
@@ -408,30 +408,45 @@ export default function WorkspaceSettingsScreen() {
           </ThemedText>
         )}
       </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
+  },
+  container: {
+    flexGrow: 1,
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 20,
+    paddingBottom: 32,
   },
   card: {
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(0,0,0,0.12)',
-    padding: 14,
-    marginBottom: 12,
+    padding: 16,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   input: {
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
+    minHeight: 48,
     fontSize: 16,
-    marginBottom: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    lineHeight: 20,
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   muted: {
     opacity: 0.7,
@@ -439,6 +454,7 @@ const styles = StyleSheet.create({
   row2: {
     flexDirection: 'row',
     gap: 10,
+    flexWrap: 'wrap',
   },
   switchRow: {
     flexDirection: 'row',
@@ -448,6 +464,7 @@ const styles = StyleSheet.create({
   },
   half: {
     flex: 1,
+    minWidth: 160,
   },
   primaryButton: {
     alignItems: 'center',
@@ -456,6 +473,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: 16,
     marginBottom: 18,
+    overflow: 'hidden',
   },
   primaryButtonText: {
     color: '#ffffff',
@@ -466,8 +484,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center',
-    minHeight: 44,
-    paddingHorizontal: 14,
+    minHeight: 48,
+    paddingHorizontal: 16,
+    overflow: 'hidden',
   },
   error: {
     marginBottom: 10,

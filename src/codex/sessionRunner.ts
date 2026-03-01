@@ -10,6 +10,7 @@ import type { JsonRpcNotification } from './jsonRpc';
 import type { CodexRuntimeLineEvent } from './nativeRuntime';
 import { onCodexRuntimeLine, sendCodexLine, startCodexRuntime, stopCodexRuntime } from './nativeRuntime';
 import { getCodexApiKey, getCodexSettings, materializeCodexConfigFiles } from './settings';
+import { appendDebugLog, pruneDebugLogs } from './debugLog';
 
 export type CodexTurnEvent =
   | { type: 'text'; text: string }
@@ -29,7 +30,7 @@ export async function* runCodexTurn(_params: {
   kind?: 'turn' | 'review' | 'rpc';
   reviewTarget?: any;
   collaborationMode?: 'code' | 'plan';
-  rpcCalls?: Array<{
+  rpcCalls?: {
     method: string;
     params?: any;
     /**
@@ -40,7 +41,7 @@ export async function* runCodexTurn(_params: {
     emitText?: boolean;
     /** 可选：输出时的标题。 */
     title?: string;
-  }>;
+  }[];
 }): AsyncGenerator<CodexTurnEvent> {
   if (Platform.OS !== 'android') {
     yield { type: 'error', message: '当前仅实现 Android 端内嵌 codex app-server（stdio JSON-RPC）。' };
@@ -149,7 +150,18 @@ export async function* runCodexTurn(_params: {
   const cwdUri = workspaceRepoPath(workspace.id);
 
   const settings = await getCodexSettings();
+  const debugLogEnabled = Boolean(settings.debugLogToFile);
+  const retentionDaysRaw = typeof settings.debugLogRetentionDays === 'number' ? settings.debugLogRetentionDays : 7;
+  const retentionDays = Number.isFinite(retentionDaysRaw) ? Math.min(90, Math.max(1, Math.floor(retentionDaysRaw))) : 7;
+
+  function logEvent(event: string, message?: string, details?: unknown) {
+    if (!debugLogEnabled) return;
+    void appendDebugLog({ workspaceId: workspace.id, sessionId, event, message, details });
+  }
+
+  if (debugLogEnabled) void pruneDebugLogs(workspace.id, retentionDays);
   if (!settings.enabled) {
+    logEvent('blocked', 'Codex 未开启。');
     yield { type: 'error', message: 'Codex 未开启：请到「设置」中开启。' };
     yield { type: 'done' };
     return;
@@ -157,6 +169,7 @@ export async function* runCodexTurn(_params: {
 
   const apiKey = await getCodexApiKey();
   if (!apiKey) {
+    logEvent('blocked', '未设置密钥。');
     yield { type: 'error', message: '未设置密钥：请到「设置」中设置。' };
     yield { type: 'done' };
     return;
@@ -188,6 +201,12 @@ export async function* runCodexTurn(_params: {
   if (settings.openaiBaseUrl?.trim()) {
     env.OPENAI_BASE_URL = settings.openaiBaseUrl.trim();
   }
+
+  logEvent('turn_start', undefined, {
+    kind,
+    inputLength: inputText.length,
+    mcpEnabledServers: enabledMcpServerIds.length,
+  });
 
   // One process per turn (simple + avoids cross-session event mixing).
   const runtimeId = `${workspace.id}:${sessionId}:${Date.now()}`;
@@ -455,6 +474,7 @@ export async function* runCodexTurn(_params: {
         if (typeof http === 'number') parts.push(`HTTP ${http}`);
         const url = err?.codexErrorInfo?.url;
         if (typeof url === 'string' && url) parts.push(`url: ${url}`);
+        logEvent('runtime_error', String(msg), parts.filter(Boolean).join('\n'));
         yield { type: 'error', message: parts.filter(Boolean).join('\n') };
         continue;
       }
@@ -493,6 +513,7 @@ export async function* runCodexTurn(_params: {
         if (!turnId || id === turnId) {
           if (t?.status === 'failed') {
             const msg = t?.error?.message ?? 'Codex turn failed';
+            logEvent('turn_failed', String(msg));
             yield { type: 'error', message: String(msg) };
           }
           completed = true;
@@ -509,6 +530,7 @@ export async function* runCodexTurn(_params: {
     const tail = takeFlush(true);
     if (tail) yield { type: 'text', text: tail };
     const message = formatRpcError(e);
+    logEvent('exception', '运行异常', message);
     yield { type: 'error', message };
   } finally {
     pumpRunning = false;
@@ -527,6 +549,7 @@ export async function* runCodexTurn(_params: {
     }
     const tail = takeFlush(true);
     if (tail) yield { type: 'text', text: tail };
+    logEvent('turn_end');
     yield { type: 'done' };
   }
 }
