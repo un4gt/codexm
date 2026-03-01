@@ -26,11 +26,29 @@ export type JsonRpcNotification = {
 type Pending = {
   resolve: (value: any) => void;
   reject: (err: Error) => void;
+  timeoutId?: ReturnType<typeof setTimeout>;
 };
 
 function toError(err: unknown): Error {
   if (err instanceof Error) return err;
   return new Error(typeof err === 'string' ? err : JSON.stringify(err));
+}
+
+function withTimeout<T>(p: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return p;
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+    p.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      }
+    );
+  });
 }
 
 export class JsonRpcClient {
@@ -54,13 +72,32 @@ export class JsonRpcClient {
     this.serverRequestHandler = fn;
   }
 
-  async request<T = any>(method: string, params?: any): Promise<T> {
+  async request<T = any>(method: string, params?: any, opts?: { timeoutMs?: number }): Promise<T> {
     const id = this.nextId++;
     const payload = { id, method, params };
+    const timeoutMs = opts?.timeoutMs;
     const p = new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      const pending: Pending = { resolve, reject };
+      if (Number.isFinite(timeoutMs) && (timeoutMs as number) > 0) {
+        pending.timeoutId = setTimeout(() => {
+          const cur = this.pending.get(id);
+          if (!cur) return;
+          this.pending.delete(id);
+          cur.reject(new Error('请求超时。'));
+        }, timeoutMs as number);
+      }
+      this.pending.set(id, pending);
     });
-    await this.sendLine(JSON.stringify(payload));
+    try {
+      await withTimeout(this.sendLine(JSON.stringify(payload)), timeoutMs ?? 0, '发送请求超时。');
+    } catch (e) {
+      const pending = this.pending.get(id);
+      if (pending) {
+        this.pending.delete(id);
+        if (pending.timeoutId) clearTimeout(pending.timeoutId);
+        pending.reject(toError(e));
+      }
+    }
     return p;
   }
 
@@ -84,6 +121,7 @@ export class JsonRpcClient {
       const pending = this.pending.get(msg.id as JsonRpcId);
       if (!pending) return;
       this.pending.delete(msg.id as JsonRpcId);
+      if (pending.timeoutId) clearTimeout(pending.timeoutId);
       if (msg.error) {
         const e = msg.error as JsonRpcResponseError | string;
         if (typeof e === 'string') {
@@ -124,7 +162,10 @@ export class JsonRpcClient {
 
   rejectAllPending(reason: unknown) {
     const err = toError(reason);
-    for (const [, p] of this.pending) p.reject(err);
+    for (const [, p] of this.pending) {
+      if (p.timeoutId) clearTimeout(p.timeoutId);
+      p.reject(err);
+    }
     this.pending.clear();
   }
 }

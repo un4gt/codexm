@@ -44,7 +44,7 @@ export async function* runCodexTurn(_params: {
   }[];
 }): AsyncGenerator<CodexTurnEvent> {
   if (Platform.OS !== 'android') {
-    yield { type: 'error', message: '当前仅实现 Android 端内嵌 codex app-server（stdio JSON-RPC）。' };
+    yield { type: 'error', message: '当前仅支持 Android 设备运行 Codex。' };
     yield { type: 'done' };
     return;
   }
@@ -53,12 +53,12 @@ export async function* runCodexTurn(_params: {
   const kind = _params.kind ?? 'turn';
   const inputText = _params.input ?? '';
   if (kind === 'turn' && !inputText.trim()) {
-    yield { type: 'error', message: '输入为空。' };
+    yield { type: 'error', message: '请输入内容。' };
     yield { type: 'done' };
     return;
   }
   if (kind === 'rpc' && (!_params.rpcCalls || _params.rpcCalls.length === 0)) {
-    yield { type: 'error', message: 'rpcCalls 为空：无法执行 RPC 命令。' };
+    yield { type: 'error', message: '没有可执行的操作。' };
     yield { type: 'done' };
     return;
   }
@@ -129,20 +129,31 @@ export async function* runCodexTurn(_params: {
     return hay.includes('no rollout found for thread id') || hay.includes('no thread found with id');
   }
 
-  function formatRpcError(e: unknown): string {
-    if (!(e instanceof JsonRpcError)) {
-      return e instanceof Error ? e.stack || e.message : String(e);
+  function formatRpcErrorForLog(e: unknown): string {
+    if (e instanceof JsonRpcError) {
+      const base = e.message || 'JSON-RPC error';
+      const details =
+        e.data &&
+        typeof e.data === 'object' &&
+        typeof (e.data as any).details === 'string' &&
+        String((e.data as any).details).trim()
+          ? String((e.data as any).details).trim()
+          : '';
+      return details && !base.toLowerCase().includes(details.toLowerCase()) ? `${base}\n${details}` : base;
     }
-    const base = e.message || 'JSON-RPC error';
-    const details =
-      e.data &&
-      typeof e.data === 'object' &&
-      typeof (e.data as any).details === 'string' &&
-      String((e.data as any).details).trim()
-        ? String((e.data as any).details).trim()
-        : '';
-    const raw = details && !base.toLowerCase().includes(details.toLowerCase()) ? `${base}\n${details}` : base;
-    return raw;
+    if (e instanceof Error) return e.stack || e.message;
+    return String(e);
+  }
+
+  function formatRpcErrorForUser(e: unknown): string {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes('请求超时') || msg.includes('发送请求超时')) {
+      return '连接超时：请检查网络与「设置」中的服务器地址/密钥是否正确。';
+    }
+    if (e instanceof JsonRpcError) {
+      return e.message || '服务返回错误。';
+    }
+    return msg || '发生未知错误。';
   }
 
   await ensureWorkspaceDirs(workspace.id);
@@ -160,12 +171,6 @@ export async function* runCodexTurn(_params: {
   }
 
   if (debugLogEnabled) void pruneDebugLogs(workspace.id, retentionDays);
-  if (!settings.enabled) {
-    logEvent('blocked', 'Codex 未开启。');
-    yield { type: 'error', message: 'Codex 未开启：请到「设置」中开启。' };
-    yield { type: 'done' };
-    return;
-  }
 
   const apiKey = await getCodexApiKey();
   if (!apiKey) {
@@ -289,6 +294,9 @@ export async function* runCodexTurn(_params: {
   }
 
   try {
+    const RPC_INIT_TIMEOUT_MS = 12_000;
+    const RPC_TIMEOUT_MS = 30_000;
+
     unsubscribe = onCodexRuntimeLine((ev) => {
       if (ev.runtimeId !== runtimeId) return;
       lineQueue.push(ev);
@@ -314,9 +322,13 @@ export async function* runCodexTurn(_params: {
     })();
 
     // Handshake
-    await rpc.request('initialize', {
-      clientInfo: { name: 'codexm_android', title: 'CodexM Android', version: '0.0.3' },
-    });
+    await rpc.request(
+      'initialize',
+      {
+        clientInfo: { name: 'codexm_android', title: 'CodexM Android', version: '0.0.3' },
+      },
+      { timeoutMs: RPC_INIT_TIMEOUT_MS }
+    );
     await rpc.notify('initialized', {});
 
     // Thread (only if needed)
@@ -328,12 +340,16 @@ export async function* runCodexTurn(_params: {
 
     if (needsThread && threadId) {
       try {
-        await rpc.request('thread/resume', {
-          threadId,
-          cwd: fileUriToPath(cwdUri),
-          approvalPolicy: settings.approvalPolicy,
-          personality: settings.personality,
-        });
+        await rpc.request(
+          'thread/resume',
+          {
+            threadId,
+            cwd: fileUriToPath(cwdUri),
+            approvalPolicy: 'never',
+            personality: settings.personality,
+          },
+          { timeoutMs: RPC_TIMEOUT_MS }
+        );
       } catch (e) {
         // Workaround for Codex thread resume failures where persisted rollout is missing/expired.
         if (isMissingThreadState(e)) {
@@ -346,16 +362,23 @@ export async function* runCodexTurn(_params: {
     }
 
     if (needsThread && !threadId) {
-      const res = await rpc.request<any>('thread/start', {
-        cwd: fileUriToPath(cwdUri),
-        approvalPolicy: settings.approvalPolicy,
-        personality: settings.personality,
-      });
+      const res = await rpc.request<any>(
+        'thread/start',
+        {
+          cwd: fileUriToPath(cwdUri),
+          approvalPolicy: 'never',
+          personality: settings.personality,
+        },
+        { timeoutMs: RPC_TIMEOUT_MS }
+      );
       threadId = res?.thread?.id ?? null;
       if (threadId) await setSessionCodexThreadId(workspace.id, sessionId, threadId);
     }
 
-    if (needsThread && !threadId) throw new Error('Codex threadId 缺失：thread/start 或 thread/resume 返回异常。');
+    if (needsThread && !threadId) {
+      logEvent('thread_missing', 'threadId 缺失');
+      throw new Error('无法建立会话，请重试。');
+    }
 
     if (kind === 'rpc') {
       const calls = _params.rpcCalls ?? [];
@@ -363,7 +386,7 @@ export async function* runCodexTurn(_params: {
         const params: any = call.params ? { ...call.params } : {};
         if (call.requiresThread && params.threadId == null) params.threadId = threadId;
 
-        const result = await rpc.request<any>(call.method, params);
+        const result = await rpc.request<any>(call.method, params, { timeoutMs: RPC_TIMEOUT_MS });
         yield { type: 'rpc_result', method: call.method, result };
 
         if (call.emitText ?? true) {
@@ -399,23 +422,31 @@ export async function* runCodexTurn(_params: {
     // Start turn
     let turnId: string | null = null;
     if (kind === 'review') {
-      const reviewRes = await rpc.request<any>('review/start', {
-        threadId,
-        delivery: 'inline',
-        target: _params.reviewTarget ?? { type: 'uncommittedChanges' },
-      });
+      const reviewRes = await rpc.request<any>(
+        'review/start',
+        {
+          threadId,
+          delivery: 'inline',
+          target: _params.reviewTarget ?? { type: 'uncommittedChanges' },
+        },
+        { timeoutMs: RPC_TIMEOUT_MS }
+      );
       turnId = reviewRes?.turn?.id ?? null;
     } else {
       const turnParams: any = {
         threadId,
         cwd: fileUriToPath(cwdUri),
-        approvalPolicy: settings.approvalPolicy,
+        approvalPolicy: 'never',
         input: [{ type: 'text', text: inputText }],
       };
       if (_params.collaborationMode) turnParams.collaborationMode = _params.collaborationMode;
-      const turnRes = await rpc.request<any>('turn/start', turnParams);
+      const turnRes = await rpc.request<any>('turn/start', turnParams, { timeoutMs: RPC_TIMEOUT_MS });
       turnId = turnRes?.turn?.id ?? null;
     }
+
+    const IDLE_POLL_MS = 1_000;
+    const TURN_IDLE_TIMEOUT_MS = 180_000;
+    let lastActivityMs = Date.now();
 
     // Stream events until this turn completes
     let completed = false;
@@ -427,14 +458,21 @@ export async function* runCodexTurn(_params: {
         if (chunk) yield { type: 'text', text: chunk };
       }
 
-      const timeoutMs = pendingText ? Math.max(1, FLUSH_INTERVAL_MS - (Date.now() - lastFlushMs)) : undefined;
+      const timeoutMs = pendingText ? Math.max(1, FLUSH_INTERVAL_MS - (Date.now() - lastFlushMs)) : IDLE_POLL_MS;
       const n = await notifQueue.shift(timeoutMs);
       if (!n) {
         const chunk = takeFlush(true);
         if (chunk) yield { type: 'text', text: chunk };
         if (notifQueue.isClosed()) break;
+        if (Date.now() - lastActivityMs >= TURN_IDLE_TIMEOUT_MS) {
+          logEvent('turn_idle_timeout', '长时间未收到响应。');
+          yield { type: 'error', message: '长时间未收到响应：请检查网络与「设置」中的服务器地址/密钥，并重试。' };
+          break;
+        }
         continue;
       }
+
+      lastActivityMs = Date.now();
 
       if (n.method === 'item/agentMessage/delta') {
         const delta = extractDelta(n.params?.delta);
@@ -512,7 +550,7 @@ export async function* runCodexTurn(_params: {
         const id = t?.id ?? n.params?.turnId;
         if (!turnId || id === turnId) {
           if (t?.status === 'failed') {
-            const msg = t?.error?.message ?? 'Codex turn failed';
+            const msg = t?.error?.message ?? '运行失败。';
             logEvent('turn_failed', String(msg));
             yield { type: 'error', message: String(msg) };
           }
@@ -529,9 +567,10 @@ export async function* runCodexTurn(_params: {
     rpc.rejectAllPending(e);
     const tail = takeFlush(true);
     if (tail) yield { type: 'text', text: tail };
-    const message = formatRpcError(e);
-    logEvent('exception', '运行异常', message);
-    yield { type: 'error', message };
+    const messageForLog = formatRpcErrorForLog(e);
+    const messageForUser = formatRpcErrorForUser(e);
+    logEvent('exception', '运行异常', messageForLog);
+    yield { type: 'error', message: messageForUser };
   } finally {
     pumpRunning = false;
     lineQueue.close();

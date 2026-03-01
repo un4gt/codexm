@@ -167,3 +167,46 @@ export async function appendDebugLog(params: {
   });
 }
 
+async function readLogTail(fileUri: string, maxChars: number) {
+  const limit = Number.isFinite(maxChars) ? Math.max(500, Math.floor(maxChars)) : 20_000;
+  try {
+    const text = await FileSystem.readAsStringAsync(fileUri);
+    if (!text) return '';
+    return text.length > limit ? text.slice(-limit) : text;
+  } catch {
+    return '';
+  }
+}
+
+export async function readSessionDebugLogTail(params: {
+  workspaceId: WorkspaceId;
+  sessionId: string;
+  maxChars?: number;
+}) {
+  const fileUri = sessionLogFileUri(params.workspaceId, params.sessionId);
+  return await readLogTail(fileUri, params.maxChars ?? 20_000);
+}
+
+export async function readLatestDebugLogTail(params: { workspaceId: WorkspaceId; maxChars?: number }) {
+  const dirUri = logDirUri(params.workspaceId);
+  try {
+    const names = await FileSystem.readDirectoryAsync(dirUri);
+    const logNames = names.filter((n) => n.toLowerCase().endsWith('.log'));
+    let bestUri: string | null = null;
+    let bestMtime = -1;
+    for (const name of logNames) {
+      const uri = `${dirUri}${name}`;
+      const info = await FileSystem.getInfoAsync(uri);
+      if (!info.exists || info.isDirectory) continue;
+      const mtime = typeof info.modificationTime === 'number' ? info.modificationTime : 0;
+      if (mtime > bestMtime) {
+        bestMtime = mtime;
+        bestUri = uri;
+      }
+    }
+    if (!bestUri) return '';
+    return await readLogTail(bestUri, params.maxChars ?? 20_000);
+  } catch {
+    return '';
+  }
+}
