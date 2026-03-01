@@ -155,6 +155,15 @@ function tomlString(v: string) {
   return JSON.stringify(v);
 }
 
+export function normalizeOpenaiBaseUrlForCodex(input: string) {
+  const raw = input.trim();
+  if (!raw) return '';
+  let base = raw.replace(/\/+$/, '');
+  if (base.endsWith('/models')) base = base.slice(0, -'/models'.length);
+  if (!base.endsWith('/v1')) base = `${base}/v1`;
+  return base;
+}
+
 function generateMcpServersToml(servers: McpServer[]) {
   const enabled = (servers ?? []).filter((s) => s && s.configKey?.trim());
   if (!enabled.length) return '';
@@ -189,6 +198,16 @@ export function generateCodexConfigToml(s: CodexSettings) {
   // 默认使用 Codex 内置 OpenAI provider（配合 auth.json 或 keyring）。
   // 在移动端我们会把用户在 SecureStore 里保存的 API Key 同步到 CODEX_HOME/auth.json（见 materializeCodexConfigFiles）。 
   lines.push(`model_provider = ${tomlString('openai')}`);
+
+  const openaiBaseUrl = s.openaiBaseUrl?.trim();
+  if (openaiBaseUrl) {
+    const baseUrl = normalizeOpenaiBaseUrlForCodex(openaiBaseUrl);
+    if (baseUrl) {
+      lines.push('');
+      lines.push('[model_providers.openai]');
+      lines.push(`base_url = ${tomlString(baseUrl)}`);
+    }
+  }
 
   if (s.featuresMultiAgent) {
     lines.push('');

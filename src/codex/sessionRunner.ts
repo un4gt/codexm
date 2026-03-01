@@ -9,7 +9,7 @@ import { JsonRpcClient, JsonRpcError } from './jsonRpc';
 import type { JsonRpcNotification } from './jsonRpc';
 import type { CodexRuntimeLineEvent } from './nativeRuntime';
 import { onCodexRuntimeLine, sendCodexLine, startCodexRuntime, stopCodexRuntime } from './nativeRuntime';
-import { getCodexApiKey, getCodexSettings, materializeCodexConfigFiles } from './settings';
+import { getCodexApiKey, getCodexSettings, materializeCodexConfigFiles, normalizeOpenaiBaseUrlForCodex } from './settings';
 import { appendDebugLog, pruneDebugLogs } from './debugLog';
 
 export type CodexTurnEvent =
@@ -148,7 +148,7 @@ export async function* runCodexTurn(_params: {
   function formatRpcErrorForUser(e: unknown): string {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg.includes('请求超时') || msg.includes('发送请求超时')) {
-      return '连接超时：请检查网络与「设置」中的服务器地址/密钥是否正确。';
+      return '连接超时：请检查网络与「设置」中的服务器地址/密钥是否正确。\n可在会话页点击「复制诊断信息」以便排查。';
     }
     if (e instanceof JsonRpcError) {
       return e.message || '服务返回错误。';
@@ -204,7 +204,12 @@ export async function* runCodexTurn(_params: {
   // 为了兼容不同版本，这里同时注入两者。
   env.CODEX_API_KEY = apiKey;
   if (settings.openaiBaseUrl?.trim()) {
-    env.OPENAI_BASE_URL = settings.openaiBaseUrl.trim();
+    const baseUrl = normalizeOpenaiBaseUrlForCodex(settings.openaiBaseUrl);
+    if (baseUrl) {
+      env.OPENAI_BASE_URL = baseUrl;
+      env.OPENAI_API_BASE = baseUrl;
+      env.OPENAI_API_BASE_URL = baseUrl;
+    }
   }
 
   logEvent('turn_start', undefined, {
@@ -296,6 +301,7 @@ export async function* runCodexTurn(_params: {
   try {
     const RPC_INIT_TIMEOUT_MS = 12_000;
     const RPC_TIMEOUT_MS = 30_000;
+    const RPC_TURN_TIMEOUT_MS = 120_000;
 
     unsubscribe = onCodexRuntimeLine((ev) => {
       if (ev.runtimeId !== runtimeId) return;
@@ -429,7 +435,7 @@ export async function* runCodexTurn(_params: {
           delivery: 'inline',
           target: _params.reviewTarget ?? { type: 'uncommittedChanges' },
         },
-        { timeoutMs: RPC_TIMEOUT_MS }
+        { timeoutMs: RPC_TURN_TIMEOUT_MS }
       );
       turnId = reviewRes?.turn?.id ?? null;
     } else {
@@ -440,7 +446,7 @@ export async function* runCodexTurn(_params: {
         input: [{ type: 'text', text: inputText }],
       };
       if (_params.collaborationMode) turnParams.collaborationMode = _params.collaborationMode;
-      const turnRes = await rpc.request<any>('turn/start', turnParams, { timeoutMs: RPC_TIMEOUT_MS });
+      const turnRes = await rpc.request<any>('turn/start', turnParams, { timeoutMs: RPC_TURN_TIMEOUT_MS });
       turnId = turnRes?.turn?.id ?? null;
     }
 
@@ -466,7 +472,11 @@ export async function* runCodexTurn(_params: {
         if (notifQueue.isClosed()) break;
         if (Date.now() - lastActivityMs >= TURN_IDLE_TIMEOUT_MS) {
           logEvent('turn_idle_timeout', '长时间未收到响应。');
-          yield { type: 'error', message: '长时间未收到响应：请检查网络与「设置」中的服务器地址/密钥，并重试。' };
+          yield {
+            type: 'error',
+            message:
+              '长时间未收到响应：请检查网络与「设置」中的服务器地址/密钥，并重试。\n可在会话页点击「复制诊断信息」以便排查。',
+          };
           break;
         }
         continue;
@@ -499,21 +509,25 @@ export async function* runCodexTurn(_params: {
         if (chunk) yield { type: 'text', text: chunk };
         const err = n.params?.error;
         const msg = err?.message ?? n.params?.message ?? 'Codex 运行出错。';
-        const parts: string[] = [String(msg)];
+        const userParts: string[] = [String(msg)];
+        const logParts: string[] = [String(msg)];
         const extra = err?.additionalDetails ?? err?.details;
         if (extra != null) {
           try {
-            parts.push(typeof extra === 'string' ? extra : JSON.stringify(extra, null, 2));
+            logParts.push(typeof extra === 'string' ? extra : JSON.stringify(extra, null, 2));
           } catch {
-            parts.push(String(extra));
+            logParts.push(String(extra));
           }
         }
         const http = err?.codexErrorInfo?.httpStatusCode;
-        if (typeof http === 'number') parts.push(`HTTP ${http}`);
+        if (typeof http === 'number') {
+          userParts.push(`HTTP ${http}`);
+          logParts.push(`HTTP ${http}`);
+        }
         const url = err?.codexErrorInfo?.url;
-        if (typeof url === 'string' && url) parts.push(`url: ${url}`);
-        logEvent('runtime_error', String(msg), parts.filter(Boolean).join('\n'));
-        yield { type: 'error', message: parts.filter(Boolean).join('\n') };
+        if (typeof url === 'string' && url) logParts.push(`url: ${url}`);
+        logEvent('runtime_error', String(msg), logParts.filter(Boolean).join('\n'));
+        yield { type: 'error', message: userParts.filter(Boolean).join('\n') };
         continue;
       }
 

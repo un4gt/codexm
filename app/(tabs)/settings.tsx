@@ -265,6 +265,7 @@ export default function SettingsScreen() {
       <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           contentContainerStyle={[styles.container, { paddingTop: 16 + insets.top }]}
+          scrollEnabled={!modelPickerOpen}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag">
           <View style={styles.header}>
@@ -401,6 +402,7 @@ export default function SettingsScreen() {
                   data={filteredModels}
                   keyExtractor={(id) => id}
                   keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled
                   style={{ maxHeight: 220 }}
                   renderItem={({ item }) => (
                     <Pressable
@@ -433,13 +435,22 @@ export default function SettingsScreen() {
               </View>
             ) : null}
 
-            <Pressable
-              accessibilityRole="button"
-              android_ripple={{ color: rippleColor }}
-              onPress={() => setShowAdvanced((v) => !v)}
-              style={({ pressed }) => [styles.linkButton, { opacity: pressed ? 0.86 : 1 }]}>
-              <ThemedText style={styles.muted}>{showAdvanced ? '收起高级选项' : '展开高级选项'}</ThemedText>
-            </Pressable>
+            <View style={styles.row2}>
+              <Pressable
+                accessibilityRole="button"
+                android_ripple={{ color: rippleColor }}
+                onPress={() => setShowAdvanced((v) => !v)}
+                style={({ pressed }) => [styles.linkButton, { opacity: pressed ? 0.86 : 1 }]}>
+                <ThemedText style={styles.muted}>{showAdvanced ? '收起高级选项' : '展开高级选项'}</ThemedText>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                android_ripple={{ color: rippleColor }}
+                onPress={copyRecentDebugLog}
+                style={({ pressed }) => [styles.linkButton, { opacity: pressed ? 0.86 : 1 }]}>
+                <ThemedText style={styles.muted}>复制诊断信息</ThemedText>
+              </Pressable>
+            </View>
 
             {showAdvanced ? (
               <View style={{ marginTop: 10 }}>

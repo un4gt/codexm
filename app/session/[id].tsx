@@ -786,7 +786,26 @@ export default function SessionDetailScreen() {
       </ThemedView>
 
       {error ? (
-        <ThemedText style={[styles.error, { color: Colors[colorScheme].danger }]}>{error}</ThemedText>
+        <View>
+          <ThemedText style={[styles.error, { color: Colors[colorScheme].danger }]}>{error}</ThemedText>
+          <Pressable
+            accessibilityRole="button"
+            onPress={copySessionDiagnostics}
+            android_ripple={{ color: rippleColor }}
+            style={({ pressed }) => [
+              styles.copyDiagButton,
+              {
+                borderColor: Colors[colorScheme].outline,
+                backgroundColor: Colors[colorScheme].surface,
+                opacity: pressed ? 0.9 : 1,
+              },
+            ]}>
+            <ThemedText type="defaultSemiBold" style={styles.copyDiagText}>
+              复制诊断信息
+            </ThemedText>
+          </Pressable>
+          <ThemedText style={styles.muted}>提示：可在「设置」的高级选项中开启调试日志。</ThemedText>
+        </View>
       ) : null}
 
       {loading ? (
