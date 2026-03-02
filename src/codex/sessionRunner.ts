@@ -350,7 +350,7 @@ export async function* runCodexTurn(_params: {
     await rpc.request(
       'initialize',
       {
-        clientInfo: { name: 'codexm_android', title: 'CodexM Android', version: '0.0.3' },
+        clientInfo: { name: 'codexm_android', title: 'CodexM Android', version: '0.0.6' },
         capabilities: { experimentalApi: true },
       },
       { timeoutMs: RPC_INIT_TIMEOUT_MS }
