@@ -7,24 +7,29 @@ export type CodexSlashCommand = {
 // 来源（内置命令清单）：https://developers.openai.com/codex/cli/slash-commands/
 export const CODEX_SLASH_COMMANDS: CodexSlashCommand[] = [
   {
+    command: '/help',
+    purpose: '查看可用命令与用法',
+    when: '不知道有哪些命令、或想快速回忆用法时。',
+  },
+  {
     command: '/permissions',
     purpose: '设置 Codex 无需确认即可执行的权限范围',
-    when: '在会话中途放宽或收紧审批要求（例如 Auto / Read Only）。',
+    when: '在会话中途放宽或收紧审批要求。',
   },
   {
     command: '/sandbox-add-read-dir',
-    purpose: '为 sandbox 额外授予一个可读目录（仅 Windows）',
-    when: '需要读取当前可读根之外的绝对路径目录时。',
+    purpose: '扩展可读取的目录（仅桌面端）',
+    when: '移动端不适用；桌面端需要读取额外目录时使用。',
   },
   {
     command: '/agent',
-    purpose: '切换当前激活的 Agent 线程',
-    when: '查看或继续某个子 Agent 的工作线程。',
+    purpose: '查看/切换线程',
+    when: '并行任务较多，需要切换工作线程时。',
   },
   {
     command: '/apps',
-    purpose: '浏览可用 App（connector）并插入到提示词',
-    when: '需要在提问前用 $app-slug 绑定一个外部 App。',
+    purpose: '列出可用扩展并插入到输入框',
+    when: '想在提问前快速插入一个扩展能力时。',
   },
   {
     command: '/compact',
@@ -38,8 +43,8 @@ export const CODEX_SLASH_COMMANDS: CodexSlashCommand[] = [
   },
   {
     command: '/exit',
-    purpose: '退出 CLI（同 /quit）',
-    when: '需要立刻退出会话时。',
+    purpose: '退出当前会话（同 /quit）',
+    when: '回到上一个页面或会话列表。',
   },
   {
     command: '/experimental',
@@ -88,8 +93,8 @@ export const CODEX_SLASH_COMMANDS: CodexSlashCommand[] = [
   },
   {
     command: '/ps',
-    purpose: '查看实验性的后台终端及其近期输出',
-    when: '想检查长时间运行命令的进度与输出时。',
+    purpose: '查看后台任务与输出',
+    when: '想检查耗时操作的进度与输出时。',
   },
   {
     command: '/fork',
@@ -99,17 +104,17 @@ export const CODEX_SLASH_COMMANDS: CodexSlashCommand[] = [
   {
     command: '/resume',
     purpose: '从会话列表中恢复一个已保存的对话',
-    when: '继续之前的 CLI 会话，不从零开始。',
+    when: '继续之前保存的会话，不从零开始。',
   },
   {
     command: '/new',
-    purpose: '在同一 CLI 会话里开启新对话',
-    when: '想在同一仓库里切换到全新上下文。',
+    purpose: '新建会话',
+    when: '想在同一工作区里开启全新对话。',
   },
   {
     command: '/quit',
-    purpose: '退出 CLI',
-    when: '需要立刻结束当前会话时。',
+    purpose: '退出当前会话',
+    when: '回到上一个页面或会话列表。',
   },
   {
     command: '/review',
@@ -123,12 +128,12 @@ export const CODEX_SLASH_COMMANDS: CodexSlashCommand[] = [
   },
   {
     command: '/debug-config',
-    purpose: '输出配置层级与要求诊断信息',
-    when: '排查 config.toml / 规则等为何未生效。',
+    purpose: '导出配置与诊断信息',
+    when: '排查设置未生效或行为异常时。',
   },
   {
     command: '/statusline',
-    purpose: '交互式配置 TUI 状态栏字段',
-    when: '自定义底部状态栏显示内容并持久化到 config.toml。',
+    purpose: '配置状态栏（仅桌面端）',
+    when: '移动端不适用。',
   },
 ];

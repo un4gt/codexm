@@ -137,42 +137,25 @@ def _download_codex_termux_binaries_from_repo_tag(
   out_dir: Path,
   download_headers: dict[str, str],
 ) -> None:
-  candidates = [
-    ('npm-package/bin/codex', out_dir / 'codex'),
-  ]
-  exec_candidates = [
-    'npm-package/bin/codex-exec',
-    'npm-package/bin/codex_exec',
+  urls = [
+    f'https://github.com/{repo}/archive/refs/tags/{tag}.tar.gz',
+    f'https://github.com/{repo}/archive/refs/heads/{tag}.tar.gz',
   ]
 
-  for src, dst in candidates:
-    url = _raw_file_url(repo, ref=tag, path=src)
-    print(f'下载 codex-termux（tag 文件）: {url}')
-    _http_download(url, dst, headers=download_headers)
-    with open(dst, 'rb') as f:
-      head = f.read(4)
-    if not _is_elf_header(head):
-      raise RuntimeError(f'下载到的 codex 不是 ELF：{repo}@{tag} / {src}')
-
-  exec_ok = False
   last_err: Optional[Exception] = None
-  for src in exec_candidates:
-    url = _raw_file_url(repo, ref=tag, path=src)
-    dst = out_dir / 'codex-exec'
-    try:
-      print(f'下载 codex-termux（tag 文件）: {url}')
-      _http_download(url, dst, headers=download_headers)
-      with open(dst, 'rb') as f:
-        head = f.read(4)
-      if not _is_elf_header(head):
-        raise RuntimeError(f'下载到的 codex-exec 不是 ELF：{repo}@{tag} / {src}')
-      exec_ok = True
-      break
-    except Exception as e:
-      last_err = e
+  with tempfile.TemporaryDirectory() as tmpdir:
+    tmp = Path(tmpdir)
+    archive = tmp / f'{repo.replace("/", "-")}-{tag}.tar.gz'
+    for url in urls:
+      try:
+        print(f'下载 codex-termux（tag 压缩包）: {url}')
+        _http_download(url, archive, headers=download_headers)
+        _extract_codex_termux_binaries(archive, out_dir)
+        return
+      except Exception as e:
+        last_err = e
 
-  if not exec_ok:
-    raise RuntimeError(f'无法从 {repo}@{tag} 下载 codex-exec：{last_err}')
+  raise RuntimeError(f'无法从 {repo}@{tag} 下载 codex-termux 源码包：{last_err}')
 
 
 def _is_elf_header(b: bytes) -> bool:
@@ -203,6 +186,38 @@ def _extract_member_to_path(tar: tarfile.TarFile, member: tarfile.TarInfo, dst: 
 
 def _extract_codex_termux_binaries(tgz_path: Path, out_dir: Path) -> None:
   with tarfile.open(tgz_path, mode='r:gz') as tar:
+    def is_elf(m: tarfile.TarInfo) -> bool:
+      fileobj = tar.extractfile(m)
+      if not fileobj:
+        return False
+      head = fileobj.read(4)
+      return _is_elf_header(head)
+
+    # 优先按文件名精确匹配（避免仅靠大小阈值导致漏检）。
+    by_basename: dict[str, list[tarfile.TarInfo]] = {
+      'codex': [],
+      'codex-exec': [],
+      'codex_exec': [],
+    }
+    for m in _tar_members(tar):
+      base = Path(m.name).name
+      if base not in by_basename:
+        continue
+      try:
+        if is_elf(m):
+          by_basename[base].append(m)
+      except OSError:
+        continue
+
+    codex_member = max(by_basename['codex'], key=lambda m: m.size) if by_basename['codex'] else None
+    exec_candidates = [*by_basename['codex-exec'], *by_basename['codex_exec']]
+    exec_member = max(exec_candidates, key=lambda m: m.size) if exec_candidates else None
+
+    if codex_member and exec_member and exec_member.name != codex_member.name:
+      _extract_member_to_path(tar, codex_member, out_dir / 'codex')
+      _extract_member_to_path(tar, exec_member, out_dir / 'codex-exec')
+      return
+
     min_size = 10 * 1024 * 1024
     elf_members: list[tarfile.TarInfo] = []
 
@@ -339,7 +354,12 @@ def main(argv: list[str]) -> int:
       # codex-termux
       rel = _github_release_json(args.codex_termux_repo, tag=args.codex_termux_tag)
       assets = rel.get('assets') or []
-      tgz_assets = [a for a in assets if str(a.get('name') or '').endswith('.tgz')]
+      tgz_assets = [
+        a
+        for a in assets
+        if str(a.get('name') or '').endswith('.tgz') or str(a.get('name') or '').endswith('.tar.gz')
+      ]
+      tgz_assets.sort(key=lambda a: 0 if str(a.get('name') or '').endswith('.tgz') else 1)
       picked_tag = str(rel.get('tag_name') or (args.codex_termux_tag if args.codex_termux_tag != 'latest' else 'main'))
 
       if tgz_assets:
@@ -360,9 +380,12 @@ def main(argv: list[str]) -> int:
 
           _extract_codex_termux_binaries(codex_tgz, out_dir)
       else:
-        # 兼容：latest release 可能暂时没有 .tgz 资产；此时改为直接从 tag 对应仓库文件下载二进制。
+        # 兼容：latest release 可能暂时没有 .tgz/.tar.gz 资产；此时改为从 tag 源码包中提取二进制。
         available = ', '.join([str(a.get('name')) for a in assets]) or '<none>'
-        print(f'提示：{args.codex_termux_repo}@{args.codex_termux_tag} 未提供 .tgz 资产（当前 assets: {available}），改为从 tag 下载二进制。')
+        print(
+          f'提示：{args.codex_termux_repo}@{args.codex_termux_tag} 未提供 .tgz/.tar.gz 资产（当前 assets: {available}），'
+          '改为从 tag 源码包中提取二进制。'
+        )
         _download_codex_termux_binaries_from_repo_tag(
           args.codex_termux_repo,
           tag=picked_tag,

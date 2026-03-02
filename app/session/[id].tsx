@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,6 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import Constants from 'expo-constants';
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
 
@@ -26,8 +28,10 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { readSessionDebugLogTail } from '@/src/codex/debugLog';
 import { CODEX_SLASH_COMMANDS } from '@/src/codex/slashCommands';
 import { getCodexSettings, materializeCodexConfigFiles, setCodexApiKey, updateCodexSettings } from '@/src/codex/settings';
+import { listInstalledSkills, normalizeSkillName, skillFilePath } from '@/src/codex/skills';
 import { runCodexTurn } from '@/src/codex/sessionRunner';
 import { gitDiff } from '@/src/git/nativeGit';
+import { listMcpServers } from '@/src/mcp/store';
 import { splitThinking } from '@/src/markdown/thinking';
 import {
   appendMessage,
@@ -51,6 +55,8 @@ export default function SessionDetailScreen() {
 
   const colorScheme = useColorScheme() ?? 'light';
   const insets = useSafeAreaInsets();
+  const manualAndroidKeyboardInset =
+    Platform.OS === 'android' && (Constants.expoConfig?.android?.softwareKeyboardLayoutMode ?? 'resize') === 'pan';
   const { workspaces, activeWorkspaceId } = useWorkspaces();
 
   const active = useMemo(
@@ -70,14 +76,35 @@ export default function SessionDetailScreen() {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [waitingFirstToken, setWaitingFirstToken] = useState(false);
+  const [androidKeyboardHeight, setAndroidKeyboardHeight] = useState(0);
   const [pendingAssistantId, setPendingAssistantId] = useState<string | null>(null);
-  const [collaborationMode, setCollaborationMode] = useState<Session['codexCollaborationMode']>('code');
+  const [collaborationMode, setCollaborationMode] = useState<Session['codexCollaborationMode']>('default');
   const [uiShowThinking, setUiShowThinking] = useState(false);
+  const [installedSkills, setInstalledSkills] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      const skills = await listInstalledSkills();
+      if (!cancelled) setInstalledSkills(skills);
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const slashToken = useMemo(() => {
     const trimmed = input.trimStart();
     if (!trimmed.startsWith('/')) return null;
     // 仅在“命令输入阶段”显示（出现空白字符后视为已进入参数阶段，关闭联想面板）
+    if (/\s/.test(trimmed)) return null;
+    return trimmed;
+  }, [input]);
+
+  const dollarToken = useMemo(() => {
+    const trimmed = input.trimStart();
+    if (!trimmed.startsWith('$')) return null;
     if (/\s/.test(trimmed)) return null;
     return trimmed;
   }, [input]);
@@ -88,6 +115,13 @@ export default function SessionDetailScreen() {
     if (!query) return CODEX_SLASH_COMMANDS;
     return CODEX_SLASH_COMMANDS.filter((c) => c.command.slice(1).toLowerCase().startsWith(query));
   }, [slashToken]);
+
+  const skillMatches = useMemo(() => {
+    if (dollarToken === null) return [];
+    const query = dollarToken.slice(1).toLowerCase();
+    const list = query ? installedSkills.filter((s) => s.toLowerCase().startsWith(query)) : installedSkills;
+    return list.slice(0, 20);
+  }, [dollarToken, installedSkills]);
 
   const rippleColor = useMemo(
     () => (colorScheme === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(2,6,23,0.08)'),
@@ -102,6 +136,20 @@ export default function SessionDetailScreen() {
       const firstWhitespaceIdx = trimmed.search(/\s/);
       if (firstWhitespaceIdx === -1) return `${leadingWhitespace}${command} `;
       return `${leadingWhitespace}${command}${trimmed.slice(firstWhitespaceIdx)}`;
+    });
+  }
+
+  function applySkillToken(name: string) {
+    const normalized = normalizeSkillName(name);
+    if (!normalized) return;
+    setInput((prev) => {
+      const leadingWhitespace = prev.match(/^\s*/)?.[0] ?? '';
+      const trimmed = prev.slice(leadingWhitespace.length);
+      const token = `$${normalized}`;
+      if (!trimmed.startsWith('$')) return `${leadingWhitespace}${token} `;
+      const firstWhitespaceIdx = trimmed.search(/\s/);
+      if (firstWhitespaceIdx === -1) return `${leadingWhitespace}${token} `;
+      return `${leadingWhitespace}${token}${trimmed.slice(firstWhitespaceIdx)}`;
     });
   }
 
@@ -191,7 +239,7 @@ export default function SessionDetailScreen() {
         if (!cancelled) {
           setSession(s);
           setDraftTitle(s?.title ?? '');
-          setCollaborationMode(s?.codexCollaborationMode ?? 'code');
+          setCollaborationMode(s?.codexCollaborationMode === 'plan' ? 'plan' : 'default');
           setMessages(msgs);
         }
       } catch (e) {
@@ -222,6 +270,24 @@ export default function SessionDetailScreen() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const onShow = Keyboard.addListener('keyboardDidShow', (event) => {
+      if (manualAndroidKeyboardInset) {
+        const height = event.endCoordinates?.height ?? 0;
+        setAndroidKeyboardHeight(Math.max(0, height));
+      }
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    });
+    const onHide = Keyboard.addListener('keyboardDidHide', () => {
+      if (manualAndroidKeyboardInset) setAndroidKeyboardHeight(0);
+    });
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, [manualAndroidKeyboardInset]);
 
   async function onSend() {
     if (!active || !sessionId) return;
@@ -263,7 +329,6 @@ export default function SessionDetailScreen() {
       isSlashCommand &&
       (firstToken === '/compact' ||
         firstToken === '/debug-config' ||
-        firstToken === '/mcp' ||
         firstToken === '/apps' ||
         firstToken === '/ps' ||
         firstToken === '/fork' ||
@@ -294,7 +359,7 @@ export default function SessionDetailScreen() {
       workspaceId: active.id,
       role: assistantRole,
       createdAt: assistantCreatedAt,
-      content: assistantRole === 'system' ? `正在执行 ${firstToken}…` : '',
+      content: assistantRole === 'system' ? '正在处理…' : '',
     };
 
     let assistantText = '';
@@ -331,6 +396,37 @@ export default function SessionDetailScreen() {
 
       if (isSlashCommand) {
         // 本地命令（不发给 Codex）
+        if (firstToken === '/help') {
+          const lines = [
+            '可用命令（移动端）',
+            '',
+            '**常用**',
+            '- /plan：切换计划模式（/plan on | /plan off）',
+            '- /review：评审当前改动',
+            '- /diff：查看当前工作区改动',
+            '- /mcp：查看已配置的 MCP 工具',
+            '- /status：查看当前会话状态',
+            '- /new：新建会话',
+            '- /resume <id>：切换到历史会话',
+            '',
+            '**设置**',
+            '- /model <id>：设置模型（也可在「设置」里选择）',
+            '- /permissions <policy>：设置审批策略',
+            '- /personality <style>：设置风格',
+            '- /experimental multi_agent on|off：实验特性',
+            '- /logout：清除本地密钥',
+            '',
+            '**技巧**',
+            "- 输入 '/' 或 '$' 可查看建议列表。",
+            '- 技能：先在「设置」→「高级选项」中创建/导入，然后在消息中输入 $技能名。',
+            '',
+            '**不适用**',
+            '- /sandbox-add-read-dir、/statusline：仅桌面端。',
+          ];
+          await finishLocal({ role: 'system', content: lines.join('\n') });
+          return;
+        }
+
         if (firstToken === '/init') {
           await ensureWorkspaceDirs(active.id);
           const path = `${workspaceRepoPath(active.id)}AGENTS.md`;
@@ -378,14 +474,35 @@ export default function SessionDetailScreen() {
           return;
         }
 
+        if (firstToken === '/mcp') {
+          const servers = await listMcpServers();
+          if (!servers.length) {
+            await finishLocal({ role: 'system', content: '还没有配置 MCP 工具。你可以在「MCP」标签页添加。' });
+            return;
+          }
+
+          const enabledIds = new Set(
+            (session?.mcpEnabledServerIds ?? active.mcpDefaultEnabledServerIds ?? []).filter(Boolean)
+          );
+          const lines: string[] = [`已配置 MCP 工具（${servers.length}）`, ''];
+          for (const s of servers) {
+            const enabled = enabledIds.has(s.id);
+            const typeLabel = s.transport === 'url' ? '网络服务' : '本地启动';
+            lines.push(`- ${s.name}：${enabled ? '已启用' : '未启用'}（${typeLabel}）`);
+          }
+          lines.push('', '提示：可在「MCP」标签页编辑；可在新建会话/工作区里设置默认启用项。');
+          await finishLocal({ role: 'system', content: lines.join('\n') });
+          return;
+        }
+
         if (isSlashPlanToggle) {
           const nextMode =
             slashArgs === 'on'
               ? 'plan'
-              : slashArgs === 'off'
-                ? 'code'
-                : collaborationMode === 'plan'
-                  ? 'code'
+            : slashArgs === 'off'
+                ? 'default'
+              : collaborationMode === 'plan'
+                  ? 'default'
                   : 'plan';
           setCollaborationMode(nextMode);
           await setSessionCodexCollaborationMode(active.id, sessionId, nextMode);
@@ -401,29 +518,64 @@ export default function SessionDetailScreen() {
             const patch = await gitDiff({ localRepoDirUri: workspaceRepoPath(active.id), maxBytes: 200_000 });
             const content = patch.trim()
               ? patch.length >= 200_000
-                ? `${patch}\n\n（已截断：输出超过 200KB）`
-                : patch
-              : '当前工作区没有 Git diff。';
+                ? `\`\`\`diff\n${patch}\n\`\`\`\n\n（已截断：输出超过 200KB）`
+                : `\`\`\`diff\n${patch}\n\`\`\``
+              : '当前工作区没有改动。';
             await finishLocal({ role: 'system', content });
           } catch (e) {
             const message = e instanceof Error ? e.message : String(e);
-            await finishLocal({ role: 'system', content: `获取 diff 失败：\n${message}` });
+            await finishLocal({ role: 'system', content: `获取 diff 失败：\n\n\`\`\`\n${message}\n\`\`\`` });
           }
           return;
         }
 
         if (firstToken === '/status') {
           const s = await getCodexSettings();
+          const approvalLabel =
+            s.approvalPolicy === 'never'
+              ? '无需确认'
+              : s.approvalPolicy === 'on-request'
+                ? '手动确认'
+                : s.approvalPolicy === 'on-failure'
+                  ? '失败时确认'
+                  : s.approvalPolicy === 'untrusted'
+                    ? '严格'
+                    : s.approvalPolicy;
+          const personalityLabel =
+            s.personality === 'friendly' ? '友好' : s.personality === 'pragmatic' ? '务实' : '默认';
+          const modelLabel = s.model?.trim() ? s.model.trim() : '使用默认模型';
+          const servers = await listMcpServers();
+          const enabledIds = new Set(
+            (session?.mcpEnabledServerIds ?? active.mcpDefaultEnabledServerIds ?? []).filter(Boolean)
+          );
+          const enabledCount = servers.filter((x) => enabledIds.has(x.id)).length;
+
           const lines = [
-            `工作区：${active.name} (${active.id})`,
-            `会话：${session?.title ?? sessionId} (${sessionId})`,
-            `线程：${session?.codexThreadId ?? '（未创建）'}`,
-            `模式：${collaborationMode === 'plan' ? '计划' : '代码'}`,
-            `模型：${s.model ?? '（默认）'}`,
-            `权限：${s.approvalPolicy}`,
-            `风格：${s.personality}`,
-            `Repo：${workspaceRepoPath(active.id)}`,
+            '当前状态',
+            `- 工作区：${active.name}`,
+            `- 会话：${session?.title ?? sessionId}`,
+            `- 线程：${session?.codexThreadId ? '已建立' : '未建立'}`,
+            `- 模式：${collaborationMode === 'plan' ? '计划' : '默认'}`,
+            `- 模型：${modelLabel}`,
+            `- 权限：${approvalLabel}`,
+            `- 风格：${personalityLabel}`,
+            `- MCP：启用 ${enabledCount}/${servers.length}`,
+            `- 调试日志：${s.debugLogToFile ? '开启' : '关闭'}`,
+            '',
+            '提示：需要更多信息可点击「复制诊断信息」。',
           ];
+
+          const wantRaw = /\b(raw|debug|diag)\b/i.test(slashArgs);
+          if (wantRaw) {
+            const raw = {
+              workspaceId: active.id,
+              sessionId,
+              threadId: session?.codexThreadId ?? null,
+              repoUri: workspaceRepoPath(active.id),
+            };
+            lines.push('', '```json', JSON.stringify(raw, null, 2), '```');
+          }
+
           await finishLocal({ role: 'system', content: lines.join('\n') });
           return;
         }
@@ -574,7 +726,7 @@ export default function SessionDetailScreen() {
           if (!pendingMentionsRef.current.includes(cleaned)) pendingMentionsRef.current.push(cleaned);
           await finishLocal({
             role: 'system',
-            content: `已标记：${cleaned}\n（下一条消息会自动附带“请重点关注该路径”的提示）`,
+            content: `已标记：${cleaned}\n（下一条消息会附加该路径供 Codex 参考）`,
           });
           return;
         }
@@ -589,24 +741,23 @@ export default function SessionDetailScreen() {
         }
 
         if (firstToken === '/statusline') {
-          await finishLocal({ role: 'system', content: '移动端没有 CLI 状态栏：/statusline 在本应用中不适用。' });
+          await finishLocal({ role: 'system', content: '该命令仅适用于桌面端：移动端不支持。' });
           return;
         }
 
         if (firstToken === '/sandbox-add-read-dir') {
           await finishLocal({
             role: 'system',
-            content: '该命令仅适用于 Windows 原生 CLI 的 sandbox。本应用在 Android 上不支持 /sandbox-add-read-dir。',
+            content: '该命令仅适用于桌面端：移动端不支持。',
           });
           return;
         }
 
         if (firstToken === '/feedback') {
+          openDiagnosticsActions();
           await finishLocal({
             role: 'system',
-            content:
-              '本应用暂未实现自动打包日志并上报。\n' +
-              '请在 GitHub issue 中附上：Codex 版本、机型/系统版本、复现步骤、以及相关 logcat 片段。',
+            content: '已打开诊断信息导出。请在弹窗中选择复制或导出，然后把内容粘贴到反馈里。',
           });
           return;
         }
@@ -619,21 +770,17 @@ export default function SessionDetailScreen() {
       const PLAN_PREFIX =
         '你处于计划模式。请先输出一个可执行的计划（步骤、依赖、风险、验证方式），在我确认前不要执行命令/不要修改文件。\n\n任务：';
 
-      const pendingMentions = pendingMentionsRef.current;
-      const mentionPrefix = pendingMentions.length
-        ? `请重点关注以下路径：\n${pendingMentions.map((p) => `- ${p}`).join('\n')}\n\n`
-        : '';
-      if (pendingMentions.length && !isSlashRpc && !isSlashReview) pendingMentionsRef.current = [];
-
       const turnKind: 'turn' | 'review' | 'rpc' = isSlashReview ? 'review' : isSlashRpc ? 'rpc' : 'turn';
       const turnInputBase = isSlashPlanTurn
         ? `${PLAN_PREFIX}${slashArgs}`
         : collaborationMode === 'plan'
           ? `${PLAN_PREFIX}${text}`
           : text;
-      const turnInput = mentionPrefix ? `${mentionPrefix}${turnInputBase}` : turnInputBase;
+      const pendingMentions = pendingMentionsRef.current;
+      if (pendingMentions.length && turnKind === 'turn') pendingMentionsRef.current = [];
 
-      const turnCollabMode: 'code' | 'plan' = isSlashPlanTurn ? 'plan' : collaborationMode === 'plan' ? 'plan' : 'code';
+      const turnCollabMode: 'default' | 'plan' =
+        isSlashPlanTurn ? 'plan' : collaborationMode === 'plan' ? 'plan' : 'default';
 
       if (isSlashPlanTurn) {
         setCollaborationMode('plan');
@@ -644,36 +791,72 @@ export default function SessionDetailScreen() {
         turnKind !== 'rpc'
           ? undefined
           : firstToken === '/compact'
-            ? [{ method: 'thread/compact/start', requiresThread: true, emitText: false, title: 'thread/compact/start' }]
-            : firstToken === '/debug-config'
-              ? [
-                  { method: 'config/read', params: { includeLayers: true }, emitText: true, title: 'config/read' },
-                  { method: 'configRequirements/read', emitText: true, title: 'configRequirements/read' },
-                ]
-              : firstToken === '/mcp'
-                ? [{ method: 'mcpServerStatus/list', emitText: true, title: 'mcpServerStatus/list' }]
+            ? [{ method: 'thread/compact/start', requiresThread: true, emitText: false }]
+              : firstToken === '/debug-config'
+                ? [
+                    { method: 'config/read', params: { includeLayers: true }, emitText: true, title: '配置详情' },
+                    { method: 'configRequirements/read', emitText: true, title: '配置要求' },
+                  ]
                 : firstToken === '/apps'
-                  ? [{ method: 'app/list', emitText: true, title: 'app/list' }]
+                  ? [{ method: 'app/list', emitText: true, title: '可用扩展' }]
                   : firstToken === '/ps'
                     ? [
                         {
                           method: 'thread/backgroundTerminals/list',
                           requiresThread: true,
                           emitText: true,
-                          title: 'thread/backgroundTerminals/list',
+                          title: '后台任务',
                         },
                       ]
                     : firstToken === '/fork'
-                      ? [{ method: 'thread/fork', requiresThread: true, emitText: false, title: 'thread/fork' }]
+                      ? [{ method: 'thread/fork', requiresThread: true, emitText: false }]
                       : firstToken === '/agent'
-                        ? [{ method: 'thread/loaded/list', emitText: true, title: 'thread/loaded/list' }]
+                        ? [{ method: 'thread/loaded/list', emitText: true, title: '线程列表' }]
                         : undefined;
+
+      const repoUri = workspaceRepoPath(active.id);
+      const repoPath = repoUri.startsWith('file://') ? repoUri.replace('file://', '') : repoUri;
+      const repoBase = repoPath.endsWith('/') ? repoPath : `${repoPath}/`;
+
+      const mentionInputs =
+        turnKind !== 'turn' || pendingMentions.length === 0
+          ? []
+          : pendingMentions
+              .map((p) => (p ?? '').trim())
+              .filter(Boolean)
+              .map((p) => {
+                const cleaned = p.replace(/^file:\/\//, '').replace(/^\.\/+/, '');
+                const absPath = cleaned.startsWith('/') ? cleaned : `${repoBase}${cleaned}`;
+                return { type: 'mention', name: p, path: absPath } as const;
+              });
+
+      const skillInputs =
+        turnKind !== 'turn'
+          ? []
+          : await (async () => {
+              const skills = await listInstalledSkills();
+              if (!skills.length) return [];
+              const known = new Set(skills);
+              const tokens = Array.from(text.matchAll(/\B\$([a-zA-Z0-9_-]{2,})\b/g))
+                .map((m) => normalizeSkillName(m[1] ?? ''))
+                .filter(Boolean);
+              const uniq = Array.from(new Set(tokens)).filter((n) => known.has(n));
+              return uniq.map((n) => ({ type: 'skill', name: n, path: skillFilePath(n) }) as const);
+            })();
+
+      const turnInputElems =
+        turnKind === 'turn'
+          ? ([...skillInputs, ...mentionInputs, { type: 'text', text: turnInputBase }] as {
+              type: string;
+              [key: string]: any;
+            }[])
+          : undefined;
 
       for await (const ev of runCodexTurn({
         workspace: active,
         sessionId,
         kind: turnKind,
-        input: turnKind === 'turn' ? turnInput : undefined,
+        input: turnKind === 'turn' ? turnInputElems : undefined,
         collaborationMode: turnKind === 'turn' ? turnCollabMode : undefined,
         rpcCalls,
       })) {
@@ -869,7 +1052,9 @@ export default function SessionDetailScreen() {
           keyExtractor={(m) => m.id}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: 16 }}
+          contentContainerStyle={{
+            paddingBottom: 16 + (manualAndroidKeyboardInset ? Math.min(androidKeyboardHeight, 120) : 0),
+          }}
           renderItem={({ item }) => {
             const { visible, thinking } = splitThinking(item.content);
             const roleLabel = item.role === 'user' ? '你' : item.role === 'assistant' ? 'Codex' : '系统';
@@ -889,16 +1074,17 @@ export default function SessionDetailScreen() {
                         : Colors[colorScheme].surface,
                   },
                 ]}>
-                <ThemedText type="defaultSemiBold" style={{ marginBottom: 8 }}>
-                  {roleLabel}
-                </ThemedText>
+                <View style={styles.msgHeader}>
+                  <ThemedText type="defaultSemiBold" style={{ flex: 1 }}>
+                    {roleLabel}
+                  </ThemedText>
+                  {item.id === pendingAssistantId && waitingFirstToken ? (
+                    <ActivityIndicator size="small" />
+                  ) : null}
+                </View>
 
                 {item.id === pendingAssistantId && waitingFirstToken ? (
                   <View>
-                    <View style={styles.thinkingRow}>
-                      <ThemedText style={[styles.muted, { flex: 1 }]}>正在等待 Codex 返回…</ThemedText>
-                      <ActivityIndicator size="small" />
-                    </View>
                     <Pressable
                       accessibilityRole="button"
                       onPress={openDiagnosticsActions}
@@ -975,12 +1161,65 @@ export default function SessionDetailScreen() {
         </View>
       ) : null}
 
+      {dollarToken !== null ? (
+        skillMatches.length > 0 ? (
+          <View
+            style={[
+              styles.slashPopup,
+              {
+                backgroundColor: Colors[colorScheme].surface,
+                borderColor: Colors[colorScheme].outline,
+              },
+            ]}>
+            <FlatList
+              data={skillMatches}
+              keyExtractor={(c) => c}
+              keyboardShouldPersistTaps="handled"
+              style={{ maxHeight: 220 }}
+              renderItem={({ item }) => (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => applySkillToken(item)}
+                  style={({ pressed }) => [
+                    styles.slashRow,
+                    pressed && {
+                      backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                    },
+                  ]}>
+                  <ThemedText type="defaultSemiBold" style={styles.slashCommand} numberOfLines={1}>
+                    {`$${item}`}
+                  </ThemedText>
+                  <View style={{ flex: 1 }}>
+                    <ThemedText style={styles.slashPurpose} numberOfLines={1}>
+                      技能
+                    </ThemedText>
+                  </View>
+                </Pressable>
+              )}
+            />
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.slashPopup,
+              {
+                backgroundColor: Colors[colorScheme].surface,
+                borderColor: Colors[colorScheme].outline,
+              },
+            ]}>
+            <ThemedText style={styles.muted}>
+              {installedSkills.length ? '未找到匹配的技能。' : '还没有安装技能。请到「设置」→「高级选项」中添加。'}
+            </ThemedText>
+          </View>
+        )
+      ) : null}
+
       <View
         style={[
           styles.composer,
           {
             borderColor: Colors[colorScheme].outline,
-            paddingBottom: Math.max(10, 10 + insets.bottom),
+            paddingBottom: 10 + insets.bottom + (manualAndroidKeyboardInset ? androidKeyboardHeight : 0),
           },
         ]}>
         <TextInput
@@ -995,6 +1234,7 @@ export default function SessionDetailScreen() {
               backgroundColor: Colors[colorScheme].surface2,
             },
           ]}
+          onFocus={() => requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }))}
           multiline
         />
         <Pressable
@@ -1053,6 +1293,12 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 10,
   },
+  msgHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+  },
   copyDiagButton: {
     alignSelf: 'flex-start',
     borderRadius: 999,
@@ -1064,12 +1310,6 @@ const styles = StyleSheet.create({
   },
   copyDiagText: {
     fontSize: 13,
-  },
-  thinkingRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
   },
   composer: {
     borderTopWidth: 1,

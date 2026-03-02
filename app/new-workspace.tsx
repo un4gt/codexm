@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Stack, useRouter } from 'expo-router';
 
@@ -64,6 +65,7 @@ function Segment({
 export default function NewWorkspaceScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
+  const insets = useSafeAreaInsets();
   const { refresh } = useWorkspaces();
   const { loading: mcpLoading, error: mcpError, servers: mcpServers } = useMcp();
 
@@ -148,7 +150,13 @@ export default function NewWorkspaceScreen() {
     <ThemedView style={styles.screen}>
       <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
-          contentContainerStyle={styles.container}
+          contentContainerStyle={[
+            styles.container,
+            {
+              paddingTop: 20 + insets.top,
+              paddingBottom: 32 + insets.bottom,
+            },
+          ]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag">
           <Stack.Screen options={{ title: '新建工作区' }} />
@@ -560,9 +568,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 720,
     alignSelf: 'center',
-    paddingTop: 20,
     paddingHorizontal: 16,
-    paddingBottom: 32,
   },
   header: {
     marginBottom: 16,

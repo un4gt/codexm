@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -24,6 +25,7 @@ import { useWorkspaces } from '@/src/workspaces/provider';
 export default function NewSessionScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme() ?? 'light';
+  const insets = useSafeAreaInsets();
   const { workspaces, activeWorkspaceId } = useWorkspaces();
   const { loading: mcpLoading, error: mcpError, servers } = useMcp();
 
@@ -101,7 +103,13 @@ export default function NewSessionScreen() {
     <ThemedView style={styles.screen}>
       <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
-          contentContainerStyle={styles.container}
+          contentContainerStyle={[
+            styles.container,
+            {
+              paddingTop: 20 + insets.top,
+              paddingBottom: 32 + insets.bottom,
+            },
+          ]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag">
           <Stack.Screen options={{ title: '新建会话' }} />
@@ -245,8 +253,6 @@ const styles = StyleSheet.create({
     maxWidth: 720,
     alignSelf: 'center',
     paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 32,
   },
   header: { marginBottom: 16 },
   center: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12 },

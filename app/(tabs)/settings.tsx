@@ -4,6 +4,7 @@ import {
   Alert,
   FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -13,6 +14,7 @@ import {
   View,
 } from 'react-native';
 
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +24,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Colors, Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { readLatestDebugLogTail } from '@/src/codex/debugLog';
+import { deleteSkill, listInstalledSkills, normalizeSkillName, skillFileUri, writeSkill } from '@/src/codex/skills';
 import {
   defaultCodexSettings,
   generateCodexConfigToml,
@@ -83,6 +86,12 @@ export default function SettingsScreen() {
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [modelQuery, setModelQuery] = useState('');
+
+  const [skills, setSkills] = useState<string[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(false);
+  const [skillsError, setSkillsError] = useState<string | null>(null);
+  const [skillNameDraft, setSkillNameDraft] = useState('');
+  const [skillContentDraft, setSkillContentDraft] = useState('');
   const [personality, setPersonality] = useState<CodexPersonality>(defaultCodexSettings().personality);
   const [uiShowThinking, setUiShowThinking] = useState(Boolean(defaultCodexSettings().uiShowThinking));
 
@@ -218,6 +227,102 @@ export default function SettingsScreen() {
     }
   }
 
+  async function refreshSkills() {
+    setSkillsError(null);
+    setSkillsLoading(true);
+    try {
+      const list = await listInstalledSkills();
+      setSkills(list);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setSkillsError(msg || '无法获取技能列表。');
+      setSkills([]);
+    } finally {
+      setSkillsLoading(false);
+    }
+  }
+
+  async function loadSkillIntoDraft(name: string) {
+    const n = normalizeSkillName(name);
+    if (!n) return;
+    setSkillsError(null);
+    try {
+      const content = await FileSystem.readAsStringAsync(skillFileUri(n));
+      setSkillNameDraft(n);
+      setSkillContentDraft(content.trimEnd());
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert('无法读取技能', msg || '读取失败。');
+    }
+  }
+
+  async function saveSkillDraft() {
+    const name = normalizeSkillName(skillNameDraft);
+    const content = skillContentDraft.trim();
+    if (!name) {
+      Alert.alert('名称无效', '请输入技能名称。');
+      return;
+    }
+    if (!content) {
+      Alert.alert('内容为空', '请输入技能内容。');
+      return;
+    }
+    setSkillsError(null);
+    setSkillsLoading(true);
+    try {
+      const res = await writeSkill({ name, content });
+      setSkillNameDraft(res.name);
+      const list = await listInstalledSkills();
+      setSkills(list);
+      Alert.alert('已保存', `技能「${res.name}」已保存。`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setSkillsError(msg);
+      Alert.alert('保存失败', msg || '保存失败。');
+    } finally {
+      setSkillsLoading(false);
+    }
+  }
+
+  function deleteSkillDraft() {
+    const name = normalizeSkillName(skillNameDraft);
+    if (!name) {
+      Alert.alert('名称无效', '请输入技能名称。');
+      return;
+    }
+    Alert.alert('删除技能', `确认删除技能「${name}」吗？`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            setSkillsError(null);
+            setSkillsLoading(true);
+            try {
+              await deleteSkill(name);
+              const list = await listInstalledSkills();
+              setSkills(list);
+              setSkillNameDraft('');
+              setSkillContentDraft('');
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              setSkillsError(msg);
+              Alert.alert('删除失败', msg || '删除失败。');
+            } finally {
+              setSkillsLoading(false);
+            }
+          })();
+        },
+      },
+    ]);
+  }
+
+  useEffect(() => {
+    if (!showAdvanced) return;
+    void refreshSkills();
+  }, [showAdvanced]);
+
   useEffect(() => {
     let cancelled = false;
     async function run() {
@@ -315,7 +420,6 @@ export default function SettingsScreen() {
       <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           contentContainerStyle={[styles.container, { paddingTop: 16 + insets.top }]}
-          scrollEnabled={!modelPickerOpen}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag">
           <View style={styles.header}>
@@ -373,7 +477,8 @@ export default function SettingsScreen() {
               accessibilityRole="button"
               android_ripple={{ color: rippleColor }}
               onPress={() => {
-                setModelPickerOpen((v) => !v);
+                setModelQuery('');
+                setModelPickerOpen(true);
                 if (!models.length && !modelsLoading) void refreshModels();
               }}
               style={({ pressed }) => [
@@ -428,61 +533,6 @@ export default function SettingsScreen() {
             </View>
             {modelsError ? (
               <ThemedText style={[styles.error, { color: Colors[colorScheme].danger }]}>{modelsError}</ThemedText>
-            ) : null}
-            {modelPickerOpen ? (
-              <View
-                style={[
-                  styles.modelPicker,
-                  {
-                    borderColor: Colors[colorScheme].outline,
-                    backgroundColor: Colors[colorScheme].surface2,
-                  },
-                ]}>
-                <TextInput
-                  value={modelQuery}
-                  onChangeText={setModelQuery}
-                  placeholder="搜索模型"
-                  placeholderTextColor={placeholderTextColor}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  selectionColor={Colors[colorScheme].tint}
-                  style={[styles.input, inputStyle, { marginBottom: 8 }]}
-                />
-                <FlatList
-                  data={filteredModels}
-                  keyExtractor={(id) => id}
-                  keyboardShouldPersistTaps="handled"
-                  nestedScrollEnabled
-                  style={{ maxHeight: 220 }}
-                  renderItem={({ item }) => (
-                    <Pressable
-                      accessibilityRole="button"
-                      android_ripple={{ color: rippleColor }}
-                      onPress={() => {
-                        setModel(item);
-                        setModelPickerOpen(false);
-                      }}
-                      style={({ pressed }) => [
-                        styles.modelRow,
-                        {
-                          borderColor: Colors[colorScheme].outlineMuted,
-                          backgroundColor: pressed
-                            ? colorScheme === 'dark'
-                              ? 'rgba(255,255,255,0.08)'
-                              : 'rgba(0,0,0,0.06)'
-                            : 'transparent',
-                        },
-                      ]}>
-                      <ThemedText numberOfLines={1} style={{ flex: 1 }}>
-                        {item}
-                      </ThemedText>
-                    </Pressable>
-                  )}
-                  ListEmptyComponent={
-                    <ThemedText style={styles.muted}>{modelsLoading ? '正在获取…' : '未找到匹配的模型。'}</ThemedText>
-                  }
-                />
-              </View>
             ) : null}
 
             <View style={styles.row2}>
@@ -606,6 +656,150 @@ export default function SettingsScreen() {
                   style={[styles.input, inputStyle]}
                 />
                 <ThemedText style={styles.muted}>范围：1–90 天。</ThemedText>
+
+                <View style={{ height: 12 }} />
+                <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
+                  技能
+                </ThemedText>
+                <ThemedText style={[styles.muted, { marginBottom: 8 }]}>
+                  在会话中输入 $技能名 可启用。
+                </ThemedText>
+
+                <View style={styles.row2}>
+                  <Pressable
+                    accessibilityRole="button"
+                    android_ripple={{ color: rippleColor }}
+                    disabled={skillsLoading}
+                    onPress={() => {
+                      void refreshSkills();
+                    }}
+                    style={({ pressed }) => [
+                      styles.smallButton,
+                      {
+                        opacity: skillsLoading ? 0.5 : pressed ? 0.92 : 1,
+                        borderColor: Colors[colorScheme].outline,
+                        backgroundColor: Colors[colorScheme].surface2,
+                      },
+                    ]}>
+                    <ThemedText type="defaultSemiBold">刷新列表</ThemedText>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    android_ripple={{ color: rippleColor }}
+                    disabled={skillsLoading}
+                    onPress={() => {
+                      setSkillNameDraft('');
+                      setSkillContentDraft('');
+                    }}
+                    style={({ pressed }) => [
+                      styles.smallButton,
+                      {
+                        opacity: skillsLoading ? 0.5 : pressed ? 0.92 : 1,
+                        borderColor: Colors[colorScheme].outline,
+                        backgroundColor: Colors[colorScheme].surface2,
+                      },
+                    ]}>
+                    <ThemedText type="defaultSemiBold">清空编辑</ThemedText>
+                  </Pressable>
+                </View>
+
+                {skillsError ? (
+                  <ThemedText style={[styles.error, { color: Colors[colorScheme].danger }]}>{skillsError}</ThemedText>
+                ) : null}
+
+                {skillsLoading ? (
+                  <View style={{ paddingVertical: 10, alignItems: 'center' }}>
+                    <ActivityIndicator />
+                  </View>
+                ) : skills.length ? (
+                  <View style={{ gap: 8 }}>
+                    {skills.map((name) => (
+                      <Pressable
+                        key={name}
+                        accessibilityRole="button"
+                        android_ripple={{ color: rippleColor }}
+                        onPress={() => void loadSkillIntoDraft(name)}
+                        style={({ pressed }) => [
+                          styles.skillRow,
+                          {
+                            borderColor: Colors[colorScheme].outlineMuted,
+                            backgroundColor: pressed
+                              ? colorScheme === 'dark'
+                                ? 'rgba(255,255,255,0.08)'
+                                : 'rgba(0,0,0,0.06)'
+                              : Colors[colorScheme].surface2,
+                          },
+                        ]}>
+                        <ThemedText type="defaultSemiBold" numberOfLines={1} style={{ flex: 1 }}>
+                          {`$${name}`}
+                        </ThemedText>
+                        <MaterialIcons name="edit" size={18} color={Colors[colorScheme].icon} />
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : (
+                  <ThemedText style={styles.muted}>还没有技能。</ThemedText>
+                )}
+
+                <View style={{ height: 12 }} />
+                <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
+                  编辑技能
+                </ThemedText>
+                <TextInput
+                  value={skillNameDraft}
+                  onChangeText={setSkillNameDraft}
+                  placeholder="名称（例如 ui-ux-pro-max）"
+                  placeholderTextColor={placeholderTextColor}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  selectionColor={Colors[colorScheme].tint}
+                  style={[styles.input, inputStyle]}
+                />
+                <View style={{ height: 8 }} />
+                <TextInput
+                  value={skillContentDraft}
+                  onChangeText={setSkillContentDraft}
+                  placeholder="内容（支持 Markdown）"
+                  placeholderTextColor={placeholderTextColor}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  selectionColor={Colors[colorScheme].tint}
+                  style={[styles.codeInput, inputStyle, { minHeight: 140, textAlignVertical: 'top' }]}
+                  multiline
+                />
+                <View style={styles.row2}>
+                  <Pressable
+                    accessibilityRole="button"
+                    android_ripple={{ color: rippleColor }}
+                    disabled={skillsLoading}
+                    onPress={saveSkillDraft}
+                    style={({ pressed }) => [
+                      styles.primaryButton,
+                      {
+                        opacity: skillsLoading ? 0.5 : pressed ? 0.92 : 1,
+                        backgroundColor: Colors[colorScheme].tint,
+                      },
+                    ]}>
+                    <ThemedText type="defaultSemiBold" style={{ color: Colors[colorScheme].onTint }}>
+                      保存技能
+                    </ThemedText>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    android_ripple={{ color: rippleColor }}
+                    disabled={!normalizeSkillName(skillNameDraft) || skillsLoading}
+                    onPress={deleteSkillDraft}
+                    style={({ pressed }) => [
+                      styles.secondaryButton,
+                      {
+                        opacity: !normalizeSkillName(skillNameDraft) || skillsLoading ? 0.5 : pressed ? 0.92 : 1,
+                        borderColor: Colors[colorScheme].outline,
+                        backgroundColor: Colors[colorScheme].surface2,
+                      },
+                    ]}>
+                    <ThemedText type="defaultSemiBold">删除</ThemedText>
+                  </Pressable>
+                </View>
               </View>
             ) : null}
           </ThemedView>
@@ -802,6 +996,104 @@ export default function SettingsScreen() {
         </ThemedText>
       </Pressable>
         </ScrollView>
+
+        <Modal
+          visible={modelPickerOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setModelPickerOpen(false)}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setModelPickerOpen(false)}>
+            <Pressable
+              accessibilityRole="none"
+              onPress={() => {}}
+              style={[
+                styles.modalSheet,
+                {
+                  backgroundColor: Colors[colorScheme].surface,
+                  borderColor: Colors[colorScheme].outline,
+                  paddingBottom: 12 + insets.bottom,
+                },
+              ]}>
+              <View style={styles.modalHeader}>
+                <ThemedText type="defaultSemiBold" style={styles.modalTitle}>
+                  选择模型
+                </ThemedText>
+                <Pressable
+                  accessibilityRole="button"
+                  android_ripple={{ color: rippleColor }}
+                  onPress={() => setModelPickerOpen(false)}
+                  style={styles.modalClose}>
+                  <MaterialIcons name="close" size={22} color={Colors[colorScheme].text} />
+                </Pressable>
+              </View>
+
+              <TextInput
+                value={modelQuery}
+                onChangeText={setModelQuery}
+                placeholder="搜索模型"
+                placeholderTextColor={placeholderTextColor}
+                autoCapitalize="none"
+                autoCorrect={false}
+                selectionColor={Colors[colorScheme].tint}
+                style={[styles.input, inputStyle, { marginBottom: 10 }]}
+                autoFocus
+              />
+
+              {modelsError ? (
+                <ThemedText style={[styles.error, { color: Colors[colorScheme].danger }]}>{modelsError}</ThemedText>
+              ) : null}
+
+              <FlatList
+                data={filteredModels}
+                keyExtractor={(it) => it}
+                keyboardShouldPersistTaps="handled"
+                style={{ maxHeight: 360 }}
+                renderItem={({ item }) => {
+                  const selected = item === model;
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      android_ripple={{ color: rippleColor }}
+                      onPress={() => {
+                        setModel(item);
+                        setModelPickerOpen(false);
+                      }}
+                      style={({ pressed }) => [
+                        styles.modelRow,
+                        {
+                          borderColor: Colors[colorScheme].outlineMuted,
+                          backgroundColor: pressed
+                            ? colorScheme === 'dark'
+                              ? 'rgba(255,255,255,0.08)'
+                              : 'rgba(0,0,0,0.06)'
+                            : 'transparent',
+                        },
+                      ]}>
+                      <ThemedText numberOfLines={1} style={{ flex: 1 }}>
+                        {item}
+                      </ThemedText>
+                      {selected ? (
+                        <MaterialIcons name="check" size={20} color={Colors[colorScheme].tint} />
+                      ) : null}
+                    </Pressable>
+                  );
+                }}
+                ListHeaderComponent={
+                  modelsLoading ? (
+                    <View style={styles.modalLoading}>
+                      <ActivityIndicator />
+                    </View>
+                  ) : null
+                }
+                ListEmptyComponent={
+                  <View style={styles.modalEmpty}>
+                    <ThemedText style={styles.muted}>{modelsLoading ? '正在获取…' : '未找到匹配的模型。'}</ThemedText>
+                  </View>
+                }
+              />
+            </Pressable>
+          </Pressable>
+        </Modal>
       </KeyboardAvoidingView>
     </ThemedView>
   );
@@ -886,6 +1178,49 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingHorizontal: 10,
     paddingVertical: 10,
+  },
+  skillRow: {
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  modalSheet: {
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 14,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  modalTitle: {
+    fontSize: 16,
+  },
+  modalClose: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  modalLoading: {
+    paddingVertical: 10,
+  },
+  modalEmpty: {
+    paddingVertical: 18,
   },
   smallButton: {
     flex: 1,

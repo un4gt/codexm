@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
@@ -31,6 +32,7 @@ export default function WorkspaceSettingsScreen() {
   const workspaceId = typeof id === 'string' ? id : '';
 
   const colorScheme = useColorScheme() ?? 'light';
+  const insets = useSafeAreaInsets();
   const { workspaces, activeWorkspaceId, refresh, setActive, remove } = useWorkspaces();
 
   const ws = useMemo(
@@ -184,7 +186,13 @@ export default function WorkspaceSettingsScreen() {
     <ThemedView style={styles.screen}>
       <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
-          contentContainerStyle={styles.container}
+          contentContainerStyle={[
+            styles.container,
+            {
+              paddingTop: 20 + insets.top,
+              paddingBottom: 32 + insets.bottom,
+            },
+          ]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag">
           <Stack.Screen
@@ -424,8 +432,6 @@ const styles = StyleSheet.create({
     maxWidth: 720,
     alignSelf: 'center',
     paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 32,
   },
   card: {
     borderRadius: 16,

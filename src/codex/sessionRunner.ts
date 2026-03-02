@@ -26,10 +26,10 @@ export type CodexTurnEvent =
 export async function* runCodexTurn(_params: {
   workspace: Workspace;
   sessionId: string;
-  input?: string;
+  input?: string | { type: string; [key: string]: any }[];
   kind?: 'turn' | 'review' | 'rpc';
   reviewTarget?: any;
-  collaborationMode?: 'code' | 'plan';
+  collaborationMode?: 'default' | 'plan';
   rpcCalls?: {
     method: string;
     params?: any;
@@ -51,8 +51,14 @@ export async function* runCodexTurn(_params: {
 
   const { workspace, sessionId } = _params;
   const kind = _params.kind ?? 'turn';
-  const inputText = _params.input ?? '';
-  if (kind === 'turn' && !inputText.trim()) {
+  const inputElems: { type: string; [key: string]: any }[] = Array.isArray(_params.input)
+    ? _params.input
+    : [{ type: 'text', text: String(_params.input ?? '') }];
+  const firstText = inputElems.find((x) => x && typeof x === 'object' && x.type === 'text') as
+    | { type: 'text'; text?: unknown }
+    | undefined;
+  const inputText = typeof firstText?.text === 'string' ? firstText.text : '';
+  if (kind === 'turn' && !inputElems.some((x) => x?.type === 'text' && typeof x.text === 'string' && x.text.trim())) {
     yield { type: 'error', message: '请输入内容。' };
     yield { type: 'done' };
     return;
@@ -147,12 +153,25 @@ export async function* runCodexTurn(_params: {
 
   function formatRpcErrorForUser(e: unknown): string {
     const msg = e instanceof Error ? e.message : String(e);
+
     if (msg.includes('请求超时') || msg.includes('发送请求超时')) {
       return '连接超时：请检查网络与「设置」中的服务器地址/密钥是否正确。\n可在会话页点击「复制诊断信息」以便排查。';
     }
+
+    // 避免把协议/结构体等内部信息直接暴露给用户（同时保留诊断信息用于排查）。
+    if (
+      msg.includes('CollaborationMode') ||
+      msg.includes('CollabrationMode') ||
+      (msg.includes('Invalid request') && msg.includes('expected struct')) ||
+      (msg.includes('invalid type') && msg.includes('expected struct'))
+    ) {
+      return '服务返回了协议校验错误：请更新应用与 Codex 运行时后重试。\n可在会话页点击「复制诊断信息」以便排查。';
+    }
+
     if (e instanceof JsonRpcError) {
       return e.message || '服务返回错误。';
     }
+
     return msg || '发生未知错误。';
   }
 
@@ -332,6 +351,7 @@ export async function* runCodexTurn(_params: {
       'initialize',
       {
         clientInfo: { name: 'codexm_android', title: 'CodexM Android', version: '0.0.3' },
+        capabilities: { experimentalApi: true },
       },
       { timeoutMs: RPC_INIT_TIMEOUT_MS }
     );
@@ -342,6 +362,7 @@ export async function* runCodexTurn(_params: {
       kind !== 'rpc' || (_params.rpcCalls ?? []).some((c) => Boolean(c.requiresThread));
 
     const s = needsThread ? session : null;
+    const approvalPolicy = settings.approvalPolicy ?? 'never';
     let threadId = needsThread ? s?.codexThreadId ?? null : null;
 
     if (needsThread && threadId) {
@@ -351,7 +372,7 @@ export async function* runCodexTurn(_params: {
           {
             threadId,
             cwd: fileUriToPath(cwdUri),
-            approvalPolicy: 'never',
+            approvalPolicy,
             personality: settings.personality,
           },
           { timeoutMs: RPC_TIMEOUT_MS }
@@ -372,7 +393,7 @@ export async function* runCodexTurn(_params: {
         'thread/start',
         {
           cwd: fileUriToPath(cwdUri),
-          approvalPolicy: 'never',
+          approvalPolicy,
           personality: settings.personality,
         },
         { timeoutMs: RPC_TIMEOUT_MS }
@@ -397,8 +418,13 @@ export async function* runCodexTurn(_params: {
 
         if (call.emitText ?? true) {
           if (call.title?.trim()) yield { type: 'text', text: `${call.title.trim()}\n` };
-          yield { type: 'text', text: JSON.stringify(result, null, 2) };
-          yield { type: 'text', text: '\n' };
+          let json = '';
+          try {
+            json = JSON.stringify(result, null, 2);
+          } catch {
+            json = String(result);
+          }
+          yield { type: 'text', text: `\`\`\`json\n${json}\n\`\`\`\n` };
         }
 
         // Special-case: thread/compact/start triggers async work; keep the server alive until it finishes.
@@ -442,10 +468,20 @@ export async function* runCodexTurn(_params: {
       const turnParams: any = {
         threadId,
         cwd: fileUriToPath(cwdUri),
-        approvalPolicy: 'never',
-        input: [{ type: 'text', text: inputText }],
+        approvalPolicy,
+        input: inputElems,
       };
-      if (_params.collaborationMode) turnParams.collaborationMode = _params.collaborationMode;
+      const modelForMode = settings.model?.trim();
+      if (_params.collaborationMode && modelForMode) {
+        turnParams.collaborationMode = {
+          mode: _params.collaborationMode === 'plan' ? 'plan' : 'default',
+          settings: {
+            model: modelForMode,
+            reasoning_effort: null,
+            developer_instructions: null,
+          },
+        };
+      }
       const turnRes = await rpc.request<any>('turn/start', turnParams, { timeoutMs: RPC_TURN_TIMEOUT_MS });
       turnId = turnRes?.turn?.id ?? null;
     }
