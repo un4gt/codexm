@@ -1,22 +1,18 @@
 import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActivityIndicator, Button, Card, Checkbox, Divider, List, Text, TextInput, useTheme } from 'react-native-paper';
 
-import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Layout, Spacing } from '@/constants/theme';
 import { useMcp } from '@/src/mcp/provider';
 import { isMcpServerProbablyRunnable } from '@/src/mcp/runnable';
 import { createSession } from '@/src/sessions/store';
@@ -24,7 +20,7 @@ import { useWorkspaces } from '@/src/workspaces/provider';
 
 export default function NewSessionScreen() {
   const router = useRouter();
-  const colorScheme = useColorScheme() ?? 'light';
+  const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { workspaces, activeWorkspaceId } = useWorkspaces();
   const { loading: mcpLoading, error: mcpError, servers } = useMcp();
@@ -58,39 +54,14 @@ export default function NewSessionScreen() {
     setEnabledIds(active?.mcpDefaultEnabledServerIds ?? []);
   }, [active?.id, active?.mcpDefaultEnabledServerIds]);
 
-  const cardStyle = useMemo(
-    () => ({
-      backgroundColor: Colors[colorScheme].surface,
-      borderColor: Colors[colorScheme].outline,
-    }),
-    [colorScheme]
-  );
-
-  const inputStyle = useMemo(
-    () => ({
-      color: Colors[colorScheme].text,
-      borderColor: Colors[colorScheme].outline,
-      backgroundColor: Colors[colorScheme].surface2,
-    }),
-    [colorScheme]
-  );
-
-  const placeholderTextColor = useMemo(
-    () => (colorScheme === 'dark' ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.38)'),
-    [colorScheme]
-  );
-
-  const rippleColor = useMemo(
-    () => (colorScheme === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(2,6,23,0.08)'),
-    [colorScheme]
-  );
-
   if (!active) {
     return (
       <ThemedView style={[styles.screen, styles.container]}>
         <Stack.Screen options={{ title: '新建会话' }} />
-        <ThemedText type="title">新建会话</ThemedText>
-        <ThemedText style={styles.muted}>请先选择一个工作区。</ThemedText>
+        <Text variant="headlineMedium">新建会话</Text>
+        <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+          请先选择一个工作区。
+        </Text>
       </ThemedView>
     );
   }
@@ -106,8 +77,8 @@ export default function NewSessionScreen() {
           contentContainerStyle={[
             styles.container,
             {
-              paddingTop: 20 + insets.top,
-              paddingBottom: 32 + insets.bottom,
+              paddingTop: Spacing.lg + insets.top,
+              paddingBottom: Spacing.xl + insets.bottom,
             },
           ]}
           keyboardShouldPersistTaps="handled"
@@ -115,130 +86,117 @@ export default function NewSessionScreen() {
           <Stack.Screen options={{ title: '新建会话' }} />
 
           <View style={styles.header}>
-            <ThemedText type="title">新建会话</ThemedText>
-            <ThemedText style={styles.muted}>
-              工作区：<ThemedText type="defaultSemiBold">{active.name}</ThemedText>
-            </ThemedText>
+            <Text variant="headlineMedium">新建会话</Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              工作区：<Text variant="bodyMedium" style={{ fontWeight: '600' }}>{active.name}</Text>
+            </Text>
           </View>
 
-          <ThemedView style={[styles.card, cardStyle]}>
-            <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
-              基本信息
-            </ThemedText>
-            <TextInput
-              placeholder="标题（可选）"
-              placeholderTextColor={placeholderTextColor}
-              value={title}
-              onChangeText={setTitle}
-              selectionColor={Colors[colorScheme].tint}
-              style={[styles.input, inputStyle]}
-            />
-            <ThemedText style={styles.muted}>不填则默认为“新会话”。</ThemedText>
-          </ThemedView>
+          <Card style={styles.card} mode="elevated">
+            <Card.Title title="基本信息" />
+            <Card.Content>
+              <TextInput
+                mode="outlined"
+                label="标题（可选）"
+                value={title}
+                onChangeText={setTitle}
+              />
+              <Text variant="bodySmall" style={{ marginTop: Spacing.sm, color: theme.colors.onSurfaceVariant }}>
+                不填则默认为“新会话”。
+              </Text>
+            </Card.Content>
+          </Card>
 
-          <ThemedView style={[styles.card, cardStyle]}>
-            <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
-              MCP（可选）
-            </ThemedText>
-            <ThemedText style={styles.muted}>默认会预选当前工作区的 MCP 默认集合；你也可以在这里覆盖。</ThemedText>
+          <Card style={styles.card} mode="elevated">
+            <Card.Title title="MCP（可选）" />
+            <Card.Content>
+              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                默认会预选当前工作区的 MCP 默认集合；你也可以在这里覆盖。
+              </Text>
 
-            {mcpLoading ? (
-              <View style={styles.center}>
-                <ActivityIndicator />
-              </View>
-            ) : (
-              <>
-                {mcpError ? (
-                  <ThemedText style={[styles.error, { color: Colors[colorScheme].danger }]}>{mcpError}</ThemedText>
-                ) : null}
-                {servers.length === 0 ? (
-                  <ThemedText style={styles.muted}>暂无已登记的 MCP 服务器。你可以先到下方 Tab「MCP」里新增。</ThemedText>
-                ) : (
-                  <View style={{ marginTop: 10 }}>
-                    {servers.map((s) => {
-                      const checked = enabledIds.includes(s.id);
-                      const runnable = mcpRunnable[s.id] ?? true;
-                      return (
-                        <Pressable
-                          key={s.id}
-                          accessibilityRole="button"
-                          disabled={!runnable && !checked}
-                          android_ripple={{ color: rippleColor }}
-                          style={[
-                            styles.row,
-                            {
-                              borderColor: Colors[colorScheme].outline,
-                              backgroundColor: checked ? Colors[colorScheme].surface2 : 'transparent',
-                              opacity: !runnable && !checked ? 0.6 : 1,
-                            },
-                          ]}
-                          onPress={() => toggle(s.id)}>
-                          <View style={[styles.checkbox, { borderColor: Colors[colorScheme].outline }]}>
-                            <ThemedText type="defaultSemiBold">{checked ? '✓' : ''}</ThemedText>
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <ThemedText type="defaultSemiBold">{s.name}</ThemedText>
-                            <ThemedText style={styles.muted}>
-                              {s.transport === 'url' ? `地址：${s.url ?? ''}` : `路径：${s.command ?? ''}`}
-                            </ThemedText>
-                            {!runnable ? (
-                              <ThemedText style={[styles.muted, { color: Colors[colorScheme].danger }]}>
-                                未安装/不可执行（请先在底部「MCP」里完成安装或修正启动方式）
-                              </ThemedText>
-                            ) : null}
-                          </View>
-                        </Pressable>
-                      );
-                    })}
+              <View style={{ marginTop: Spacing.md }}>
+                {mcpLoading ? (
+                  <View style={styles.center}>
+                    <ActivityIndicator />
                   </View>
+                ) : (
+                  <>
+                    {mcpError ? <Text style={{ color: theme.colors.error }}>{mcpError}</Text> : null}
+
+                    {servers.length === 0 ? (
+                      <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                        暂无已登记的 MCP 服务器。你可以先到下方 Tab「MCP」里新增。
+                      </Text>
+                    ) : (
+                      <View style={styles.list}>
+                        {servers.map((s, idx) => {
+                          const checked = enabledIds.includes(s.id);
+                          const runnable = mcpRunnable[s.id] ?? true;
+                          const disabled = !runnable && !checked;
+
+                          return (
+                            <View key={s.id}>
+                              <List.Item
+                                title={s.name}
+                                titleNumberOfLines={1}
+                                description={() => (
+                                  <View style={{ gap: 2 }}>
+                                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                                      {s.transport === 'url' ? `地址：${s.url ?? ''}` : `本地：${s.command ?? ''}`}
+                                    </Text>
+                                    {!runnable ? (
+                                      <Text variant="bodySmall" style={{ color: theme.colors.error }}>
+                                        未安装/不可执行（请先在底部「MCP」里完成安装或修正启动方式）
+                                      </Text>
+                                    ) : null}
+                                  </View>
+                                )}
+                                onPress={() => toggle(s.id)}
+                                disabled={disabled}
+                                left={() => (
+                                  <Checkbox
+                                    status={checked ? 'checked' : 'unchecked'}
+                                    disabled={disabled}
+                                    onPress={() => toggle(s.id)}
+                                  />
+                                )}
+                              />
+                              {idx < servers.length - 1 ? <Divider /> : null}
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-          </ThemedView>
+              </View>
+            </Card.Content>
+          </Card>
 
-      <Pressable
-        accessibilityRole="button"
-        disabled={busy}
-        android_ripple={{ color: rippleColor }}
-        style={({ pressed }) => [
-          styles.primaryButton,
-          {
-            backgroundColor: Colors[colorScheme].tint,
-            opacity: busy ? 0.6 : pressed ? 0.92 : 1,
-          },
-        ]}
-        onPress={async () => {
-          setBusy(true);
-          try {
-            const s = await createSession(active.id, title, { mcpEnabledServerIds: enabledIds });
-            router.replace(`/session/${s.id}`);
-          } catch (e) {
-            const message = e instanceof Error ? e.message : String(e);
-            Alert.alert('创建失败', message);
-          } finally {
-            setBusy(false);
-          }
-        }}>
-        <ThemedText type="defaultSemiBold" style={{ color: colorScheme === 'dark' ? '#0b1220' : '#ffffff' }}>
-          创建
-        </ThemedText>
-      </Pressable>
+          <View style={styles.actions}>
+            <Button
+              mode="contained"
+              loading={busy}
+              disabled={busy}
+              onPress={async () => {
+                setBusy(true);
+                try {
+                  const s = await createSession(active.id, title, { mcpEnabledServerIds: enabledIds });
+                  router.replace(`/session/${s.id}`);
+                } catch (e) {
+                  const message = e instanceof Error ? e.message : String(e);
+                  Alert.alert('创建失败', message);
+                } finally {
+                  setBusy(false);
+                }
+              }}>
+              创建
+            </Button>
 
-      <Pressable
-        accessibilityRole="button"
-        disabled={busy}
-        android_ripple={{ color: rippleColor }}
-        style={({ pressed }) => [
-          styles.secondaryButton,
-          {
-            borderColor: Colors[colorScheme].outline,
-            backgroundColor: Colors[colorScheme].surface,
-            opacity: busy ? 0.6 : pressed ? 0.92 : 1,
-          },
-        ]}
-        onPress={() => router.back()}>
-        <ThemedText type="defaultSemiBold">取消</ThemedText>
-      </Pressable>
+            <Button mode="outlined" disabled={busy} onPress={() => router.back()}>
+              取消
+            </Button>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </ThemedView>
@@ -250,71 +208,13 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     width: '100%',
-    maxWidth: 720,
+    maxWidth: Layout.maxWidthForm,
     alignSelf: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
   },
-  header: { marginBottom: 16 },
-  center: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12 },
-  muted: { opacity: 0.8 },
-  error: { marginTop: 10 },
-  card: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 12,
-    minHeight: 48,
-    fontSize: 16,
-    lineHeight: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 12,
-  },
-  row: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginBottom: 10,
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    minHeight: 48,
-    paddingHorizontal: 16,
-    marginTop: 4,
-    overflow: 'hidden',
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    minHeight: 48,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    marginTop: 10,
-    overflow: 'hidden',
-  },
+  header: { marginBottom: Spacing.lg },
+  center: { alignItems: 'center', justifyContent: 'center', paddingVertical: Spacing.md },
+  card: { marginBottom: Spacing.lg },
+  list: { marginTop: Spacing.sm, borderRadius: 12, overflow: 'hidden' },
+  actions: { gap: Spacing.md },
 });

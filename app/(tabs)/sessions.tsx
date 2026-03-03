@@ -1,17 +1,14 @@
+import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Alert, FlatList, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Button, Card, IconButton, List, Text, useTheme } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useFocusEffect } from '@react-navigation/native';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useWorkspaces } from '@/src/workspaces/provider';
+import { Layout, Spacing } from '@/constants/theme';
 import { deleteSession, listSessions } from '@/src/sessions/store';
 import type { Session } from '@/src/sessions/types';
-import { useRouter } from 'expo-router';
+import { useWorkspaces } from '@/src/workspaces/provider';
 
 type SessionListItem =
   | { type: 'date-header'; id: string; title: string }
@@ -55,7 +52,7 @@ function buildSessionListItems(sessions: Session[]): SessionListItem[] {
 
 export default function SessionsScreen() {
   const router = useRouter();
-  const colorScheme = useColorScheme() ?? 'light';
+  const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { workspaces, activeWorkspaceId } = useWorkspaces();
   const [loading, setLoading] = useState(false);
@@ -67,83 +64,73 @@ export default function SessionsScreen() {
 
   const listItems = useMemo(() => buildSessionListItems(sessions), [sessions]);
 
-  const rippleColor = useMemo(
-    () => (colorScheme === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(2,6,23,0.08)'),
-    [colorScheme]
-  );
-
   useFocusEffect(
     useCallback(() => {
-    let cancelled = false;
-    async function run() {
-      if (!activeId) {
-        setSessions([]);
+      let cancelled = false;
+      async function run() {
+        if (!activeId) {
+          setSessions([]);
+          setError(null);
+          return;
+        }
+        setLoading(true);
         setError(null);
-        return;
+        try {
+          const all = await listSessions(activeId);
+          if (!cancelled) setSessions(all);
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e);
+          if (!cancelled) setError(message);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
       }
-      setLoading(true);
-      setError(null);
-      try {
-        const all = await listSessions(activeId);
-        if (!cancelled) setSessions(all);
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        if (!cancelled) setError(message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    run();
-    return () => {
-      cancelled = true;
-    };
+      run();
+      return () => {
+        cancelled = true;
+      };
     }, [activeId])
   );
 
   if (!active) {
     return (
-      <ThemedView style={styles.screen}>
-        <View style={styles.container}>
-          <ThemedText type="title">会话</ThemedText>
-          <ThemedText style={styles.muted}>请先选择一个工作区。</ThemedText>
+      <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
+        <View style={[styles.container, { paddingTop: 16 + insets.top }]}>
+          <Text variant="headlineMedium" style={{ fontWeight: 'bold' }}>会话</Text>
+          <Text style={{ color: theme.colors.onSurfaceVariant }}>请先选择一个工作区。</Text>
         </View>
-      </ThemedView>
+      </View>
     );
   }
 
   return (
-    <ThemedView style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: theme.colors.background }]}>
       <View style={[styles.container, { paddingTop: 16 + insets.top }]}>
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
-            <ThemedText type="title">会话</ThemedText>
-            <ThemedText style={styles.muted}>
-              工作区：<ThemedText type="defaultSemiBold">{active.name}</ThemedText>
-            </ThemedText>
+            <Text variant="headlineMedium" style={{ fontWeight: 'bold' }}>会话</Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              工作区：<Text variant="bodyMedium" style={{ fontWeight: 'bold' }}>{active.name}</Text>
+            </Text>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            android_ripple={{ color: rippleColor }}
-            style={({ pressed }) => [
-              styles.primaryButton,
-              { opacity: pressed ? 0.9 : 1, backgroundColor: Colors[colorScheme].tint },
-            ]}
-            onPress={() => router.push('/new-session' as any)}>
-            <ThemedText type="defaultSemiBold" style={{ color: colorScheme === 'dark' ? '#0b1220' : '#ffffff' }}>
-              新建
-            </ThemedText>
-          </Pressable>
+          <Button
+            mode="contained"
+            onPress={() => router.push('/new-session' as any)}
+            style={styles.button}
+          >
+            新建
+          </Button>
         </View>
 
         {error ? (
-          <ThemedText type="default" style={[styles.error, { color: Colors[colorScheme].danger }]}>
+          <Text style={[styles.error, { color: theme.colors.error }]}>
             {error}
-          </ThemedText>
+          </Text>
         ) : null}
 
         {loading ? (
           <View style={styles.center}>
-            <ActivityIndicator />
+            <ActivityIndicator animating={true} size="large" />
           </View>
         ) : (
           <FlatList
@@ -152,25 +139,18 @@ export default function SessionsScreen() {
             contentContainerStyle={{ paddingBottom: 24 }}
             keyboardDismissMode="on-drag"
             keyboardShouldPersistTaps="handled"
-            renderItem={({ item, index }) => {
+            renderItem={({ item }) => {
               if (item.type === 'date-header') {
                 return (
-                  <ThemedText type="default" style={[styles.sectionTitle, { color: Colors[colorScheme].icon }]}>
+                  <List.Subheader style={{ color: theme.colors.primary }}>
                     {item.title}
-                  </ThemedText>
+                  </List.Subheader>
                 );
               }
 
-              const prev = listItems[index - 1];
-              const next = listItems[index + 1];
-              const isFirst = prev?.type === 'date-header' || prev == null;
-              const isLast = next?.type === 'date-header' || next == null;
-              const isSingle = isFirst && isLast;
-
               return (
-                <Pressable
-                  accessibilityRole="button"
-                  android_ripple={{ color: rippleColor }}
+                <Card
+                  style={[styles.sessionCard, { backgroundColor: theme.colors.surfaceVariant }]}
                   onPress={() => router.push(`/session/${item.session.id}`)}
                   onLongPress={() => {
                     Alert.alert('删除会话？', item.session.title, [
@@ -186,33 +166,26 @@ export default function SessionsScreen() {
                       },
                     ]);
                   }}
-                  style={({ pressed }) => [
-                    styles.sessionCard,
-                    !isFirst && styles.sessionCardNotFirst,
-                    isSingle ? styles.sessionCardSingle : isFirst ? styles.sessionCardFirst : isLast ? styles.sessionCardLast : undefined,
-                    {
-                      opacity: pressed ? 0.92 : 1,
-                      borderColor: Colors[colorScheme].outline,
-                      backgroundColor: Colors[colorScheme].surface,
-                    },
-                  ]}>
-                  <View style={{ flex: 1 }}>
-                    <ThemedText type="defaultSemiBold" numberOfLines={1} style={{ marginBottom: 2 }}>
-                      {item.session.title}
-                    </ThemedText>
-                    <ThemedText style={styles.muted} numberOfLines={1}>
-                      {new Date(item.session.updatedAt).toLocaleTimeString()}
-                    </ThemedText>
-                  </View>
-                  <MaterialIcons name="chevron-right" size={20} color={Colors[colorScheme].icon} />
-                </Pressable>
+                >
+                  <Card.Title
+                    title={item.session.title}
+                    titleVariant="titleMedium"
+                    subtitle={new Date(item.session.updatedAt).toLocaleTimeString()}
+                    subtitleVariant="bodySmall"
+                    right={(props) => <IconButton {...props} icon="chevron-right" />}
+                  />
+                </Card>
               );
             }}
-            ListEmptyComponent={<ThemedText style={styles.muted}>还没有会话。</ThemedText>}
+            ListEmptyComponent={
+              <Text style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center', marginTop: 24 }}>
+                还没有会话。
+              </Text>
+            }
           />
         )}
       </View>
-    </ThemedView>
+    </View>
   );
 }
 
@@ -222,10 +195,9 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingTop: 24,
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     width: '100%',
-    maxWidth: 980,
+    maxWidth: Layout.maxWidthWide,
     alignSelf: 'center',
   },
   header: {
@@ -234,50 +206,12 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 16,
   },
-  primaryButton: {
-    minHeight: 44,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  sectionTitle: {
-    marginTop: 14,
-    marginBottom: 8,
-    fontSize: 13,
-    letterSpacing: 0.2,
-    opacity: 0.85,
+  button: {
+    borderRadius: 8,
   },
   sessionCard: {
-    minHeight: 56,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    overflow: 'hidden',
-  },
-  sessionCardNotFirst: {
-    marginTop: -1,
-  },
-  sessionCardFirst: {
-    borderTopLeftRadius: 14,
-    borderTopRightRadius: 14,
-  },
-  sessionCardLast: {
-    borderBottomLeftRadius: 14,
-    borderBottomRightRadius: 14,
     marginBottom: 12,
-  },
-  sessionCardSingle: {
-    borderRadius: 14,
-    marginBottom: 12,
-  },
-  muted: {
-    opacity: 0.7,
+    borderRadius: 12,
   },
   error: {
     marginBottom: 8,

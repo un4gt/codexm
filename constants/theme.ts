@@ -4,38 +4,72 @@
  */
 
 import { Platform } from 'react-native';
+import { MD3DarkTheme, MD3LightTheme } from 'react-native-paper';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#22d3ee';
+const ROUNDNESS = 12;
+
+export const Spacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  xxl: 32,
+} as const;
+
+export const Radii = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 28,
+  pill: 999,
+} as const;
+
+export const Layout = {
+  maxWidthWide: 980,
+  maxWidthForm: 720,
+} as const;
+
+export const MaterialLightTheme = {
+  ...MD3LightTheme,
+  roundness: ROUNDNESS,
+} as const;
+
+export const MaterialDarkTheme = {
+  ...MD3DarkTheme,
+  roundness: ROUNDNESS,
+} as const;
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
-    surface: '#F8FAFC',
-    surface2: '#F1F5F9',
-    tint: tintColorLight,
-    icon: '#687076',
-    outline: '#E2E8F0',
-    outlineMuted: 'rgba(2,6,23,0.08)',
-    danger: '#DC2626',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
+    text: MaterialLightTheme.colors.onBackground,
+    background: MaterialLightTheme.colors.background,
+    surface: MaterialLightTheme.colors.surface,
+    surface2: MaterialLightTheme.colors.surfaceVariant,
+    tint: MaterialLightTheme.colors.primary,
+    onTint: MaterialLightTheme.colors.onPrimary,
+    icon: MaterialLightTheme.colors.onSurfaceVariant,
+    outline: MaterialLightTheme.colors.outline,
+    outlineMuted: MaterialLightTheme.colors.outlineVariant,
+    danger: MaterialLightTheme.colors.error,
+    tabIconDefault: MaterialLightTheme.colors.onSurfaceVariant,
+    tabIconSelected: MaterialLightTheme.colors.primary,
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    surface: '#1C1E20',
-    surface2: '#232527',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    outline: 'rgba(255,255,255,0.16)',
-    outlineMuted: 'rgba(255,255,255,0.10)',
-    danger: '#F87171',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
+    text: MaterialDarkTheme.colors.onBackground,
+    background: MaterialDarkTheme.colors.background,
+    surface: MaterialDarkTheme.colors.surface,
+    surface2: MaterialDarkTheme.colors.surfaceVariant,
+    tint: MaterialDarkTheme.colors.primary,
+    onTint: MaterialDarkTheme.colors.onPrimary,
+    icon: MaterialDarkTheme.colors.onSurfaceVariant,
+    outline: MaterialDarkTheme.colors.outline,
+    outlineMuted: MaterialDarkTheme.colors.outlineVariant,
+    danger: MaterialDarkTheme.colors.error,
+    tabIconDefault: MaterialDarkTheme.colors.onSurfaceVariant,
+    tabIconSelected: MaterialDarkTheme.colors.primary,
   },
-};
+} as const;
 
 export const Fonts = Platform.select({
   ios: {

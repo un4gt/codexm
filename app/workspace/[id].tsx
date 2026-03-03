@@ -1,24 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
-  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Button, Card, Switch, Text, TextInput, useTheme } from 'react-native-paper';
 
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
-import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Layout, Spacing } from '@/constants/theme';
 import { deleteAuth, saveAuth } from '@/src/auth/authStore';
 import type { GitHttpsAuth } from '@/src/auth/types';
 import { workspaceRepoPath } from '@/src/workspaces/paths';
@@ -31,7 +26,7 @@ export default function WorkspaceSettingsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const workspaceId = typeof id === 'string' ? id : '';
 
-  const colorScheme = useColorScheme() ?? 'light';
+  const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { workspaces, activeWorkspaceId, refresh, setActive, remove } = useWorkspaces();
 
@@ -80,33 +75,6 @@ export default function WorkspaceSettingsScreen() {
     if (busy) return false;
     return true;
   }, [busy, name, ws]);
-
-  const cardStyle = useMemo(
-    () => ({
-      backgroundColor: Colors[colorScheme].surface,
-      borderColor: Colors[colorScheme].outline,
-    }),
-    [colorScheme]
-  );
-
-  const inputStyle = useMemo(
-    () => ({
-      color: Colors[colorScheme].text,
-      borderColor: Colors[colorScheme].outline,
-      backgroundColor: Colors[colorScheme].surface2,
-    }),
-    [colorScheme]
-  );
-
-  const placeholderTextColor = useMemo(
-    () => (colorScheme === 'dark' ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.38)'),
-    [colorScheme]
-  );
-
-  const rippleColor = useMemo(
-    () => (colorScheme === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(2,6,23,0.08)'),
-    [colorScheme]
-  );
 
   async function onSave() {
     if (!ws) return;
@@ -174,8 +142,10 @@ export default function WorkspaceSettingsScreen() {
     return (
       <ThemedView style={[styles.screen, styles.container]}>
         <Stack.Screen options={{ title: '工作区设置' }} />
-        <ThemedText type="title">工作区设置</ThemedText>
-        <ThemedText style={styles.muted}>未找到该工作区。</ThemedText>
+        <Text variant="headlineMedium">工作区设置</Text>
+        <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+          未找到该工作区。
+        </Text>
       </ThemedView>
     );
   }
@@ -189,8 +159,8 @@ export default function WorkspaceSettingsScreen() {
           contentContainerStyle={[
             styles.container,
             {
-              paddingTop: 20 + insets.top,
-              paddingBottom: 32 + insets.bottom,
+              paddingTop: Spacing.lg + insets.top,
+              paddingBottom: Spacing.xl + insets.bottom,
             },
           ]}
           keyboardShouldPersistTaps="handled"
@@ -199,223 +169,179 @@ export default function WorkspaceSettingsScreen() {
             options={{
               title: '工作区设置',
               headerRight: () => (
-                <Pressable
-                  accessibilityRole="button"
-                  android_ripple={{ color: rippleColor }}
-                  onPress={() => router.back()}
-                  style={{ paddingHorizontal: 12 }}>
-                  <ThemedText type="defaultSemiBold">关闭</ThemedText>
-                </Pressable>
+                <Button compact mode="text" onPress={() => router.back()}>
+                  关闭
+                </Button>
               ),
             }}
           />
 
-      <ThemedView style={[styles.card, cardStyle]}>
-        <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
-          基础信息
-        </ThemedText>
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          placeholder="工作区名称"
-          placeholderTextColor={placeholderTextColor}
-          selectionColor={Colors[colorScheme].tint}
-          style={[styles.input, inputStyle]}
-        />
-        <ThemedText style={styles.muted}>
-          代码目录：<ThemedText type="defaultSemiBold">{repoUri}</ThemedText>
-        </ThemedText>
-        <ThemedText style={styles.muted}>
-          当前状态：<ThemedText type="defaultSemiBold">{ws.id === activeWorkspaceId ? '当前工作区' : '未选中'}</ThemedText>
-        </ThemedText>
-        <View style={{ height: 10 }} />
-        <View style={styles.row2}>
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy || ws.id === activeWorkspaceId}
-            android_ripple={{ color: rippleColor }}
-            onPress={async () => {
-              await setActive(ws.id);
-              await refresh();
-            }}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              {
-                opacity: busy || ws.id === activeWorkspaceId ? 0.5 : pressed ? 0.92 : 1,
-                borderColor: Colors[colorScheme].outline,
-                backgroundColor: Colors[colorScheme].surface,
-              },
-            ]}>
-            <ThemedText type="defaultSemiBold">设为当前</ThemedText>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy}
-            android_ripple={{ color: rippleColor }}
-            onPress={() => {
-              Alert.alert('删除工作区？', ws.name, [
-                { text: '取消', style: 'cancel' },
-                {
-                  text: '删除',
-                  style: 'destructive',
-                  onPress: async () => {
-                    await remove(ws.id);
-                    router.back();
-                  },
-                },
-              ]);
-            }}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              {
-                opacity: busy ? 0.5 : pressed ? 0.92 : 1,
-                borderColor: Colors[colorScheme].danger,
-                backgroundColor: Colors[colorScheme].surface,
-              },
-            ]}>
-            <ThemedText type="defaultSemiBold" style={{ color: Colors[colorScheme].danger }}>
-              删除
-            </ThemedText>
-          </Pressable>
-        </View>
-      </ThemedView>
+          <Card style={styles.card} mode="elevated">
+            <Card.Title title="基础信息" />
+            <Card.Content>
+              <TextInput mode="outlined" label="工作区名称" value={name} onChangeText={setName} />
 
-      <ThemedView style={[styles.card, cardStyle]}>
-        <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
-          Git（可选）
-        </ThemedText>
-        <TextInput
-          value={gitRemoteUrl}
-          onChangeText={setGitRemoteUrl}
-          placeholder="https://github.com/user/repo.git"
-          placeholderTextColor={placeholderTextColor}
-          selectionColor={Colors[colorScheme].tint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={[styles.input, inputStyle]}
-        />
-        <TextInput
-          value={gitBranch}
-          onChangeText={setGitBranch}
-          placeholder="默认分支（可选）"
-          placeholderTextColor={placeholderTextColor}
-          selectionColor={Colors[colorScheme].tint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={[styles.input, inputStyle]}
-        />
-        <TextInput
-          value={gitToken}
-          onChangeText={setGitToken}
-          placeholder="访问令牌（留空保持不变）"
-          placeholderTextColor={placeholderTextColor}
-          selectionColor={Colors[colorScheme].tint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          secureTextEntry
-          style={[styles.input, inputStyle]}
-        />
+              <View style={{ marginTop: Spacing.sm, gap: 4 }}>
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                  代码目录：<Text variant="bodySmall" style={{ fontWeight: '600' }}>{repoUri}</Text>
+                </Text>
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                  当前状态：<Text variant="bodySmall" style={{ fontWeight: '600' }}>{ws.id === activeWorkspaceId ? '当前工作区' : '未选中'}</Text>
+                </Text>
+              </View>
 
-        <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
-          提交身份（可选）
-        </ThemedText>
-        <View style={styles.row2}>
-          <TextInput
-            value={gitUserName}
-            onChangeText={setGitUserName}
-            placeholder="user.name"
-            placeholderTextColor={placeholderTextColor}
-            selectionColor={Colors[colorScheme].tint}
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={[styles.input, styles.half, inputStyle]}
-          />
-          <TextInput
-            value={gitUserEmail}
-            onChangeText={setGitUserEmail}
-            placeholder="user.email"
-            placeholderTextColor={placeholderTextColor}
-            selectionColor={Colors[colorScheme].tint}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            style={[styles.input, styles.half, inputStyle]}
-          />
-        </View>
+              <View style={styles.row2}>
+                <Button
+                  mode="outlined"
+                  disabled={busy || ws.id === activeWorkspaceId}
+                  onPress={async () => {
+                    await setActive(ws.id);
+                    await refresh();
+                  }}>
+                  设为当前
+                </Button>
 
-        <View style={styles.switchRow}>
-          <ThemedText type="defaultSemiBold">跳过证书校验（不安全）</ThemedText>
-          <Switch value={gitAllowInsecure} onValueChange={setGitAllowInsecure} />
-        </View>
-      </ThemedView>
+                <Button
+                  mode="text"
+                  textColor={theme.colors.error}
+                  disabled={busy}
+                  onPress={() => {
+                    Alert.alert('删除工作区？', ws.name, [
+                      { text: '取消', style: 'cancel' },
+                      {
+                        text: '删除',
+                        style: 'destructive',
+                        onPress: async () => {
+                          await remove(ws.id);
+                          router.back();
+                        },
+                      },
+                    ]);
+                  }}>
+                  删除
+                </Button>
+              </View>
+            </Card.Content>
+          </Card>
 
-      <ThemedView style={[styles.card, cardStyle]}>
-        <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
-          WebDAV（可选）
-        </ThemedText>
-        <TextInput
-          value={webdavEndpoint}
-          onChangeText={setWebdavEndpoint}
-          placeholder="https://example.com/dav/"
-          placeholderTextColor={placeholderTextColor}
-          selectionColor={Colors[colorScheme].tint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={[styles.input, inputStyle]}
-        />
-        <View style={styles.row2}>
-          <TextInput
-            value={webdavBasePath}
-            onChangeText={setWebdavBasePath}
-            placeholder="基础路径（可选）"
-            placeholderTextColor={placeholderTextColor}
-            selectionColor={Colors[colorScheme].tint}
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={[styles.input, styles.half, inputStyle]}
-          />
-          <TextInput
-            value={webdavRemoteRoot}
-            onChangeText={setWebdavRemoteRoot}
-            placeholder="远端目录（可选）"
-            placeholderTextColor={placeholderTextColor}
-            selectionColor={Colors[colorScheme].tint}
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={[styles.input, styles.half, inputStyle]}
-          />
-        </View>
-        <ThemedText style={styles.muted}>认证信息在创建工作区时设置（后续会单独补齐编辑入口）。</ThemedText>
-      </ThemedView>
+          <Card style={styles.card} mode="elevated">
+            <Card.Title title="Git（可选）" />
+            <Card.Content>
+              <TextInput
+                mode="outlined"
+                label="仓库地址"
+                placeholder="https://…"
+                value={gitRemoteUrl}
+                onChangeText={setGitRemoteUrl}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
 
-      {error ? (
-        <ThemedText type="default" style={[styles.error, { color: Colors[colorScheme].danger }]}>
-          {error}
-        </ThemedText>
-      ) : null}
+              <View style={styles.formGap} />
 
-      <Pressable
-        accessibilityRole="button"
-        disabled={!canSave}
-        android_ripple={{ color: rippleColor }}
-        onPress={onSave}
-        style={({ pressed }) => [
-          styles.primaryButton,
-          {
-            opacity: !canSave ? 0.5 : pressed ? 0.92 : 1,
-            backgroundColor: Colors[colorScheme].tint,
-          },
-        ]}>
-        {busy ? (
-          <ActivityIndicator color={colorScheme === 'dark' ? '#0b1220' : '#ffffff'} />
-        ) : (
-          <ThemedText
-            type="defaultSemiBold"
-            style={[styles.primaryButtonText, { color: colorScheme === 'dark' ? '#0b1220' : '#ffffff' }]}>
-            保存
-          </ThemedText>
-        )}
-      </Pressable>
+              <TextInput
+                mode="outlined"
+                label="默认分支（可选）"
+                placeholder="main"
+                value={gitBranch}
+                onChangeText={setGitBranch}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              <View style={styles.formGap} />
+
+              <TextInput
+                mode="outlined"
+                label="访问令牌（留空保持不变）"
+                value={gitToken}
+                onChangeText={setGitToken}
+                autoCapitalize="none"
+                autoCorrect={false}
+                secureTextEntry
+              />
+
+              <View style={styles.formGap} />
+
+              <Text variant="labelLarge">提交身份（可选）</Text>
+              <View style={styles.row2}>
+                <TextInput
+                  mode="outlined"
+                  label="user.name"
+                  value={gitUserName}
+                  onChangeText={setGitUserName}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.half}
+                />
+                <TextInput
+                  mode="outlined"
+                  label="user.email"
+                  value={gitUserEmail}
+                  onChangeText={setGitUserEmail}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  style={styles.half}
+                />
+              </View>
+
+              <View style={styles.switchRow}>
+                <Text variant="bodyMedium">跳过证书校验（不安全）</Text>
+                <Switch value={gitAllowInsecure} onValueChange={setGitAllowInsecure} />
+              </View>
+            </Card.Content>
+          </Card>
+
+          <Card style={styles.card} mode="elevated">
+            <Card.Title title="WebDAV（可选）" />
+            <Card.Content>
+              <TextInput
+                mode="outlined"
+                label="地址"
+                placeholder="https://…"
+                value={webdavEndpoint}
+                onChangeText={setWebdavEndpoint}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              <View style={styles.row2}>
+                <TextInput
+                  mode="outlined"
+                  label="基础路径（可选）"
+                  placeholder="/"
+                  value={webdavBasePath}
+                  onChangeText={setWebdavBasePath}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.half}
+                />
+                <TextInput
+                  mode="outlined"
+                  label="远端目录（可选）"
+                  placeholder="repo/"
+                  value={webdavRemoteRoot}
+                  onChangeText={setWebdavRemoteRoot}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.half}
+                />
+              </View>
+
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                认证信息在创建工作区时设置（后续会单独补齐编辑入口）。
+              </Text>
+            </Card.Content>
+          </Card>
+
+          {error ? <Text style={[styles.error, { color: theme.colors.error }]}>{error}</Text> : null}
+
+          <View style={styles.actions}>
+            <Button mode="contained" loading={busy} disabled={!canSave} onPress={onSave}>
+              保存
+            </Button>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </ThemedView>
@@ -429,72 +355,27 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     width: '100%',
-    maxWidth: 720,
+    maxWidth: Layout.maxWidthForm,
     alignSelf: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
   },
-  card: {
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 16,
-    marginBottom: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  input: {
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    minHeight: 48,
-    fontSize: 16,
-    lineHeight: 20,
-    marginBottom: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  muted: {
-    opacity: 0.7,
-  },
+  card: { marginBottom: Spacing.lg },
+  formGap: { height: Spacing.md },
   row2: {
     flexDirection: 'row',
-    gap: 10,
+    gap: Spacing.md,
     flexWrap: 'wrap',
   },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginTop: Spacing.md,
   },
   half: {
     flex: 1,
     minWidth: 160,
   },
-  primaryButton: {
-    alignItems: 'center',
-    borderRadius: 12,
-    justifyContent: 'center',
-    minHeight: 48,
-    paddingHorizontal: 16,
-    marginBottom: 18,
-    overflow: 'hidden',
-  },
-  primaryButtonText: {
-    color: '#ffffff',
-  },
-  secondaryButton: {
-    flex: 1,
-    alignItems: 'center',
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    justifyContent: 'center',
-    minHeight: 48,
-    paddingHorizontal: 16,
-    overflow: 'hidden',
-  },
-  error: {
-    marginBottom: 10,
-  },
+  actions: { gap: Spacing.md, marginBottom: Spacing.xl },
+  error: { marginBottom: Spacing.md },
 });

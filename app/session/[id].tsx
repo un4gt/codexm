@@ -9,10 +9,10 @@ import {
   Pressable,
   Share,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Button, TextInput, useTheme } from 'react-native-paper';
 
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import Constants from 'expo-constants';
@@ -23,8 +23,7 @@ import { MarkdownView } from '@/components/markdown/MarkdownView';
 import { ThinkingBlock } from '@/components/markdown/ThinkingBlock';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Layout, Spacing } from '@/constants/theme';
 import { readSessionDebugLogTail } from '@/src/codex/debugLog';
 import { CODEX_SLASH_COMMANDS } from '@/src/codex/slashCommands';
 import { getCodexSettings, materializeCodexConfigFiles, setCodexApiKey, updateCodexSettings } from '@/src/codex/settings';
@@ -53,7 +52,7 @@ export default function SessionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const sessionId = typeof id === 'string' ? id : '';
 
-  const colorScheme = useColorScheme() ?? 'light';
+  const theme = useTheme();
   const insets = useSafeAreaInsets();
   const manualAndroidKeyboardInset =
     Platform.OS === 'android' && (Constants.expoConfig?.android?.softwareKeyboardLayoutMode ?? 'resize') === 'pan';
@@ -122,11 +121,6 @@ export default function SessionDetailScreen() {
     const list = query ? installedSkills.filter((s) => s.toLowerCase().startsWith(query)) : installedSkills;
     return list.slice(0, 20);
   }, [dollarToken, installedSkills]);
-
-  const rippleColor = useMemo(
-    () => (colorScheme === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(2,6,23,0.08)'),
-    [colorScheme]
-  );
 
   function applySlashCommand(command: string) {
     setInput((prev) => {
@@ -973,9 +967,9 @@ export default function SessionDetailScreen() {
         options={{
           title: session?.title ?? '会话',
           headerRight: () => (
-            <Pressable accessibilityRole="button" onPress={() => router.back()} style={{ paddingHorizontal: 12 }}>
-              <ThemedText type="defaultSemiBold">关闭</ThemedText>
-            </Pressable>
+            <Button compact mode="text" onPress={() => router.back()}>
+              关闭
+            </Button>
           ),
         }}
       />
@@ -985,57 +979,37 @@ export default function SessionDetailScreen() {
           <ThemedView
             style={[
               styles.topCard,
-              { backgroundColor: Colors[colorScheme].surface, borderColor: Colors[colorScheme].outline },
+              { backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant },
             ]}>
-        <ThemedText style={styles.muted}>
-          工作区：<ThemedText type="defaultSemiBold">{active.name}</ThemedText>
-        </ThemedText>
+            <ThemedText style={styles.muted}>
+              工作区：<ThemedText type="defaultSemiBold">{active.name}</ThemedText>
+            </ThemedText>
 
-        <TextInput
-          value={draftTitle}
-          onChangeText={setDraftTitle}
-          placeholder="会话标题"
-          placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
-          style={[
-            styles.titleInput,
-            {
-              color: Colors[colorScheme].text,
-              borderColor: Colors[colorScheme].outline,
-              backgroundColor: Colors[colorScheme].surface2,
-            },
-          ]}
-          onBlur={async () => {
-            if (!session) return;
-            const next = draftTitle.trim();
-            if (next && next !== session.title) {
-              await renameSession(active.id, session.id, next);
-              const allSessions = await listSessions(active.id);
-              const s = allSessions.find((x) => x.id === session.id) ?? null;
-              setSession(s);
-            }
-          }}
-        />
-      </ThemedView>
+            <TextInput
+              mode="outlined"
+              label="会话标题"
+              value={draftTitle}
+              onChangeText={setDraftTitle}
+              style={styles.titleInput}
+              onBlur={async () => {
+                if (!session) return;
+                const next = draftTitle.trim();
+                if (next && next !== session.title) {
+                  await renameSession(active.id, session.id, next);
+                  const allSessions = await listSessions(active.id);
+                  const s = allSessions.find((x) => x.id === session.id) ?? null;
+                  setSession(s);
+                }
+              }}
+            />
+          </ThemedView>
 
       {error ? (
         <View>
-          <ThemedText style={[styles.error, { color: Colors[colorScheme].danger }]}>{error}</ThemedText>
-          <Pressable
-            accessibilityRole="button"
-            onPress={openDiagnosticsActions}
-            android_ripple={{ color: rippleColor }}
-            style={({ pressed }) => [
-              styles.copyDiagButton,
-              {
-                borderColor: Colors[colorScheme].outline,
-                backgroundColor: Colors[colorScheme].surface,
-                opacity: pressed ? 0.9 : 1,
-              },
-            ]}>
-            <ThemedText type="defaultSemiBold" style={styles.copyDiagText}>
-              复制诊断信息
-            </ThemedText>
-          </Pressable>
+          <ThemedText style={[styles.error, { color: theme.colors.error }]}>{error}</ThemedText>
+          <Button mode="outlined" onPress={openDiagnosticsActions} style={styles.copyDiagButton}>
+            复制诊断信息
+          </Button>
           <ThemedText style={styles.muted}>提示：可在「设置」的高级选项中开启调试日志。</ThemedText>
         </View>
       ) : null}
@@ -1065,13 +1039,11 @@ export default function SessionDetailScreen() {
                 style={[
                   styles.msg,
                   {
-                    borderColor: Colors[colorScheme].outlineMuted,
+                    borderColor: theme.colors.outlineVariant,
                     backgroundColor:
                       item.role === 'user'
-                        ? colorScheme === 'dark'
-                          ? 'rgba(34,211,238,0.14)'
-                          : 'rgba(10,126,164,0.08)'
-                        : Colors[colorScheme].surface,
+                        ? theme.colors.primaryContainer
+                        : theme.colors.surface,
                   },
                 ]}>
                 <View style={styles.msgHeader}>
@@ -1085,22 +1057,9 @@ export default function SessionDetailScreen() {
 
                 {item.id === pendingAssistantId && waitingFirstToken ? (
                   <View>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={openDiagnosticsActions}
-                      android_ripple={{ color: rippleColor }}
-                      style={({ pressed }) => [
-                        styles.copyDiagButton,
-                        {
-                          borderColor: Colors[colorScheme].outline,
-                          backgroundColor: Colors[colorScheme].surface,
-                          opacity: pressed ? 0.9 : 1,
-                        },
-                      ]}>
-                      <ThemedText type="defaultSemiBold" style={styles.copyDiagText}>
-                        复制诊断信息
-                      </ThemedText>
-                    </Pressable>
+                    <Button mode="outlined" onPress={openDiagnosticsActions} style={styles.copyDiagButton}>
+                      复制诊断信息
+                    </Button>
                   </View>
                 ) : (
                   <>
@@ -1127,8 +1086,8 @@ export default function SessionDetailScreen() {
           style={[
             styles.slashPopup,
             {
-              backgroundColor: Colors[colorScheme].surface,
-              borderColor: Colors[colorScheme].outline,
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.outlineVariant,
             },
           ]}>
           <FlatList
@@ -1142,11 +1101,11 @@ export default function SessionDetailScreen() {
                 onPress={() => applySlashCommand(item.command)}
                 style={({ pressed }) => [
                   styles.slashRow,
-                  pressed && {
-                    backgroundColor:
-                      colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-                  },
-                ]}>
+                    pressed && {
+                      backgroundColor:
+                        theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                    },
+                  ]}>
                 <ThemedText type="defaultSemiBold" style={styles.slashCommand} numberOfLines={1}>
                   {item.command}
                 </ThemedText>
@@ -1167,8 +1126,8 @@ export default function SessionDetailScreen() {
             style={[
               styles.slashPopup,
               {
-                backgroundColor: Colors[colorScheme].surface,
-                borderColor: Colors[colorScheme].outline,
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.outlineVariant,
               },
             ]}>
             <FlatList
@@ -1183,7 +1142,7 @@ export default function SessionDetailScreen() {
                   style={({ pressed }) => [
                     styles.slashRow,
                     pressed && {
-                      backgroundColor: colorScheme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                      backgroundColor: theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
                     },
                   ]}>
                   <ThemedText type="defaultSemiBold" style={styles.slashCommand} numberOfLines={1}>
@@ -1203,8 +1162,8 @@ export default function SessionDetailScreen() {
             style={[
               styles.slashPopup,
               {
-                backgroundColor: Colors[colorScheme].surface,
-                borderColor: Colors[colorScheme].outline,
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.outlineVariant,
               },
             ]}>
             <ThemedText style={styles.muted}>
@@ -1218,41 +1177,30 @@ export default function SessionDetailScreen() {
         style={[
           styles.composer,
           {
-            borderColor: Colors[colorScheme].outline,
-            paddingBottom: 10 + insets.bottom + (manualAndroidKeyboardInset ? androidKeyboardHeight : 0),
+            borderColor: theme.colors.outlineVariant,
+            paddingBottom: Spacing.sm + insets.bottom + (manualAndroidKeyboardInset ? androidKeyboardHeight : 0),
           },
         ]}>
         <TextInput
+          mode="outlined"
           value={input}
           onChangeText={setInput}
           placeholder="输入你的问题…"
-          placeholderTextColor={colorScheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'}
           style={[
             styles.composerInput,
-            {
-              color: Colors[colorScheme].text,
-              backgroundColor: Colors[colorScheme].surface2,
-            },
           ]}
           onFocus={() => requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }))}
           multiline
         />
-        <Pressable
-          accessibilityRole="button"
-          android_ripple={{ color: rippleColor }}
+        <Button
+          mode="contained"
           disabled={sending || !input.trim()}
           onPress={onSend}
-          style={({ pressed }) => [
-            styles.sendButton,
-            {
-              opacity: sending || !input.trim() ? 0.4 : pressed ? 0.85 : 1,
-              backgroundColor: Colors[colorScheme].tint,
-            },
-          ]}>
-          <ThemedText type="defaultSemiBold" style={{ color: colorScheme === 'dark' ? '#0b1220' : '#ffffff' }}>
-            发送
-          </ThemedText>
-        </Pressable>
+          style={styles.sendButton}
+          contentStyle={styles.sendButtonContent}
+          loading={sending}>
+          发送
+        </Button>
       </View>
         </View>
       </KeyboardAvoidingView>
@@ -1266,11 +1214,11 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingTop: 12,
-    paddingHorizontal: 12,
-    paddingBottom: 12,
+    paddingTop: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.md,
     width: '100%',
-    maxWidth: 980,
+    maxWidth: Layout.maxWidthWide,
     alignSelf: 'center',
   },
   topCard: {
@@ -1280,11 +1228,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   titleInput: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    fontSize: 16,
     marginTop: 8,
   },
   msg: {
@@ -1301,15 +1244,7 @@ const styles = StyleSheet.create({
   },
   copyDiagButton: {
     alignSelf: 'flex-start',
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
     marginTop: 6,
-    overflow: 'hidden',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  copyDiagText: {
-    fontSize: 13,
   },
   composer: {
     borderTopWidth: 1,
@@ -1323,10 +1258,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 44,
     maxHeight: 140,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    fontSize: 16,
   },
   slashPopup: {
     borderWidth: 1,
@@ -1354,9 +1285,10 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     minHeight: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignSelf: 'flex-end',
+  },
+  sendButtonContent: {
+    minHeight: 44,
     paddingHorizontal: 14,
   },
   muted: {

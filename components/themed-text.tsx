@@ -1,8 +1,10 @@
-import { StyleSheet, Text, type TextProps } from 'react-native';
+import type { ComponentProps } from 'react';
+import { StyleSheet } from 'react-native';
+import { Text } from 'react-native-paper';
 
 import { useThemeColor } from '@/hooks/use-theme-color';
 
-export type ThemedTextProps = TextProps & {
+export type ThemedTextProps = ComponentProps<typeof Text> & {
   lightColor?: string;
   darkColor?: string;
   type?: 'default' | 'title' | 'defaultSemiBold' | 'subtitle' | 'link';
@@ -19,12 +21,10 @@ export function ThemedText({
 
   return (
     <Text
+      variant={type === 'title' ? 'headlineMedium' : type === 'subtitle' ? 'titleLarge' : 'bodyLarge'}
       style={[
         { color },
-        type === 'default' ? styles.default : undefined,
-        type === 'title' ? styles.title : undefined,
-        type === 'defaultSemiBold' ? styles.defaultSemiBold : undefined,
-        type === 'subtitle' ? styles.subtitle : undefined,
+        type === 'defaultSemiBold' ? styles.semiBold : undefined,
         type === 'link' ? styles.link : undefined,
         style,
       ]}
@@ -34,30 +34,11 @@ export function ThemedText({
 }
 
 const styles = StyleSheet.create({
-  default: {
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  defaultSemiBold: {
-    fontSize: 16,
-    lineHeight: 24,
+  semiBold: {
     fontWeight: '600',
-  },
-  title: {
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  subtitle: {
-    fontSize: 20,
-    lineHeight: 28,
-    fontWeight: '700',
-    letterSpacing: 0.1,
   },
   link: {
-    fontSize: 16,
-    lineHeight: 24,
     fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });

@@ -10,9 +10,9 @@ import {
   ScrollView,
   Share,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
+import { Button, Card, Divider, List, SegmentedButtons, TextInput as PaperTextInput, useTheme } from 'react-native-paper';
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as Clipboard from 'expo-clipboard';
@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Colors, Fonts } from '@/constants/theme';
+import { Colors, Fonts, Layout, Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { readLatestDebugLogTail } from '@/src/codex/debugLog';
 import { deleteSkill, listInstalledSkills, normalizeSkillName, skillFileUri, writeSkill } from '@/src/codex/skills';
@@ -38,40 +38,9 @@ import {
 } from '@/src/codex/settings';
 import { useWorkspaces } from '@/src/workspaces/provider';
 
-function Segment({
-  label,
-  active,
-  onPress,
-  colorScheme,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-  colorScheme: 'light' | 'dark';
-}) {
-  const tint = Colors[colorScheme].tint;
-  const activeBg = colorScheme === 'dark' ? 'rgba(34,211,238,0.16)' : 'rgba(10,126,164,0.12)';
-  const rippleColor = colorScheme === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(2,6,23,0.08)';
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      android_ripple={{ color: rippleColor }}
-      style={({ pressed }) => [
-        styles.segment,
-        {
-          opacity: pressed ? 0.92 : 1,
-          backgroundColor: active ? activeBg : 'transparent',
-          borderColor: active ? tint : Colors[colorScheme].outline,
-        },
-      ]}>
-      <ThemedText type="defaultSemiBold">{label}</ThemedText>
-    </Pressable>
-  );
-}
-
 export default function SettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
+  const theme = useTheme();
   const { activeWorkspaceId } = useWorkspaces();
   const insets = useSafeAreaInsets();
 
@@ -378,28 +347,6 @@ export default function SettingsScreen() {
     return generatedToml;
   }, [generatedToml, rawConfigToml, useRawConfigToml]);
 
-  const cardStyle = useMemo(
-    () => ({
-      backgroundColor: Colors[colorScheme].surface,
-      borderColor: Colors[colorScheme].outline,
-    }),
-    [colorScheme]
-  );
-
-  const inputStyle = useMemo(
-    () => ({
-      color: Colors[colorScheme].text,
-      borderColor: Colors[colorScheme].outline,
-      backgroundColor: Colors[colorScheme].surface2,
-    }),
-    [colorScheme]
-  );
-
-  const placeholderTextColor = useMemo(
-    () => (colorScheme === 'dark' ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.38)'),
-    [colorScheme]
-  );
-
   const rippleColor = useMemo(
     () => (colorScheme === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(2,6,23,0.08)'),
     [colorScheme]
@@ -419,7 +366,13 @@ export default function SettingsScreen() {
     <ThemedView style={styles.screen}>
       <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
-          contentContainerStyle={[styles.container, { paddingTop: 16 + insets.top }]}
+          contentContainerStyle={[
+            styles.container,
+            {
+              paddingTop: Spacing.lg + insets.top,
+              paddingBottom: Spacing.xl + insets.bottom,
+            },
+          ]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag">
           <View style={styles.header}>
@@ -427,33 +380,30 @@ export default function SettingsScreen() {
             <ThemedText style={styles.muted}>全局设置（所有工作区共用）。</ThemedText>
           </View>
 
-          <ThemedView style={[styles.card, cardStyle]}>
-            <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
-              Codex
-            </ThemedText>
-
-            <View style={{ height: 12 }} />
+          <Card style={styles.card} mode="elevated">
+            <Card.Title title="Codex" />
+            <Card.Content>
 
             <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
               密钥
             </ThemedText>
             <ThemedText style={[styles.muted, { marginBottom: 8 }]}>状态：{apiKeyConfigured ? '已保存' : '未保存'}</ThemedText>
-            <TextInput
+            <PaperTextInput
+              mode="outlined"
               value={newApiKey}
               onChangeText={setNewApiKey}
               placeholder={apiKeyConfigured ? '留空保持不变' : '粘贴你的密钥'}
-              placeholderTextColor={placeholderTextColor}
               autoCapitalize="none"
               autoCorrect={false}
               secureTextEntry
-              selectionColor={Colors[colorScheme].tint}
-              style={[styles.input, inputStyle]}
+              style={styles.input}
             />
 
             <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
               服务器地址（可选）
             </ThemedText>
-            <TextInput
+            <PaperTextInput
+              mode="outlined"
               value={openaiBaseUrl}
               onChangeText={(v) => {
                 setOpenaiBaseUrl(v);
@@ -463,93 +413,45 @@ export default function SettingsScreen() {
                 setModelQuery('');
               }}
               placeholder="留空使用默认"
-              placeholderTextColor={placeholderTextColor}
               autoCapitalize="none"
               autoCorrect={false}
-              selectionColor={Colors[colorScheme].tint}
-              style={[styles.input, inputStyle]}
+              style={styles.input}
             />
 
             <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
               模型
             </ThemedText>
-            <Pressable
-              accessibilityRole="button"
-              android_ripple={{ color: rippleColor }}
-              onPress={() => {
-                setModelQuery('');
-                setModelPickerOpen(true);
-                if (!models.length && !modelsLoading) void refreshModels();
-              }}
-              style={({ pressed }) => [
-                styles.input,
-                inputStyle,
-                {
-                  justifyContent: 'center',
-                  opacity: pressed ? 0.92 : 1,
-                },
-              ]}>
-              <ThemedText
-                numberOfLines={1}
-                style={{
-                  color: model ? Colors[colorScheme].text : placeholderTextColor,
-                }}>
-                {model || '使用默认模型'}
-              </ThemedText>
-            </Pressable>
-            <View style={styles.row2}>
-              <Pressable
-                accessibilityRole="button"
-                android_ripple={{ color: rippleColor }}
-                disabled={modelsLoading}
+            <View style={[styles.modelPicker, { borderColor: Colors[colorScheme].outline, backgroundColor: Colors[colorScheme].surface2 }]}>
+              <List.Item
+                title={model || '使用默认模型'}
+                description="点击选择模型"
                 onPress={() => {
-                  void refreshModels({ openPicker: true });
+                  setModelQuery('');
+                  setModelPickerOpen(true);
+                  if (!models.length && !modelsLoading) void refreshModels();
                 }}
-                style={({ pressed }) => [
-                  styles.smallButton,
-                  {
-                    opacity: modelsLoading ? 0.5 : pressed ? 0.92 : 1,
-                    borderColor: Colors[colorScheme].outline,
-                    backgroundColor: Colors[colorScheme].surface2,
-                  },
-                ]}>
-                <ThemedText type="defaultSemiBold">{modelsLoading ? '刷新中…' : '刷新列表'}</ThemedText>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                android_ripple={{ color: rippleColor }}
-                disabled={!model}
-                onPress={() => setModel('')}
-                style={({ pressed }) => [
-                  styles.smallButton,
-                  {
-                    opacity: !model ? 0.4 : pressed ? 0.92 : 1,
-                    borderColor: Colors[colorScheme].outline,
-                    backgroundColor: Colors[colorScheme].surface2,
-                  },
-                ]}>
-                <ThemedText type="defaultSemiBold">使用默认</ThemedText>
-              </Pressable>
+                right={(props) => <MaterialIcons name="chevron-right" size={22} color={props.color} />}
+              />
+            </View>
+            <View style={styles.row2}>
+              <Button mode="outlined" loading={modelsLoading} disabled={modelsLoading} onPress={() => void refreshModels({ openPicker: true })}>
+                刷新列表
+              </Button>
+              <Button mode="outlined" disabled={!model} onPress={() => setModel('')}>
+                使用默认
+              </Button>
             </View>
             {modelsError ? (
               <ThemedText style={[styles.error, { color: Colors[colorScheme].danger }]}>{modelsError}</ThemedText>
             ) : null}
 
             <View style={styles.row2}>
-              <Pressable
-                accessibilityRole="button"
-                android_ripple={{ color: rippleColor }}
-                onPress={() => setShowAdvanced((v) => !v)}
-                style={({ pressed }) => [styles.linkButton, { opacity: pressed ? 0.86 : 1 }]}>
-                <ThemedText style={styles.muted}>{showAdvanced ? '收起高级选项' : '展开高级选项'}</ThemedText>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                android_ripple={{ color: rippleColor }}
-                onPress={openDiagnosticsActions}
-                style={({ pressed }) => [styles.linkButton, { opacity: pressed ? 0.86 : 1 }]}>
-                <ThemedText style={styles.muted}>导出日志</ThemedText>
-              </Pressable>
+              <Button mode="text" onPress={() => setShowAdvanced((v) => !v)}>
+                {showAdvanced ? '收起高级选项' : '展开高级选项'}
+              </Button>
+              <Button mode="text" onPress={openDiagnosticsActions}>
+                导出日志
+              </Button>
             </View>
 
             {showAdvanced ? (
@@ -559,26 +461,15 @@ export default function SettingsScreen() {
                 <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
                   风格
                 </ThemedText>
-                <View style={styles.segments}>
-                  <Segment
-                    label="默认"
-                    active={personality === 'none'}
-                    onPress={() => setPersonality('none')}
-                    colorScheme={colorScheme}
-                  />
-                  <Segment
-                    label="友好"
-                    active={personality === 'friendly'}
-                    onPress={() => setPersonality('friendly')}
-                    colorScheme={colorScheme}
-                  />
-                  <Segment
-                    label="务实"
-                    active={personality === 'pragmatic'}
-                    onPress={() => setPersonality('pragmatic')}
-                    colorScheme={colorScheme}
-                  />
-                </View>
+                <SegmentedButtons
+                  value={personality}
+                  onValueChange={(v) => setPersonality(v as CodexPersonality)}
+                  buttons={[
+                    { value: 'none', label: '默认' },
+                    { value: 'friendly', label: '友好' },
+                    { value: 'pragmatic', label: '务实' },
+                  ]}
+                />
 
                 <View style={{ height: 12 }} />
                 <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
@@ -587,20 +478,14 @@ export default function SettingsScreen() {
                 <ThemedText style={[styles.muted, { marginBottom: 8 }]}>
                   默认隐藏，避免占用屏幕。
                 </ThemedText>
-                <View style={styles.segments}>
-                  <Segment
-                    label="隐藏"
-                    active={!uiShowThinking}
-                    onPress={() => setUiShowThinking(false)}
-                    colorScheme={colorScheme}
-                  />
-                  <Segment
-                    label="显示"
-                    active={uiShowThinking}
-                    onPress={() => setUiShowThinking(true)}
-                    colorScheme={colorScheme}
-                  />
-                </View>
+                <SegmentedButtons
+                  value={uiShowThinking ? 'show' : 'hide'}
+                  onValueChange={(v) => setUiShowThinking(v === 'show')}
+                  buttons={[
+                    { value: 'hide', label: '隐藏' },
+                    { value: 'show', label: '显示' },
+                  ]}
+                />
 
                 <View style={{ height: 12 }} />
                 <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
@@ -609,36 +494,21 @@ export default function SettingsScreen() {
                 <ThemedText style={[styles.muted, { marginBottom: 8 }]}>
                   默认关闭。开启后会在本机记录错误与关键事件，用于排查问题。
                 </ThemedText>
-                <View style={styles.segments}>
-                  <Segment
-                    label="关闭"
-                    active={!debugLogToFile}
-                    onPress={() => setDebugLogToFile(false)}
-                    colorScheme={colorScheme}
-                  />
-                  <Segment
-                    label="开启"
-                    active={debugLogToFile}
-                    onPress={() => setDebugLogToFile(true)}
-                    colorScheme={colorScheme}
-                  />
-                </View>
-                <Pressable
-                  accessibilityRole="button"
+                <SegmentedButtons
+                  value={debugLogToFile ? 'on' : 'off'}
+                  onValueChange={(v) => setDebugLogToFile(v === 'on')}
+                  buttons={[
+                    { value: 'off', label: '关闭' },
+                    { value: 'on', label: '开启' },
+                  ]}
+                />
+                <Button
+                  mode="outlined"
+                  style={{ marginTop: Spacing.md }}
                   disabled={!debugLogToFile || !activeWorkspaceId}
-                  onPress={copyRecentDebugLog}
-                  android_ripple={{ color: rippleColor }}
-                  style={({ pressed }) => [
-                    styles.secondaryButton,
-                    {
-                      marginTop: 10,
-                      borderColor: Colors[colorScheme].outline,
-                      backgroundColor: Colors[colorScheme].surface,
-                      opacity: !debugLogToFile || !activeWorkspaceId ? 0.5 : pressed ? 0.9 : 1,
-                    },
-                  ]}>
-                  <ThemedText type="defaultSemiBold">复制最近日志</ThemedText>
-                </Pressable>
+                  onPress={copyRecentDebugLog}>
+                  复制最近日志
+                </Button>
                 <ThemedText style={styles.muted}>
                   复制到剪贴板后，可粘贴到问题反馈中帮助排查。
                 </ThemedText>
@@ -646,14 +516,13 @@ export default function SettingsScreen() {
                 <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
                   保留天数
                 </ThemedText>
-                <TextInput
+                <PaperTextInput
+                  mode="outlined"
                   value={debugLogRetentionDays}
                   onChangeText={(v) => setDebugLogRetentionDays(v.replace(/[^0-9]/g, ''))}
                   placeholder="7"
-                  placeholderTextColor={placeholderTextColor}
                   keyboardType="number-pad"
-                  selectionColor={Colors[colorScheme].tint}
-                  style={[styles.input, inputStyle]}
+                  style={styles.input}
                 />
                 <ThemedText style={styles.muted}>范围：1–90 天。</ThemedText>
 
@@ -666,41 +535,18 @@ export default function SettingsScreen() {
                 </ThemedText>
 
                 <View style={styles.row2}>
-                  <Pressable
-                    accessibilityRole="button"
-                    android_ripple={{ color: rippleColor }}
-                    disabled={skillsLoading}
-                    onPress={() => {
-                      void refreshSkills();
-                    }}
-                    style={({ pressed }) => [
-                      styles.smallButton,
-                      {
-                        opacity: skillsLoading ? 0.5 : pressed ? 0.92 : 1,
-                        borderColor: Colors[colorScheme].outline,
-                        backgroundColor: Colors[colorScheme].surface2,
-                      },
-                    ]}>
-                    <ThemedText type="defaultSemiBold">刷新列表</ThemedText>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    android_ripple={{ color: rippleColor }}
+                  <Button mode="outlined" disabled={skillsLoading} onPress={() => void refreshSkills()}>
+                    刷新列表
+                  </Button>
+                  <Button
+                    mode="outlined"
                     disabled={skillsLoading}
                     onPress={() => {
                       setSkillNameDraft('');
                       setSkillContentDraft('');
-                    }}
-                    style={({ pressed }) => [
-                      styles.smallButton,
-                      {
-                        opacity: skillsLoading ? 0.5 : pressed ? 0.92 : 1,
-                        borderColor: Colors[colorScheme].outline,
-                        backgroundColor: Colors[colorScheme].surface2,
-                      },
-                    ]}>
-                    <ThemedText type="defaultSemiBold">清空编辑</ThemedText>
-                  </Pressable>
+                    }}>
+                    清空编辑
+                  </Button>
                 </View>
 
                 {skillsError ? (
@@ -712,29 +558,24 @@ export default function SettingsScreen() {
                     <ActivityIndicator />
                   </View>
                 ) : skills.length ? (
-                  <View style={{ gap: 8 }}>
-                    {skills.map((name) => (
-                      <Pressable
-                        key={name}
-                        accessibilityRole="button"
-                        android_ripple={{ color: rippleColor }}
-                        onPress={() => void loadSkillIntoDraft(name)}
-                        style={({ pressed }) => [
-                          styles.skillRow,
-                          {
-                            borderColor: Colors[colorScheme].outlineMuted,
-                            backgroundColor: pressed
-                              ? colorScheme === 'dark'
-                                ? 'rgba(255,255,255,0.08)'
-                                : 'rgba(0,0,0,0.06)'
-                              : Colors[colorScheme].surface2,
-                          },
-                        ]}>
-                        <ThemedText type="defaultSemiBold" numberOfLines={1} style={{ flex: 1 }}>
-                          {`$${name}`}
-                        </ThemedText>
-                        <MaterialIcons name="edit" size={18} color={Colors[colorScheme].icon} />
-                      </Pressable>
+                  <View
+                    style={{
+                      borderRadius: 12,
+                      overflow: 'hidden',
+                      borderWidth: StyleSheet.hairlineWidth,
+                      borderColor: Colors[colorScheme].outline,
+                      backgroundColor: Colors[colorScheme].surface2,
+                    }}>
+                    {skills.map((name, idx) => (
+                      <View key={name}>
+                        <List.Item
+                          title={`$${name}`}
+                          titleNumberOfLines={1}
+                          onPress={() => void loadSkillIntoDraft(name)}
+                          right={(props) => <MaterialIcons name="edit" size={18} color={props.color} />}
+                        />
+                        {idx < skills.length - 1 ? <Divider /> : null}
+                      </View>
                     ))}
                   </View>
                 ) : (
@@ -745,147 +586,101 @@ export default function SettingsScreen() {
                 <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
                   编辑技能
                 </ThemedText>
-                <TextInput
+                <PaperTextInput
+                  mode="outlined"
                   value={skillNameDraft}
                   onChangeText={setSkillNameDraft}
                   placeholder="名称（例如 ui-ux-pro-max）"
-                  placeholderTextColor={placeholderTextColor}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  selectionColor={Colors[colorScheme].tint}
-                  style={[styles.input, inputStyle]}
+                  style={styles.input}
                 />
                 <View style={{ height: 8 }} />
-                <TextInput
+                <PaperTextInput
+                  mode="outlined"
                   value={skillContentDraft}
                   onChangeText={setSkillContentDraft}
                   placeholder="内容（支持 Markdown）"
-                  placeholderTextColor={placeholderTextColor}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  selectionColor={Colors[colorScheme].tint}
-                  style={[styles.codeInput, inputStyle, { minHeight: 140, textAlignVertical: 'top' }]}
+                  style={[styles.codeInput, { minHeight: 140 }]}
+                  contentStyle={{ fontFamily: Fonts.mono, fontSize: 12, lineHeight: 16 }}
                   multiline
                 />
                 <View style={styles.row2}>
-                  <Pressable
-                    accessibilityRole="button"
-                    android_ripple={{ color: rippleColor }}
-                    disabled={skillsLoading}
-                    onPress={saveSkillDraft}
-                    style={({ pressed }) => [
-                      styles.primaryButton,
-                      {
-                        opacity: skillsLoading ? 0.5 : pressed ? 0.92 : 1,
-                        backgroundColor: Colors[colorScheme].tint,
-                      },
-                    ]}>
-                    <ThemedText type="defaultSemiBold" style={{ color: Colors[colorScheme].onTint }}>
-                      保存技能
-                    </ThemedText>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    android_ripple={{ color: rippleColor }}
+                  <Button mode="contained" disabled={skillsLoading} onPress={saveSkillDraft}>
+                    保存技能
+                  </Button>
+                  <Button
+                    mode="outlined"
                     disabled={!normalizeSkillName(skillNameDraft) || skillsLoading}
-                    onPress={deleteSkillDraft}
-                    style={({ pressed }) => [
-                      styles.secondaryButton,
-                      {
-                        opacity: !normalizeSkillName(skillNameDraft) || skillsLoading ? 0.5 : pressed ? 0.92 : 1,
-                        borderColor: Colors[colorScheme].outline,
-                        backgroundColor: Colors[colorScheme].surface2,
-                      },
-                    ]}>
-                    <ThemedText type="defaultSemiBold">删除</ThemedText>
-                  </Pressable>
+                    onPress={deleteSkillDraft}>
+                    删除
+                  </Button>
                 </View>
               </View>
             ) : null}
-          </ThemedView>
+            </Card.Content>
+          </Card>
 
-      <ThemedView style={[styles.card, cardStyle]}>
-        <ThemedText type="subtitle" style={{ marginBottom: 8 }}>
-          配置文件
-        </ThemedText>
+          <Card style={styles.card} mode="elevated">
+            <Card.Title title="配置文件" />
+            <Card.Content>
         <ThemedText style={[styles.muted, { marginBottom: 8 }]}>
           提示：不要在配置文件中粘贴密钥，密钥请在上方单独设置。
         </ThemedText>
 
-        <View style={styles.segments}>
-          <Segment
-            label="自动生成"
-            active={!useRawConfigToml}
-            onPress={() => {
+        <SegmentedButtons
+          value={useRawConfigToml ? 'custom' : 'auto'}
+          onValueChange={(v) => {
+            if (v === 'auto') {
               setUseRawConfigToml(false);
-            }}
-            colorScheme={colorScheme}
-          />
-          <Segment
-            label="自定义"
-            active={useRawConfigToml}
-            onPress={() => {
-              setUseRawConfigToml(true);
-              if (!rawConfigToml.trim()) setRawConfigToml(generatedToml);
-            }}
-            colorScheme={colorScheme}
-          />
-        </View>
+              return;
+            }
+            setUseRawConfigToml(true);
+            if (!rawConfigToml.trim()) setRawConfigToml(generatedToml);
+          }}
+          buttons={[
+            { value: 'auto', label: '自动生成' },
+            { value: 'custom', label: '自定义' },
+          ]}
+        />
 
         <View style={{ height: 10 }} />
 
         {useRawConfigToml ? (
           <>
             <View style={styles.row2}>
-              <Pressable
-                accessibilityRole="button"
-                android_ripple={{ color: rippleColor }}
+              <Button
+                mode="outlined"
                 disabled={busy}
                 onPress={() => {
                   setUseRawConfigToml(true);
                   setRawConfigToml(generatedToml);
-                }}
-                style={({ pressed }) => [
-                  styles.smallButton,
-                  {
-                    opacity: busy ? 0.4 : pressed ? 0.92 : 1,
-                    borderColor: Colors[colorScheme].outline,
-                    backgroundColor: Colors[colorScheme].surface2,
-                  },
-                ]}>
-                <ThemedText type="defaultSemiBold">从当前设置生成</ThemedText>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                android_ripple={{ color: rippleColor }}
+                }}>
+                从当前设置生成
+              </Button>
+              <Button
+                mode="outlined"
                 disabled={busy}
                 onPress={() => {
                   setUseRawConfigToml(false);
                   setRawConfigToml('');
-                }}
-                style={({ pressed }) => [
-                  styles.smallButton,
-                  {
-                    opacity: busy ? 0.4 : pressed ? 0.92 : 1,
-                    borderColor: Colors[colorScheme].outline,
-                    backgroundColor: Colors[colorScheme].surface2,
-                  },
-                ]}>
-                <ThemedText type="defaultSemiBold">恢复默认</ThemedText>
-              </Pressable>
+                }}>
+                恢复默认
+              </Button>
             </View>
             <View style={{ height: 10 }} />
-            <TextInput
+            <PaperTextInput
+              mode="outlined"
               value={rawConfigToml}
               onChangeText={setRawConfigToml}
               placeholder="在这里编辑配置内容"
-              placeholderTextColor={placeholderTextColor}
               autoCapitalize="none"
               autoCorrect={false}
               multiline
-              textAlignVertical="top"
-              selectionColor={Colors[colorScheme].tint}
-              style={[styles.codeInput, inputStyle]}
+              style={styles.codeInput}
+              contentStyle={{ fontFamily: Fonts.mono, fontSize: 12, lineHeight: 16, minHeight: 180 }}
             />
           </>
         ) : (
@@ -900,13 +695,14 @@ export default function SettingsScreen() {
             <ThemedText style={styles.code}>{effectiveToml}</ThemedText>
           </ThemedView>
         )}
-      </ThemedView>
+            </Card.Content>
+          </Card>
 
       {error ? <ThemedText style={[styles.error, { color: Colors[colorScheme].danger }]}>{error}</ThemedText> : null}
 
-      <Pressable
-        accessibilityRole="button"
-        android_ripple={{ color: rippleColor }}
+      <Button
+        mode="contained"
+        loading={busy}
         disabled={busy}
         onPress={async () => {
           setBusy(true);
@@ -951,24 +747,14 @@ export default function SettingsScreen() {
           } finally {
             setBusy(false);
           }
-        }}
-        style={({ pressed }) => [
-          styles.primaryButton,
-          { opacity: busy ? 0.5 : pressed ? 0.85 : 1, backgroundColor: Colors[colorScheme].tint },
-        ]}>
-        {busy ? (
-          <ActivityIndicator />
-        ) : (
-          <ThemedText type="defaultSemiBold" style={{ color: colorScheme === 'dark' ? '#0b1220' : '#ffffff' }}>
-            保存
-          </ThemedText>
-        )}
-      </Pressable>
+        }}>
+        保存
+      </Button>
 
-      <Pressable
-        accessibilityRole="button"
-        android_ripple={{ color: rippleColor }}
+      <Button
+        mode="outlined"
         disabled={busy || !apiKeyConfigured}
+        textColor={theme.colors.error}
         onPress={async () => {
           setBusy(true);
           setError(null);
@@ -982,19 +768,9 @@ export default function SettingsScreen() {
           } finally {
             setBusy(false);
           }
-        }}
-        style={({ pressed }) => [
-          styles.secondaryButton,
-          {
-            opacity: busy || !apiKeyConfigured ? 0.4 : pressed ? 0.85 : 1,
-            borderColor: Colors[colorScheme].danger,
-            backgroundColor: Colors[colorScheme].surface,
-          },
-        ]}>
-        <ThemedText type="defaultSemiBold" style={{ color: Colors[colorScheme].danger }}>
-          删除密钥
-        </ThemedText>
-      </Pressable>
+        }}>
+        删除密钥
+      </Button>
         </ScrollView>
 
         <Modal
@@ -1027,15 +803,14 @@ export default function SettingsScreen() {
                 </Pressable>
               </View>
 
-              <TextInput
+              <PaperTextInput
+                mode="outlined"
                 value={modelQuery}
                 onChangeText={setModelQuery}
                 placeholder="搜索模型"
-                placeholderTextColor={placeholderTextColor}
                 autoCapitalize="none"
                 autoCorrect={false}
-                selectionColor={Colors[colorScheme].tint}
-                style={[styles.input, inputStyle, { marginBottom: 10 }]}
+                style={{ marginBottom: Spacing.md }}
                 autoFocus
               />
 
@@ -1106,68 +881,28 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     width: '100%',
-    maxWidth: 720,
+    maxWidth: Layout.maxWidthForm,
     alignSelf: 'center',
-    paddingTop: 20,
-    paddingHorizontal: 16,
-    paddingBottom: 32,
+    paddingHorizontal: Spacing.lg,
   },
   header: {
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   card: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  segments: {
-    flexDirection: 'row',
-    gap: 10,
-    flexWrap: 'wrap',
-  },
-  segment: {
-    flex: 1,
-    minHeight: 44,
-    borderWidth: 1,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    overflow: 'hidden',
+    marginBottom: Spacing.lg,
   },
   input: {
-    borderWidth: 1,
-    borderRadius: 12,
-    minHeight: 48,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    fontSize: 16,
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  linkButton: {
-    alignSelf: 'flex-start',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    overflow: 'hidden',
+    marginBottom: Spacing.md,
   },
   row2: {
     flexDirection: 'row',
-    gap: 10,
+    gap: Spacing.md,
     flexWrap: 'wrap',
   },
   modelPicker: {
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 10,
-    padding: 10,
+    marginBottom: Spacing.md,
   },
   modelRow: {
     alignItems: 'center',
@@ -1175,15 +910,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     marginBottom: 8,
-    overflow: 'hidden',
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-  },
-  skillRow: {
-    alignItems: 'center',
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
     overflow: 'hidden',
     paddingHorizontal: 10,
     paddingVertical: 10,
@@ -1222,61 +948,24 @@ const styles = StyleSheet.create({
   modalEmpty: {
     paddingVertical: 18,
   },
-  smallButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 12,
-    minWidth: 160,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    overflow: 'hidden',
-  },
   codeBox: {
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 12,
     padding: 12,
   },
   codeInput: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    minHeight: 180,
-    fontSize: 12,
-    lineHeight: 16,
-    fontFamily: Fonts.mono,
+    marginBottom: Spacing.md,
   },
   code: {
     fontSize: 12,
     lineHeight: 16,
     fontFamily: Fonts.mono,
   },
-  primaryButton: {
-    minHeight: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    marginTop: 8,
-    overflow: 'hidden',
-  },
-  secondaryButton: {
-    minHeight: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    marginTop: 8,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
   muted: {
     opacity: 0.7,
   },
   error: {
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   center: {
     flex: 1,
