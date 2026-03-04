@@ -38,10 +38,21 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
     val process: Process,
     val stdin: OutputStreamWriter,
     val alive: AtomicBoolean,
+    val stderrTail: StringBuilder,
+  )
+
+  private data class RuntimeExitInfo(
+    val exitCode: Int?,
+    val stderrTail: String,
+    val updatedAtMs: Long,
   )
 
   private val ioExecutor = Executors.newCachedThreadPool()
   private val runtimes = ConcurrentHashMap<String, RuntimeProc>()
+  private val runtimeExits = ConcurrentHashMap<String, RuntimeExitInfo>()
+
+  private val stderrTailMaxChars = 8_000
+  private val startupGraceMs = 250L
 
   override fun getName(): String = "CodexRuntimeManager"
 
@@ -52,6 +63,73 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
     } catch (_: Throwable) {
       // best-effort
     }
+  }
+
+  private fun appendStderrTail(buf: StringBuilder, line: String) {
+    synchronized(buf) {
+      if (buf.isNotEmpty()) buf.append('\n')
+      buf.append(line)
+      if (buf.length > stderrTailMaxChars) {
+        buf.delete(0, buf.length - stderrTailMaxChars)
+      }
+    }
+  }
+
+  private fun readStderrTail(buf: StringBuilder): String {
+    return synchronized(buf) { buf.toString().trim() }
+  }
+
+  private fun recordRuntimeExit(runtimeId: String, exitCode: Int?, stderrTail: String) {
+    runtimeExits[runtimeId] = RuntimeExitInfo(
+      exitCode = exitCode,
+      stderrTail = stderrTail,
+      updatedAtMs = System.currentTimeMillis(),
+    )
+  }
+
+  private fun formatRuntimeExit(info: RuntimeExitInfo): String {
+    val code = info.exitCode?.toString() ?: "unknown"
+    val tail = if (info.stderrTail.isBlank()) "<empty>" else info.stderrTail
+    return "lastExitCode=$code at=${info.updatedAtMs}\nstderr:\n$tail"
+  }
+
+  private fun buildStartupExitMessage(
+    runtimeId: String,
+    source: String,
+    commandPreview: String,
+    exitCode: Int?,
+    stderrTail: String,
+  ): String {
+    val code = exitCode?.toString() ?: "unknown"
+    val tail = if (stderrTail.isBlank()) "<empty>" else stderrTail
+    return "Codex runtime 启动后立即退出。\n" +
+      "- runtimeId: $runtimeId\n" +
+      "- source: $source\n" +
+      "- exitCode: $code\n" +
+      "- command: $commandPreview\n" +
+      "stderr:\n$tail"
+  }
+
+  private fun ensureExecWrapper(wrapper: File, target: File): Boolean {
+    return try {
+      wrapper.parentFile?.mkdirs()
+      val targetPath = target.absolutePath.replace("\"", "\\\"")
+      val script = "#!/system/bin/sh\nexec \"$targetPath\" \"$@\"\n"
+      wrapper.writeText(script, Charsets.UTF_8)
+      chmodExecutable(wrapper.absolutePath)
+      wrapper.setExecutable(true, false)
+      wrapper.setReadable(true, false)
+      wrapper.setWritable(true, true)
+      true
+    } catch (_: Throwable) {
+      false
+    }
+  }
+
+  private fun ensureRuntimeHelper(outDir: File, helperName: String, target: File): Boolean {
+    val helper = File(outDir, helperName)
+    if (ensureSymlink(helper, target)) return true
+    return ensureExecWrapper(helper, target)
   }
 
   private fun ensureSymlink(link: File, target: File): Boolean {
@@ -66,10 +144,18 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
       Os.symlink(target.absolutePath, link.absolutePath)
       true
     } catch (_: Throwable) {
-      // best-effort: some devices may block symlink creation. We intentionally avoid copying the
-      // binary into app data here because Android 10+ (targetSdk>=29) forbids exec() from
-      // app-private writable directories under SELinux W^X restrictions.
-      false
+      // Best-effort: some devices may block symlink creation. If possible, fall back to a hard
+      // link which still points at the same inode (so exec permission is checked against the
+      // nativeLibraryDir file label).
+      try {
+        Os.link(target.absolutePath, link.absolutePath)
+        true
+      } catch (_: Throwable) {
+        // We intentionally avoid copying the binary into app data here because Android 10+
+        // (targetSdk>=29) forbids exec() from app-private writable directories under SELinux W^X
+        // restrictions.
+        false
+      }
     }
   }
 
@@ -84,14 +170,28 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
     chmodExecutable(outDir.absolutePath)
 
     val codex = File(nativeDir, "libcodex.so")
+    val codexExec = File(nativeDir, "libcodex_exec.so")
+    val rg = File(nativeDir, "librg.so")
     if (!codex.exists()) return null
+    if (!codexExec.exists()) return null
+    if (!rg.exists()) return null
 
     // Create stable names in our own bin dir. Exec permission will be checked against the target
     // (apk native lib dir), not the symlink itself.
     val codexLink = File(outDir, "codex")
     val useSymlink = ensureSymlink(codexLink, codex)
-    ensureSymlink(File(outDir, "codex-exec"), File(nativeDir, "libcodex_exec.so"))
-    ensureSymlink(File(outDir, "rg"), File(nativeDir, "librg.so"))
+    val codexExecReady = ensureRuntimeHelper(outDir, "codex-exec", codexExec)
+    val rgReady = ensureRuntimeHelper(outDir, "rg", rg)
+
+    if (!codexExecReady || !rgReady) {
+      throw IllegalStateException(
+        "Codex 运行时 helper 准备失败（无法创建 codex-exec/rg 入口）。\n" +
+          "- nativeLibraryDir: $nativeDirPath\n" +
+          "- outDir: ${outDir.absolutePath}\n" +
+          "- codexExecReady: $codexExecReady\n" +
+          "- rgReady: $rgReady"
+      )
+    }
 
     val execPath = if (useSymlink && codexLink.exists()) {
       codexLink.absolutePath
@@ -141,6 +241,11 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
     return outFile
   }
 
+  private fun missingNativeRuntimeFiles(nativeDir: File): List<String> {
+    val required = listOf("libcodex.so", "libcodex_exec.so", "librg.so")
+    return required.filter { name -> !File(nativeDir, name).exists() }
+  }
+
   private fun resolveExecutable(params: ReadableMap): ResolvedExecutable {
     if (params.hasKey("executablePath") && !params.isNull("executablePath")) {
       val execPath = uriToFilePath(params.getString("executablePath")!!)
@@ -160,6 +265,12 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
       }
 
       val nativeDirPath = reactContext.applicationInfo?.nativeLibraryDir ?: ""
+      val missing = try {
+        val dir = File(nativeDirPath)
+        if (nativeDirPath.isNotBlank() && dir.exists()) missingNativeRuntimeFiles(dir) else emptyList()
+      } catch (_: Throwable) {
+        emptyList()
+      }
       val nativeDirListing = try {
         val dir = File(nativeDirPath)
         if (!dir.exists()) "(missing)"
@@ -168,10 +279,11 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
         "(unreadable)"
       }
       throw IllegalStateException(
-        "未能从 nativeLibraryDir 解析 codex 可执行文件（libcodex.so）。\n" +
+        "未能从 nativeLibraryDir 解析 Codex 运行时可执行文件。\n" +
           "- targetSdkVersion: $targetSdk\n" +
           "- nativeLibraryDir: $nativeDirPath\n" +
           "- nativeLibraryDir contents: $nativeDirListing\n" +
+          (if (missing.isNotEmpty()) "- missing: ${missing.joinToString(", ")}\n" else "") +
           "\n" +
           "请确认：\n" +
           "1) `android/gradle.properties` 设置 `expo.useLegacyPackaging=true`（确保 .so 提取到磁盘）\n" +
@@ -192,6 +304,7 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
         promise.resolve(runtimeId)
         return
       }
+      runtimeExits.remove(runtimeId)
 
       val cwdUri = params.getString("cwdUri") ?: throw IllegalArgumentException("cwdUri is required")
       val cwdPath = uriToFilePath(cwdUri)
@@ -210,26 +323,11 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
           if (v != null) argv.add(v)
         }
       }
+      val commandPreview = argv.joinToString(" ").let { if (it.length > 360) "${it.take(360)}..." else it }
 
       val pb = ProcessBuilder(argv)
       pb.directory(cwd)
       pb.redirectErrorStream(false)
-
-      // Prepend our bin directory (contains symlinks or extracted helpers) to PATH so Codex can
-      // locate codex-exec/rg.
-      try {
-        val binDir = resolved.binDir?.absolutePath
-        if (!binDir.isNullOrBlank()) {
-          val existingPath = pb.environment()["PATH"]
-          pb.environment()["PATH"] = if (existingPath.isNullOrBlank()) {
-            binDir
-          } else {
-            "${binDir}${File.pathSeparator}${existingPath}"
-          }
-        }
-      } catch (_: Throwable) {
-        // ignore
-      }
 
       if (params.hasKey("env") && !params.isNull("env")) {
         val envMap = params.getMap("env")!!
@@ -239,6 +337,29 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
           val v = envMap.getString(k)
           if (v != null) pb.environment()[k] = v
         }
+      }
+
+      // Prepend our bin directory (contains symlinks or extracted helpers) to PATH so Codex can
+      // locate codex-exec/rg. Also ensure /system/bin is present, because some Android app
+      // environments may not set PATH by default (which breaks spawning /system/bin/sh).
+      try {
+        val env = pb.environment()
+        val systemFallback = listOf("/system/bin", "/system/xbin", "/vendor/bin", "/system_ext/bin")
+          .joinToString(File.pathSeparator)
+
+        val binDir = resolved.binDir?.absolutePath
+        if (!binDir.isNullOrBlank()) {
+          val existingPath = env["PATH"]
+          val basePath = if (existingPath.isNullOrBlank()) systemFallback else existingPath
+          env["PATH"] = "${binDir}${File.pathSeparator}${basePath}"
+        } else if (env["PATH"].isNullOrBlank()) {
+          env["PATH"] = systemFallback
+        }
+
+        if (env["SHELL"].isNullOrBlank()) env["SHELL"] = "/system/bin/sh"
+        if (env["TMPDIR"].isNullOrBlank()) env["TMPDIR"] = reactContext.cacheDir.absolutePath
+      } catch (_: Throwable) {
+        // ignore
       }
 
       val proc = try {
@@ -264,7 +385,7 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
       }
       val stdin = OutputStreamWriter(proc.outputStream, StandardCharsets.UTF_8)
       val alive = AtomicBoolean(true)
-      val runtime = RuntimeProc(runtimeId, proc, stdin, alive)
+      val runtime = RuntimeProc(runtimeId, proc, stdin, alive, StringBuilder())
       runtimes[runtimeId] = runtime
 
       ioExecutor.execute {
@@ -285,23 +406,54 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
           BufferedReader(InputStreamReader(proc.errorStream, StandardCharsets.UTF_8)).use { br ->
             while (alive.get()) {
               val line = br.readLine() ?: break
+              appendStderrTail(runtime.stderrTail, line)
               emitLine(runtimeId, "stderr", line)
             }
           }
         } catch (e: Throwable) {
-          emitLine(runtimeId, "stderr", "stderr reader error: ${e.message}")
+          val line = "stderr reader error: ${e.message}"
+          appendStderrTail(runtime.stderrTail, line)
+          emitLine(runtimeId, "stderr", line)
         }
       }
 
       ioExecutor.execute {
+        var exitCode: Int? = null
         try {
-          proc.waitFor()
+          exitCode = proc.waitFor()
         } catch (_: Throwable) {
         } finally {
           alive.set(false)
           runtimes.remove(runtimeId)
-          emitLine(runtimeId, "stderr", "process exited")
+          val tail = readStderrTail(runtime.stderrTail)
+          recordRuntimeExit(runtimeId, exitCode, tail)
+          val code = exitCode?.toString() ?: "unknown"
+          emitLine(runtimeId, "stderr", "process exited (code=$code)")
         }
+      }
+
+      val exitedEarly = try {
+        proc.waitFor(startupGraceMs, TimeUnit.MILLISECONDS)
+      } catch (_: Throwable) {
+        false
+      }
+      if (exitedEarly) {
+        val exitCode = try {
+          proc.exitValue()
+        } catch (_: Throwable) {
+          null
+        }
+        alive.set(false)
+        runtimes.remove(runtimeId, runtime)
+        try {
+          stdin.close()
+        } catch (_: Throwable) {
+        }
+        val tail = readStderrTail(runtime.stderrTail)
+        recordRuntimeExit(runtimeId, exitCode, tail)
+        throw IllegalStateException(
+          buildStartupExitMessage(runtimeId, resolved.source, commandPreview, exitCode, tail)
+        )
       }
 
       promise.resolve(runtimeId)
@@ -351,7 +503,12 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
     try {
       val runtimeId = params.getString("runtimeId") ?: "default"
       val line = params.getString("line") ?: ""
-      val rt = runtimes[runtimeId] ?: throw IllegalStateException("runtime not running: $runtimeId")
+      val rt = runtimes[runtimeId]
+      if (rt == null || !rt.alive.get()) {
+        val last = runtimeExits[runtimeId]
+        val lastSummary = if (last != null) "\n${formatRuntimeExit(last)}" else ""
+        throw IllegalStateException("runtime not running: $runtimeId$lastSummary")
+      }
       rt.stdin.write(line)
       rt.stdin.write("\n")
       rt.stdin.flush()

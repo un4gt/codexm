@@ -86,6 +86,25 @@ npx expo start --dev-client
 2. 进入 `Settings`：开启 Codex，设置 `OPENAI_API_KEY`（写入 SecureStore）并保存；App 会在 `DocumentDirectory/codex-home/` 生成 `config.toml` 与 `auth.json`（不使用 HTTP 模式，app-server 走 stdio）。
 3. 进入 `Sessions` 新建会话并发送消息：应看到 Codex 输出的 **流式**文本（`item/agentMessage/delta`）。
 
+## APK 发布（GitHub Actions）
+
+本项目使用 GitHub Actions 打包 Android Release APK，不依赖 EAS Build。
+
+1. 在本地创建并推送 tag（示例）：
+
+```bash
+git tag v0.0.9
+git push origin v0.0.9
+```
+
+2. 工作流 `.github/workflows/android-release.yml` 会自动执行：
+- 拉取依赖与 Android SDK/NDK
+- 下载 Codex 运行时二进制（`scripts/fetch_android_codex_deps.py`）
+- 构建 `app-release.apk`
+- 上传 Artifact 并附加到 GitHub Release
+
+3. 从 Release 页面下载 `codexm-<tag>-arm64-v8a.apk` 安装到设备。
+
 ## Troubleshooting
 
 - Gradle 报 `Namespace ... 'native' is a Java keyword`：避免使用 `com.*.native` 作为 `namespace/package`；本项目原生模块使用 `com.codexm.nativemodules`，改完后请 `npx expo prebuild --platform android --clean` 再构建。

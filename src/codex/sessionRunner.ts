@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 
 import { listMcpServers } from '@/src/mcp/store';
 import { getSession, setSessionCodexThreadId } from '@/src/sessions/store';
-import { ensureWorkspaceDirs, workspaceRepoPath } from '@/src/workspaces/paths';
+import { ensureWorkspaceDirs, workspaceRepoPath, workspaceTmpPath } from '@/src/workspaces/paths';
 
 import { JsonRpcClient, JsonRpcError } from './jsonRpc';
 import type { JsonRpcNotification } from './jsonRpc';
@@ -158,6 +158,17 @@ export async function* runCodexTurn(_params: {
       return '连接超时：请检查网络与「设置」中的服务器地址/密钥是否正确。\n可在会话页点击「复制诊断信息」以便排查。';
     }
 
+    const msgLower = msg.toLowerCase();
+    if (
+      msgLower.includes('e_codex_runtime_start') ||
+      msgLower.includes('e_codex_runtime_send') ||
+      msgLower.includes('nativelibrarydir') ||
+      msgLower.includes('libcodex.so') ||
+      msgLower.includes('codexruntime')
+    ) {
+      return 'Codex 运行时未就绪：请安装发布构建后重试。\n可在会话页点击「复制诊断信息」以便排查。';
+    }
+
     // 避免把协议/结构体等内部信息直接暴露给用户（同时保留诊断信息用于排查）。
     if (
       msg.includes('CollaborationMode') ||
@@ -218,9 +229,13 @@ export async function* runCodexTurn(_params: {
 
   const { codexHomeUri } = await materializeCodexConfigFiles({ mcpServers, enabledMcpServerIds });
 
+  const tmpDir = fileUriToPath(workspaceTmpPath(workspace.id));
+
   const env: Record<string, string> = {
     CODEX_HOME: fileUriToPath(codexHomeUri),
     HOME: fileUriToPath(codexHomeUri),
+    TMPDIR: tmpDir,
+    SQLITE_TMPDIR: tmpDir,
   };
 
   env.OPENAI_API_KEY = apiKey;
@@ -352,7 +367,7 @@ export async function* runCodexTurn(_params: {
       cwdUri,
       // 默认从 Android assets 里复制可执行文件；你需要在原生侧打包该 asset。
       assetPath: 'codex/{abi}/codex',
-      args: ['app-server', '--listen', 'stdio://'],
+      args: ['--skip-git-repo-check', 'app-server', '--listen', 'stdio://'],
       env,
     });
     started = true;

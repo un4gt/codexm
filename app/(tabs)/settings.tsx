@@ -116,10 +116,15 @@ export default function SettingsScreen() {
   }
 
   async function copyRecentDebugLog() {
-    const text = await getRecentDebugLogTextOrAlert();
-    if (!text) return;
-    await Clipboard.setStringAsync(text);
-    Alert.alert('已复制', '诊断信息已复制到剪贴板。');
+    try {
+      const text = await getRecentDebugLogTextOrAlert();
+      if (!text) return;
+      await Clipboard.setStringAsync(text);
+      Alert.alert('已复制', '诊断信息已复制到剪贴板。');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert('复制失败', msg);
+    }
   }
 
   async function exportRecentDebugLog() {

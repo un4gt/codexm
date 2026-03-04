@@ -215,8 +215,9 @@ export function generateCodexConfigToml(s: CodexSettings) {
     lines.push('multi_agent = true');
   }
 
-  // sandbox_mode 暂不在此写入；未来可按会话覆盖。
-  // lines.push(`sandbox_mode = ${tomlString('read-only')}`);
+  // 移动端：禁用桌面端沙箱实现（某些沙箱在 Android 上不可用/不稳定）。
+  // 运行环境本身已受 App Sandbox 限制；这里用 full-access 避免启动时的 runtime 初始化失败。
+  lines.push(`sandbox_mode = ${tomlString('danger-full-access')}`);
 
   // CLI 凭证存储使用文件模式（密钥仍由 App 单独保存）。
   lines.push(`cli_auth_credentials_store = ${tomlString('file')}`);
