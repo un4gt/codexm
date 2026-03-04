@@ -36,6 +36,8 @@ import {
   updateCodexSettings,
   type CodexPersonality,
 } from '@/src/codex/settings';
+import { applyOtaUpdate, checkForOtaUpdate, getOtaUpdateSupport } from '@/src/services/updateService';
+import { formatOtaError, formatOtaSubtitle } from '@/src/services/updateUiHelper';
 import { useWorkspaces } from '@/src/workspaces/provider';
 
 export default function SettingsScreen() {
@@ -47,6 +49,8 @@ export default function SettingsScreen() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [otaBusy, setOtaBusy] = useState(false);
+  const [otaStatusText, setOtaStatusText] = useState('');
 
   const [model, setModel] = useState('');
   const [openaiBaseUrl, setOpenaiBaseUrl] = useState('');
@@ -75,6 +79,8 @@ export default function SettingsScreen() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [useRawConfigToml, setUseRawConfigToml] = useState(false);
   const [rawConfigToml, setRawConfigToml] = useState('');
+
+  const otaSupport = getOtaUpdateSupport();
 
   function validateApiKeyInput(v: string): string | null {
     const t = v.trim();
@@ -161,6 +167,54 @@ export default function SettingsScreen() {
     if (base.endsWith('/models')) return base;
     if (base.endsWith('/v1')) return `${base}/models`;
     return `${base}/v1/models`;
+  }
+
+  async function runOtaCheck() {
+    if (!otaSupport.supported) {
+      Alert.alert('不可用', otaSupport.reason);
+      return;
+    }
+
+    setOtaBusy(true);
+    setOtaStatusText('正在检查更新…');
+    try {
+      const res = await checkForOtaUpdate();
+      setOtaBusy(false);
+
+      if (res.reason) {
+        Alert.alert('不可用', res.reason);
+        return;
+      }
+
+      if (!res.available) {
+        Alert.alert('已是最新版本', '当前已是最新版本。');
+        return;
+      }
+
+      Alert.alert('发现新版本', '将下载并重启应用以应用更新。', [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '下载并重启',
+          onPress: () => {
+            void (async () => {
+              setOtaBusy(true);
+              setOtaStatusText('正在下载更新…');
+              try {
+                await applyOtaUpdate();
+              } catch (e) {
+                console.warn('[ota] apply failed', e);
+                setOtaBusy(false);
+                Alert.alert('更新失败', formatOtaError(e));
+              }
+            })();
+          },
+        },
+      ]);
+    } catch (e) {
+      console.warn('[ota] check failed', e);
+      setOtaBusy(false);
+      Alert.alert('检查失败', formatOtaError(e));
+    }
   }
 
   async function refreshModels(opts?: { openPicker?: boolean }) {
@@ -379,6 +433,31 @@ export default function SettingsScreen() {
             <ThemedText type="title">设置</ThemedText>
             <ThemedText style={styles.muted}>全局设置（所有工作区共用）。</ThemedText>
           </View>
+
+          <Card style={styles.card} mode="elevated">
+            <Card.Title title="应用" />
+            <Card.Content>
+              <View
+                style={[
+                  styles.modelPicker,
+                  { borderColor: Colors[colorScheme].outline, backgroundColor: Colors[colorScheme].surface2 },
+                ]}>
+                <List.Item
+                  title="检查更新"
+                  description={formatOtaSubtitle()}
+                  disabled={busy || otaBusy || !otaSupport.supported}
+                  onPress={() => void runOtaCheck()}
+                  right={(props) =>
+                    otaBusy ? (
+                      <ActivityIndicator color={props.color} />
+                    ) : (
+                      <MaterialIcons name="chevron-right" size={22} color={props.color} />
+                    )
+                  }
+                />
+              </View>
+            </Card.Content>
+          </Card>
 
           <Card style={styles.card} mode="elevated">
             <Card.Title title="Codex" />
@@ -774,6 +853,28 @@ export default function SettingsScreen() {
         </ScrollView>
 
         <Modal
+          visible={otaBusy}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {}}>
+          <View style={styles.otaModalBackdrop}>
+            <View
+              style={[
+                styles.otaModalCard,
+                {
+                  borderColor: Colors[colorScheme].outline,
+                  backgroundColor: Colors[colorScheme].surface,
+                },
+              ]}>
+              <ActivityIndicator />
+              <ThemedText style={[styles.otaModalText, { color: Colors[colorScheme].text }]}>
+                {otaStatusText || '请稍候…'}
+              </ThemedText>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
           visible={modelPickerOpen}
           transparent
           animationType="slide"
@@ -947,6 +1048,27 @@ const styles = StyleSheet.create({
   },
   modalEmpty: {
     paddingVertical: 18,
+  },
+  otaModalBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    padding: 24,
+  },
+  otaModalCard: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    alignItems: 'center',
+  },
+  otaModalText: {
+    marginTop: 12,
+    fontSize: 14,
+    textAlign: 'center',
   },
   codeBox: {
     borderWidth: StyleSheet.hairlineWidth,
