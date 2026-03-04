@@ -118,3 +118,44 @@ jobs:
         with:
           files: |
             dist/**/codexm-*.apk
+
+  eas_update:
+    name: Publish EAS Update (Android)
+    needs: release
+    runs-on: ubuntu-latest
+    env:
+      # 必填：在 GitHub Secrets 中配置 EXPO_TOKEN（Expo account access token）
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      # 可选：在 GitHub Variables 中覆盖分支名，默认 production
+      EAS_UPDATE_BRANCH: ${{ vars.EAS_UPDATE_BRANCH || 'production' }}
+    steps:
+      - name: Validate EXPO_TOKEN
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${EXPO_TOKEN:-}" ]; then
+            echo "Missing EXPO_TOKEN secret. Please add it in GitHub repository secrets."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Publish Android OTA update
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx eas-cli@latest update \
+            --branch "${EAS_UPDATE_BRANCH}" \
+            --platform android \
+            --message "release ${GITHUB_REF_NAME}" \
+            --non-interactive
