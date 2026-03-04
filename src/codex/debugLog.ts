@@ -87,8 +87,8 @@ function appendWithHandle(fileUri: string, text: string) {
   const handle = file.open();
   try {
     const size = handle.size ?? 0;
-    // Setting offset beyond size appends at end.
-    handle.offset = size + 1;
+    // Append at end.
+    handle.offset = size;
     handle.writeBytes(encoder.encode(text));
   } finally {
     try {
@@ -172,7 +172,9 @@ async function readLogTail(fileUri: string, maxChars: number) {
   try {
     const text = await FileSystem.readAsStringAsync(fileUri);
     if (!text) return '';
-    return text.length > limit ? text.slice(-limit) : text;
+    // Some append methods (or past bugs) can introduce NUL bytes; strip them so clipboard / UI doesn't truncate.
+    const cleaned = text.includes('\u0000') ? text.replace(/\u0000/g, '') : text;
+    return cleaned.length > limit ? cleaned.slice(-limit) : cleaned;
   } catch {
     return '';
   }

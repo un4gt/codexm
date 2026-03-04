@@ -156,6 +156,7 @@ export default function SessionDetailScreen() {
     }
     const text = await readSessionDebugLogTail({ workspaceId: active.id, sessionId, maxChars: 200_000 });
     if (!text.trim()) {
+      if (error?.trim()) return error.trim();
       Alert.alert('暂无日志', '还没有可导出的诊断信息。');
       return null;
     }

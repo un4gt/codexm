@@ -189,6 +189,11 @@ export async function* runCodexTurn(_params: {
     void appendDebugLog({ workspaceId: workspace.id, sessionId, event, message, details });
   }
 
+  async function logEventFlush(event: string, message?: string, details?: unknown) {
+    if (!debugLogEnabled) return;
+    await appendDebugLog({ workspaceId: workspace.id, sessionId, event, message, details });
+  }
+
   if (debugLogEnabled) void pruneDebugLogs(workspace.id, retentionDays);
 
   const apiKey = await getCodexApiKey();
@@ -246,6 +251,20 @@ export async function* runCodexTurn(_params: {
 
   let pumpRunning = true;
   let started = false;
+
+  const STDERR_RING_MAX = 120;
+  const stderrRing: string[] = [];
+  function pushStderr(line: string) {
+    stderrRing.push(line);
+    if (stderrRing.length > STDERR_RING_MAX) {
+      stderrRing.splice(0, stderrRing.length - STDERR_RING_MAX);
+    }
+  }
+  function formatStderrTail(): string {
+    const lines = stderrRing.filter(Boolean);
+    if (!lines.length) return '';
+    return lines.join('\n');
+  }
 
   const rpc = new JsonRpcClient((line) => sendCodexLine(runtimeId, line));
   rpc.onNotification((n) => notifQueue.push(n));
@@ -324,6 +343,7 @@ export async function* runCodexTurn(_params: {
 
     unsubscribe = onCodexRuntimeLine((ev) => {
       if (ev.runtimeId !== runtimeId) return;
+      if (ev.stream === 'stderr') pushStderr(ev.line);
       lineQueue.push(ev);
     });
 
@@ -507,7 +527,9 @@ export async function* runCodexTurn(_params: {
         if (chunk) yield { type: 'text', text: chunk };
         if (notifQueue.isClosed()) break;
         if (Date.now() - lastActivityMs >= TURN_IDLE_TIMEOUT_MS) {
-          logEvent('turn_idle_timeout', '长时间未收到响应。');
+          const stderrTail = formatStderrTail();
+          const detailsText = stderrTail ? `stderr:\n${stderrTail}` : undefined;
+          await logEventFlush('turn_idle_timeout', '长时间未收到响应。', detailsText);
           yield {
             type: 'error',
             message:
@@ -562,7 +584,11 @@ export async function* runCodexTurn(_params: {
         }
         const url = err?.codexErrorInfo?.url;
         if (typeof url === 'string' && url) logParts.push(`url: ${url}`);
-        logEvent('runtime_error', String(msg), logParts.filter(Boolean).join('\n'));
+        const stderrTail = formatStderrTail();
+        const detailsText = [logParts.filter(Boolean).join('\n'), stderrTail ? `stderr:\n${stderrTail}` : '']
+          .filter(Boolean)
+          .join('\n\n');
+        await logEventFlush('runtime_error', String(msg), detailsText);
         yield { type: 'error', message: userParts.filter(Boolean).join('\n') };
         continue;
       }
@@ -601,7 +627,9 @@ export async function* runCodexTurn(_params: {
         if (!turnId || id === turnId) {
           if (t?.status === 'failed') {
             const msg = t?.error?.message ?? '运行失败。';
-            logEvent('turn_failed', String(msg));
+            const stderrTail = formatStderrTail();
+            const detailsText = stderrTail ? `stderr:\n${stderrTail}` : undefined;
+            await logEventFlush('turn_failed', String(msg), detailsText);
             yield { type: 'error', message: String(msg) };
           }
           completed = true;
@@ -619,7 +647,9 @@ export async function* runCodexTurn(_params: {
     if (tail) yield { type: 'text', text: tail };
     const messageForLog = formatRpcErrorForLog(e);
     const messageForUser = formatRpcErrorForUser(e);
-    logEvent('exception', '运行异常', messageForLog);
+    const stderrTail = formatStderrTail();
+    const detailsText = [messageForLog, stderrTail ? `stderr:\n${stderrTail}` : ''].filter(Boolean).join('\n\n');
+    await logEventFlush('exception', '运行异常', detailsText);
     yield { type: 'error', message: messageForUser };
   } finally {
     pumpRunning = false;
