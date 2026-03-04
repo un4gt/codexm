@@ -10,7 +10,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
-    "eas-build-pre-build": "python3 scripts/fetch_android_codex_deps.py --abi arm64-v8a"
+    "eas-build-post-install": "python3 scripts/fetch_android_codex_deps.py --abi arm64-v8a"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
