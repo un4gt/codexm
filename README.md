@@ -86,9 +86,9 @@ npx expo start --dev-client
 2. 进入 `Settings`：开启 Codex，设置 `OPENAI_API_KEY`（写入 SecureStore）并保存；App 会在 `DocumentDirectory/codex-home/` 生成 `config.toml` 与 `auth.json`（不使用 HTTP 模式，app-server 走 stdio）。
 3. 进入 `Sessions` 新建会话并发送消息：应看到 Codex 输出的 **流式**文本（`item/agentMessage/delta`）。
 
-## APK 发布 + EAS Update（GitHub Actions）
+## APK 发布 + EAS Update（Cirrus CI）
 
-本项目使用 GitHub Actions 打包 Android Release APK 并发布到 GitHub Release，同时执行 Android OTA（EAS Update），不依赖 EAS Build。
+本项目使用 Cirrus CI 打包 Android Release APK 并发布到 GitHub Release，同时执行 Android OTA（EAS Update），不依赖 EAS Build。
 
 1. 在本地创建并推送 tag（示例）：
 
@@ -97,20 +97,24 @@ git tag v0.0.9
 git push origin v0.0.9
 ```
 
-2. 先在仓库中配置：
-- `Settings > Secrets and variables > Actions > Secrets` 添加 `EXPO_TOKEN`
-- （可选）`Variables` 添加 `EAS_UPDATE_BRANCH`（默认 `production`）
+2. 在 GitHub 安装并启用 Cirrus CI App，确保仓库根目录存在 `.cirrus.yml`。
 
-3. 工作流 `.github/workflows/android-release.yml` 会自动执行：
+3. 在 Cirrus 仓库设置里配置环境变量：
+- 必填：`GITHUB_TOKEN`（需要对当前仓库有 `contents:write`，用于创建/更新 Release 并上传 APK）
+- 必填：`EXPO_TOKEN`
+- 可选：`EAS_UPDATE_BRANCH`（默认 `production`）
+- 可选：`CODEX_TERMUX_REPO` / `CODEX_TERMUX_TAG` / `RIPGREP_REPO` / `RIPGREP_TAG`
+
+4. Cirrus 任务会在 tag 匹配 `v*` 或 `*-v*` 时自动执行：
 - 拉取依赖与 Android SDK/NDK
 - 下载 Codex 运行时二进制（`scripts/fetch_android_codex_deps.py`）
 - 构建 `app-release.apk`
-- 上传 Artifact 并附加到 GitHub Release
+- 上传 Artifact，并通过 `scripts/ci/publish_github_release.py` 附加到 GitHub Release
 - 发布 Android 平台的 EAS Update（`eas update --platform android`）
 
-4. 从 Release 页面下载 `codexm-<tag>-arm64-v8a.apk` 安装到设备；已安装用户可通过应用内“检查更新”获取 OTA。
+5. 从 Release 页面下载 `codexm-<tag>-arm64-v8a.apk` 安装到设备；已安装用户可通过应用内“检查更新”获取 OTA。
 
-5. OTA 兼容性说明：
+6. OTA 兼容性说明：
 - 当前更新通道固定为 `production`（`expo-channel-name` 请求头）
 - `runtimeVersion` 需与安装包保持兼容；如果改了原生代码（Android 工程/原生模块），请先发新 APK，再发对应 runtime 的 update
 
