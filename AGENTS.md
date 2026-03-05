@@ -42,3 +42,8 @@
 ## Security & Configuration Tips
 - Never commit secrets (API keys/tokens). Use secure storage on device and store references only.
 - PowerShell tip: quote paths with parentheses, e.g. `Get-Content -Raw 'app/(tabs)/index.tsx'`.
+
+## Known Gotchas (2026-03-05)
+- GitHub Actions Android release builds can fail with `OutOfMemoryError: Metaspace` during `lintVitalAnalyzeRelease` (seen in `react-native-screens`, `react-native-reanimated`, `expo-modules-core`). Current mitigation lives in `.github/workflows/android-release.yml`: increase Gradle JVM args, cap workers, and skip `lintVitalAnalyzeRelease` for release packaging.
+- Android: spawning packaged native executables (Codex runtime) can exit immediately with missing `libc++_shared.so`. When using `ProcessBuilder`, make sure `LD_LIBRARY_PATH` includes `applicationInfo.nativeLibraryDir` so the dynamic linker can find the app-bundled shared libraries.
+- OTA/online updates are intentionally disabled short-term. Keep Expo Updates config in sync between `app.json` (`updates.enabled=false`) and the checked-in native Android manifest meta-data (`expo.modules.updates.ENABLED=false`) to avoid “app.json says off but native still initializes updates” surprises.
