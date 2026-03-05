@@ -356,6 +356,15 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
           env["PATH"] = systemFallback
         }
 
+        // When spawning prebuilt executables, the dynamic linker won't automatically search the
+        // app's nativeLibraryDir for DT_NEEDED dependencies (e.g. libc++_shared.so). Make it
+        // explicit.
+        val nativeLibDir = reactContext.applicationInfo?.nativeLibraryDir
+        if (!nativeLibDir.isNullOrBlank()) {
+          val existingLd = env["LD_LIBRARY_PATH"]
+          env["LD_LIBRARY_PATH"] = if (existingLd.isNullOrBlank()) nativeLibDir else "${nativeLibDir}${File.pathSeparator}${existingLd}"
+        }
+
         if (env["SHELL"].isNullOrBlank()) env["SHELL"] = "/system/bin/sh"
         if (env["TMPDIR"].isNullOrBlank()) env["TMPDIR"] = reactContext.cacheDir.absolutePath
       } catch (_: Throwable) {
