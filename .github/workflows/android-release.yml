@@ -75,13 +75,23 @@ jobs:
 
       - name: Build release APK
         shell: bash
+        env:
+          # 仅用于在 lint 崩溃时输出更完整栈，便于后续定位。
+          LINT_PRINT_STACKTRACE: 'true'
         run: |
           set -euo pipefail
           cd android
           # Windows 下生成的 gradlew 可能没有可执行位，且可能包含 CRLF；CI 里先修正再执行。
           chmod +x ./gradlew
           sed -i 's/\r$//' ./gradlew
-          ./gradlew :app:assembleRelease -PreactNativeArchitectures=${{ matrix.abi }} --no-daemon
+          # CI 上出现过 lintVitalAnalyzeRelease 的 Metaspace OOM，这里提高 JVM 内存并排除该任务。
+          GRADLE_JVM_ARGS='-Xmx6g -XX:MaxMetaspaceSize=2g -Dfile.encoding=UTF-8'
+          ./gradlew :app:assembleRelease \
+            -PreactNativeArchitectures=${{ matrix.abi }} \
+            -Dorg.gradle.jvmargs="${GRADLE_JVM_ARGS}" \
+            -Dorg.gradle.workers.max=2 \
+            -x lintVitalAnalyzeRelease \
+            --no-daemon
 
       - name: Collect APK
         shell: bash
@@ -118,44 +128,3 @@ jobs:
         with:
           files: |
             dist/**/codexm-*.apk
-
-  eas_update:
-    name: Publish EAS Update (Android)
-    needs: release
-    runs-on: ubuntu-latest
-    env:
-      # 必填：在 GitHub Secrets 中配置 EXPO_TOKEN（Expo account access token）
-      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-      # 可选：在 GitHub Variables 中覆盖分支名，默认 production
-      EAS_UPDATE_BRANCH: ${{ vars.EAS_UPDATE_BRANCH || 'production' }}
-    steps:
-      - name: Validate EXPO_TOKEN
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -z "${EXPO_TOKEN:-}" ]; then
-            echo "Missing EXPO_TOKEN secret. Please add it in GitHub repository secrets."
-            exit 1
-          fi
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install npm dependencies
-        run: npm ci
-
-      - name: Publish Android OTA update
-        shell: bash
-        run: |
-          set -euo pipefail
-          npx eas-cli@latest update \
-            --branch "${EAS_UPDATE_BRANCH}" \
-            --platform android \
-            --message "release ${GITHUB_REF_NAME}" \
-            --non-interactive
