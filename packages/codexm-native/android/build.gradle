@@ -32,8 +32,8 @@ def generateCodexJniLibsTask = tasks.register('generateCodexJniLibs') {
         'rg',
         // codex-termux depends on versioned libs (e.g. libz.so.1, liblzma.so.5). We ship the
         // base names here and create versioned aliases at runtime.
-        'libz.so',
-        'liblzma.so',
+        'libcodex_z.so',
+        'libcodex_lzma.so',
       ]
       def missing = requiredSources.findAll { srcName -> !new File(abiDir, srcName).exists() }
       if (!missing.isEmpty()) {
@@ -47,8 +47,8 @@ def generateCodexJniLibsTask = tasks.register('generateCodexJniLibs') {
         'codex'     : 'libcodex.so',
         'codex-exec': 'libcodex_exec.so',
         'rg'        : 'librg.so',
-        'libz.so'   : 'libz.so',
-        'liblzma.so': 'liblzma.so',
+        'libcodex_z.so'   : 'libcodex_z.so',
+        'libcodex_lzma.so': 'libcodex_lzma.so',
       ]
 
       mappings.each { srcName, dstName ->

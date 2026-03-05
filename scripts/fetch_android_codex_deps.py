@@ -4,12 +4,12 @@
 
 产物路径：
   packages/codexm-native/android/src/main/assets/codex/<abi>/{codex,codex-exec,rg}
-  packages/codexm-native/android/src/main/assets/codex/<abi>/{libz.so,liblzma.so}
+  packages/codexm-native/android/src/main/assets/codex/<abi>/{libcodex_z.so,libcodex_lzma.so}
 
 来源（默认）：
   - codex/codex-exec：DioNanos/codex-termux 的 GitHub Releases（Termux ARM64）
   - rg：microsoft/ripgrep-prebuilt 的 GitHub Releases（aarch64-unknown-linux-musl）
-  - libz.so / liblzma.so：Termux main repo（用于满足 codex-termux 的版本化依赖，如 libz.so.1 / liblzma.so.5）
+  - libcodex_z.so / libcodex_lzma.so：Termux main repo（用于满足 codex-termux 的版本化依赖，如 libz.so.1 / liblzma.so.5）
 
 仅使用 Python 标准库。
 
@@ -749,6 +749,11 @@ def main(argv: list[str]) -> int:
     'liblzma.so': 'liblzma',
     'libz.so': 'zlib',
   }
+  # Output filenames under assets (avoid clobbering system lib names like liblzma.so / libz.so).
+  termux_asset_for_lib = {
+    'liblzma.so': 'libcodex_lzma.so',
+    'libz.so': 'libcodex_z.so',
+  }
 
   token = _github_token()
   download_headers = {'User-Agent': USER_AGENT}
@@ -819,7 +824,7 @@ def main(argv: list[str]) -> int:
             # Usually already shipped by the app (NDK STL c++_shared). We avoid bundling another
             # copy here to prevent duplicate packaging conflicts.
             continue
-          if base not in termux_pkg_for_lib:
+          if base not in termux_pkg_for_lib or base not in termux_asset_for_lib:
             unknown.append(base)
 
         if unknown:
@@ -849,7 +854,7 @@ def main(argv: list[str]) -> int:
                 out_dir=tmp,
               )
               lib_bytes = _extract_termux_shared_lib_bytes(deb, base)
-              dst = out_dir / base
+              dst = out_dir / termux_asset_for_lib[base]
               dst.write_bytes(lib_bytes)
               try:
                 mode = dst.stat().st_mode
@@ -882,7 +887,7 @@ def main(argv: list[str]) -> int:
     else:
       print(f'跳过 rg：当前脚本未配置 {abi} 的 ripgrep 目标三元组')
 
-    for f in ('codex', 'codex-exec', 'rg', 'libz.so', 'liblzma.so'):
+    for f in ('codex', 'codex-exec', 'rg', 'libcodex_z.so', 'libcodex_lzma.so'):
       p = out_dir / f
       if p.exists():
         print(f'✓ {p.name}: {p.stat().st_size} bytes')

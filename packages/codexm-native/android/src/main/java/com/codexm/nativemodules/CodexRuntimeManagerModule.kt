@@ -219,6 +219,14 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
     return name.substring(0, i + 3)
   }
 
+  private fun bundledSoNameForVersionedNeeded(neededName: String): String? {
+    // Avoid clobbering/overriding system libraries with the same basename (e.g. liblzma.so, libz.so).
+    // We package Termux-provided deps under private names and create versioned aliases at runtime.
+    if (neededName.startsWith("liblzma.so.")) return "libcodex_lzma.so"
+    if (neededName.startsWith("libz.so.")) return "libcodex_z.so"
+    return baseSoNameForVersioned(neededName)
+  }
+
   private fun shouldPreflightNeededLib(name: String): Boolean {
     // Only check deps that are very unlikely to be provided by Android system images:
     // - versioned SONAMEs (e.g. libssl.so.3, liblzma.so.5)
@@ -420,7 +428,7 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
       // Best-effort: if the binary needs a versioned SONAME like libfoo.so.1 but we only ship
       // libfoo.so (because jniLibs must end with ".so"), create an alias in our writable bin dir.
       if (isVersionedSoName(name)) {
-        val base = baseSoNameForVersioned(name)
+        val base = bundledSoNameForVersionedNeeded(name)
         if (!base.isNullOrBlank()) {
           val baseFile = File(nativeLibDir, base)
           if (baseFile.exists()) {
