@@ -17,6 +17,8 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -102,7 +104,7 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
   ): String {
     val code = exitCode?.toString() ?: "unknown"
     val tail = if (stderrTail.isBlank()) "<empty>" else stderrTail
-    return "Codex runtime 启动后立即退出。\n" +
+    return "CodexRuntime 启动后立即退出。\n" +
       "- runtimeId: $runtimeId\n" +
       "- source: $source\n" +
       "- exitCode: $code\n" +
@@ -200,6 +202,263 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
     }
 
     return ResolvedExecutable(execPath, outDir, "nativeLibs")
+  }
+
+  private fun isVersionedSoName(name: String): Boolean {
+    val i = name.indexOf(".so.")
+    if (i < 0) return false
+    val j = i + 4
+    if (j >= name.length) return false
+    val c = name[j]
+    return c in '0'..'9'
+  }
+
+  private fun baseSoNameForVersioned(name: String): String? {
+    val i = name.indexOf(".so.")
+    if (i < 0) return null
+    return name.substring(0, i + 3)
+  }
+
+  private fun shouldPreflightNeededLib(name: String): Boolean {
+    // Only check deps that are very unlikely to be provided by Android system images:
+    // - versioned SONAMEs (e.g. libssl.so.3, liblzma.so.5)
+    // - libc++_shared.so (should be bundled by the app when using c++_shared)
+    if (name == "libc++_shared.so") return true
+    return isVersionedSoName(name)
+  }
+
+  private fun readFully(channel: java.nio.channels.FileChannel, buf: ByteBuffer, pos: Long): Int {
+    var total = 0
+    while (buf.hasRemaining()) {
+      val n = channel.read(buf, pos + total)
+      if (n <= 0) break
+      total += n
+    }
+    return total
+  }
+
+  private fun u16(v: Short): Int = v.toInt() and 0xffff
+  private fun u32(v: Int): Long = v.toLong() and 0xffffffffL
+
+  private data class ElfSegment(
+    val type: Long,
+    val offset: Long,
+    val vaddr: Long,
+    val filesz: Long,
+    val memsz: Long,
+  )
+
+  private fun listNeededSharedLibraries(execFile: File): List<String> {
+    if (!execFile.exists() || !execFile.isFile) return emptyList()
+    return try {
+      FileInputStream(execFile).use { fis ->
+        val ch = fis.channel
+
+        val header = ByteBuffer.allocate(64).order(ByteOrder.LITTLE_ENDIAN)
+        val n0 = readFully(ch, header, 0L)
+        if (n0 < 52) return emptyList()
+        header.flip()
+
+        // e_ident
+        val magic0 = header.get(0)
+        val magic1 = header.get(1)
+        val magic2 = header.get(2)
+        val magic3 = header.get(3)
+        if (magic0.toInt() != 0x7f || magic1.toInt() != 'E'.code || magic2.toInt() != 'L'.code || magic3.toInt() != 'F'.code) {
+          return emptyList()
+        }
+        val eiClass = header.get(4).toInt() and 0xff // 1=32, 2=64
+        val eiData = header.get(5).toInt() and 0xff  // 1=little
+        if (eiData != 1) return emptyList()
+
+        val phoff: Long
+        val phentsize: Int
+        val phnum: Int
+        val is64 = eiClass == 2
+
+        if (is64) {
+          phoff = header.getLong(32)
+          phentsize = u16(header.getShort(54))
+          phnum = u16(header.getShort(56))
+        } else if (eiClass == 1) {
+          phoff = u32(header.getInt(28))
+          phentsize = u16(header.getShort(42))
+          phnum = u16(header.getShort(44))
+        } else {
+          return emptyList()
+        }
+
+        if (phoff <= 0 || phentsize <= 0 || phnum <= 0) return emptyList()
+
+        val segments = ArrayList<ElfSegment>(phnum)
+        val phBuf = ByteBuffer.allocate(phentsize).order(ByteOrder.LITTLE_ENDIAN)
+        for (i in 0 until phnum) {
+          phBuf.clear()
+          val pos = phoff + (i.toLong() * phentsize.toLong())
+          val n = readFully(ch, phBuf, pos)
+          if (n < phentsize) break
+          phBuf.flip()
+          if (is64) {
+            val pType = u32(phBuf.getInt(0))
+            val pOffset = phBuf.getLong(8)
+            val pVaddr = phBuf.getLong(16)
+            val pFilesz = phBuf.getLong(32)
+            val pMemsz = phBuf.getLong(40)
+            segments.add(ElfSegment(pType, pOffset, pVaddr, pFilesz, pMemsz))
+          } else {
+            val pType = u32(phBuf.getInt(0))
+            val pOffset = u32(phBuf.getInt(4))
+            val pVaddr = u32(phBuf.getInt(8))
+            val pFilesz = u32(phBuf.getInt(16))
+            val pMemsz = u32(phBuf.getInt(20))
+            segments.add(ElfSegment(pType, pOffset, pVaddr, pFilesz, pMemsz))
+          }
+        }
+
+        val ptDynamic = segments.firstOrNull { it.type == 2L } ?: return emptyList()
+        val loadSegs = segments.filter { it.type == 1L }
+        if (ptDynamic.filesz <= 0) return emptyList()
+
+        val dynEntrySize = if (is64) 16 else 8
+        val dynMax = 1024 * 1024
+        val dynSize = kotlin.math.min(ptDynamic.filesz.toInt(), dynMax)
+        if (dynSize < dynEntrySize) return emptyList()
+
+        val dynBuf = ByteBuffer.allocate(dynSize).order(ByteOrder.LITTLE_ENDIAN)
+        val nd = readFully(ch, dynBuf, ptDynamic.offset)
+        if (nd < dynEntrySize) return emptyList()
+        dynBuf.flip()
+
+        var strtabVa: Long? = null
+        var strsz: Long = 0
+        val neededOffsets = ArrayList<Long>()
+
+        var idx = 0
+        while (idx + dynEntrySize <= dynBuf.limit()) {
+          val tag: Long
+          val value: Long
+          if (is64) {
+            tag = dynBuf.getLong(idx)
+            value = dynBuf.getLong(idx + 8)
+          } else {
+            tag = u32(dynBuf.getInt(idx))
+            value = u32(dynBuf.getInt(idx + 4))
+          }
+          if (tag == 0L) break // DT_NULL
+          when (tag) {
+            1L -> neededOffsets.add(value)  // DT_NEEDED
+            5L -> strtabVa = value          // DT_STRTAB
+            10L -> strsz = value            // DT_STRSZ
+          }
+          idx += dynEntrySize
+        }
+
+        if (neededOffsets.isEmpty()) return emptyList()
+        val strVa = strtabVa ?: return emptyList()
+        if (strsz <= 0) return emptyList()
+
+        val strSeg = loadSegs.firstOrNull { seg ->
+          strVa >= seg.vaddr && strVa < (seg.vaddr + seg.memsz)
+        } ?: return emptyList()
+
+        val strOffset = strSeg.offset + (strVa - strSeg.vaddr)
+        val strMax = 8 * 1024 * 1024L
+        val strToRead = kotlin.math.min(strsz, strMax).toInt()
+        if (strToRead <= 0) return emptyList()
+
+        val strBuf = ByteBuffer.allocate(strToRead)
+        val ns = readFully(ch, strBuf, strOffset)
+        if (ns <= 0) return emptyList()
+        val strBytes = strBuf.array()
+
+        fun readCString(off: Int): String? {
+          if (off < 0 || off >= ns) return null
+          var end = off
+          while (end < ns && strBytes[end].toInt() != 0) end++
+          if (end <= off) return null
+          return try {
+            String(strBytes, off, end - off, Charsets.UTF_8)
+          } catch (_: Throwable) {
+            null
+          }
+        }
+
+        val out = LinkedHashSet<String>()
+        for (off0 in neededOffsets) {
+          val off = off0.toInt()
+          readCString(off)?.let { out.add(it) }
+        }
+        out.toList()
+      }
+    } catch (_: Throwable) {
+      emptyList()
+    }
+  }
+
+  private fun findLibraryFile(name: String, dirs: List<File>): File? {
+    for (d in dirs) {
+      val f = File(d, name)
+      if (f.exists()) return f
+    }
+    return null
+  }
+
+  private fun preflightLinkerDeps(execPath: String, binDir: File?, nativeLibDir: File?) {
+    if (binDir == null || nativeLibDir == null) return
+    if (!nativeLibDir.exists()) return
+
+    val needed = listNeededSharedLibraries(File(execPath))
+    if (needed.isEmpty()) return
+
+    val searchDirs = listOf(binDir, nativeLibDir)
+    val missing = ArrayList<String>()
+
+    for (name in needed) {
+      if (!shouldPreflightNeededLib(name)) continue
+      if (findLibraryFile(name, searchDirs) != null) continue
+
+      // Best-effort: if the binary needs a versioned SONAME like libfoo.so.1 but we only ship
+      // libfoo.so (because jniLibs must end with ".so"), create an alias in our writable bin dir.
+      if (isVersionedSoName(name)) {
+        val base = baseSoNameForVersioned(name)
+        if (!base.isNullOrBlank()) {
+          val baseFile = File(nativeLibDir, base)
+          if (baseFile.exists()) {
+            val link = File(binDir, name)
+            val linked = ensureSymlink(link, baseFile)
+            if (!linked) {
+              // Some devices may block symlink/hardlink creation. As a last resort, copy the
+              // shared library into our bin dir with the versioned filename.
+              try {
+                link.delete()
+              } catch (_: Throwable) {
+              }
+              try {
+                baseFile.copyTo(link, overwrite = true)
+                chmodExecutable(link.absolutePath)
+                link.setReadable(true, false)
+                link.setWritable(true, true)
+              } catch (_: Throwable) {
+                // ignore
+              }
+            }
+          }
+        }
+      }
+
+      if (findLibraryFile(name, searchDirs) == null) missing.add(name)
+    }
+
+    if (missing.isNotEmpty()) {
+      val bin = binDir.absolutePath
+      val native = nativeLibDir.absolutePath
+      throw IllegalStateException(
+        "缺少共享库依赖（动态链接器无法解析）。\n" +
+          "- execPath: $execPath\n" +
+          "- missing: ${missing.joinToString(", ")}\n" +
+          "- searched: $bin, $native\n"
+      )
+    }
   }
 
   private fun emitLine(runtimeId: String, stream: String, line: String) {
@@ -362,13 +621,37 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
         val nativeLibDir = reactContext.applicationInfo?.nativeLibraryDir
         if (!nativeLibDir.isNullOrBlank()) {
           val existingLd = env["LD_LIBRARY_PATH"]
-          env["LD_LIBRARY_PATH"] = if (existingLd.isNullOrBlank()) nativeLibDir else "${nativeLibDir}${File.pathSeparator}${existingLd}"
+          val parts = ArrayList<String>()
+          val binDir = resolved.binDir?.absolutePath
+          if (!binDir.isNullOrBlank()) parts.add(binDir)
+          parts.add(nativeLibDir)
+          if (!existingLd.isNullOrBlank()) {
+            existingLd.split(File.pathSeparatorChar).filter { it.isNotBlank() }.forEach { parts.add(it) }
+          }
+          env["LD_LIBRARY_PATH"] = parts.distinct().joinToString(File.pathSeparator)
         }
 
         if (env["SHELL"].isNullOrBlank()) env["SHELL"] = "/system/bin/sh"
         if (env["TMPDIR"].isNullOrBlank()) env["TMPDIR"] = reactContext.cacheDir.absolutePath
       } catch (_: Throwable) {
         // ignore
+      }
+
+      // Preflight: check for "versioned" DT_NEEDED libs (e.g. libssl.so.3 / liblzma.so.5) which
+      // Android system images typically do not provide. This helps surface missing runtime deps
+      // earlier and (when possible) creates alias symlinks in our writable bin dir.
+      try {
+        val nativeLibDirPath = reactContext.applicationInfo?.nativeLibraryDir
+        val nativeLibDir = if (!nativeLibDirPath.isNullOrBlank()) File(nativeLibDirPath) else null
+        preflightLinkerDeps(execPath, resolved.binDir, nativeLibDir)
+      } catch (e: Throwable) {
+        throw IllegalStateException(
+          "CodexRuntime 缺少依赖库，无法启动。\n" +
+            "- runtimeId: $runtimeId\n" +
+            "- source: ${resolved.source}\n" +
+            "${e.message ?: ""}".trim(),
+          e
+        )
       }
 
       val proc = try {
@@ -379,7 +662,7 @@ class CodexRuntimeManagerModule(private val reactContext: ReactApplicationContex
           val appData = reactContext.filesDir.absolutePath
           val nativeDir = reactContext.applicationInfo?.nativeLibraryDir ?: ""
           throw RuntimeException(
-            "无法执行 codex 可执行文件（Permission denied）。\n" +
+            "CodexRuntime 无法执行可执行文件（Permission denied）。\n" +
               "- 已解析来源：${resolved.source}\n" +
               "- filesDir: $appData\n" +
               "- nativeLibraryDir: $nativeDir\n" +

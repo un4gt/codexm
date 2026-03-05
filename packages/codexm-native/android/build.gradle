@@ -26,10 +26,29 @@ def generateCodexJniLibsTask = tasks.register('generateCodexJniLibs') {
       def outAbiDir = new File(generatedCodexJniLibsDir, abi)
       outAbiDir.mkdirs()
 
+      def requiredSources = [
+        'codex',
+        'codex-exec',
+        'rg',
+        // codex-termux depends on versioned libs (e.g. libz.so.1, liblzma.so.5). We ship the
+        // base names here and create versioned aliases at runtime.
+        'libz.so',
+        'liblzma.so',
+      ]
+      def missing = requiredSources.findAll { srcName -> !new File(abiDir, srcName).exists() }
+      if (!missing.isEmpty()) {
+        throw new GradleException(
+          "缺少 Codex Android 运行时文件（ABI=${abi}）：${missing.join(', ')}\n" +
+          "请先运行：python3 scripts/fetch_android_codex_deps.py"
+        )
+      }
+
       def mappings = [
         'codex'     : 'libcodex.so',
         'codex-exec': 'libcodex_exec.so',
         'rg'        : 'librg.so',
+        'libz.so'   : 'libz.so',
+        'liblzma.so': 'liblzma.so',
       ]
 
       mappings.each { srcName, dstName ->
