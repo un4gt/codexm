@@ -367,7 +367,7 @@ export async function* runCodexTurn(_params: {
       cwdUri,
       // 默认从 Android assets 里复制可执行文件；你需要在原生侧打包该 asset。
       assetPath: 'codex/{abi}/codex',
-      args: ['--skip-git-repo-check', 'app-server', '--listen', 'stdio://'],
+      args: ['app-server', '--listen', 'stdio://'],
       env,
     });
     started = true;
