@@ -1,4 +1,4 @@
-import { parse as parseToml } from '@iarna/toml';
+import parseToml from '@iarna/toml/parse-string';
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { deleteAuth, loadAuth, saveAuth } from '@/src/auth/authStore';
