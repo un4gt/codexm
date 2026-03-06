@@ -1,5 +1,7 @@
 # 本地参考工程（不属于本仓库）
 happy/
+.helloagents/
+.vscode/
 
 # 旧 RN 本地缓存（保留忽略，避免清理后继续污染状态）
 .expo/
