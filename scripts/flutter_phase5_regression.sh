@@ -7,6 +7,12 @@ FLUTTER_DIR="${ROOT_DIR}/flutter_app"
 echo "[Phase 5.1] fetch Android codex deps"
 python3 "${ROOT_DIR}/scripts/fetch_android_codex_deps.py" --abi arm64-v8a
 
+echo "[Phase 5.1] flutter pub get (plugin example)"
+(
+  cd "${FLUTTER_DIR}/packages/codexm_native/example"
+  flutter pub get
+)
+
 echo "[Phase 5.1] flutter analyze"
 (
   cd "${FLUTTER_DIR}"

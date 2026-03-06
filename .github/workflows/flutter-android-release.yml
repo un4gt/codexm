@@ -70,6 +70,10 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
+      - name: Flutter pub get (plugin example)
+        run: flutter pub get
+        working-directory: flutter_app/packages/codexm_native/example
+
       - name: Flutter analyze
         run: flutter analyze
 

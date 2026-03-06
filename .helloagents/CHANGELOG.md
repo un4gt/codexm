@@ -3,6 +3,10 @@
 ## [0.0.8] - 2026-03-06
 
 ### 变更
+- **[flutter_release_tooling]**: 修复 GitHub Actions 上插件 example 分析失败的问题，在 `flutter analyze` 前显式为 `packages/codexm_native/example/` 执行 `flutter pub get`，并同步本地回归脚本 — by un4gt
+  - 方案: [202603061832_flutter-mainline-cutover](archive/2026-03/202603061832_flutter-mainline-cutover/)
+  - 文件: `.github/workflows/flutter-android-release.yml`、`scripts/flutter_phase5_regression.sh`
+
 - **[flutter_app]**: 对比 RN 与 Flutter 已完成功能后，正式将仓库切换为 Flutter Android 主线，并移除 Expo / React Native 页面层、宿主工程、旧插件与旧发布链路 — by un4gt
   - 方案: [202603061832_flutter-mainline-cutover](archive/2026-03/202603061832_flutter-mainline-cutover/)
   - 决策: flutter-mainline-cutover#D001(Flutter 成为唯一移动端主线)

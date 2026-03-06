@@ -16,7 +16,8 @@
 
 - GitHub Actions 会显式安装 Android SDK `36`、NDK `28.2.13676358` 与 CMake
 - release workflow 会在 `flutter build apk` 前下载 `codex` Android 依赖
-- 回归脚本会先下载 Android 依赖，再执行 `flutter analyze`、`flutter test` 与 `./gradlew :app:assembleDebug`
+- release workflow 会在 `flutter analyze` 前为 `packages/codexm_native/example/` 单独执行一次 `flutter pub get`
+- 回归脚本会先下载 Android 依赖，并为 `packages/codexm_native/example/` 生成 package config，再执行 `flutter analyze`、`flutter test` 与 `./gradlew :app:assembleDebug`
 - 构建产物聚焦 `arm64-v8a`
 
 ## 约束
