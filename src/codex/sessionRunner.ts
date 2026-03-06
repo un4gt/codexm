@@ -227,7 +227,16 @@ export async function* runCodexTurn(_params: {
     }
   }
 
-  const { codexHomeUri } = await materializeCodexConfigFiles({ mcpServers, enabledMcpServerIds });
+  let codexHomeUri: string;
+  try {
+    ({ codexHomeUri } = await materializeCodexConfigFiles({ mcpServers, enabledMcpServerIds }));
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await logEventFlush('config_invalid', '配置不可用', msg);
+    yield { type: 'error', message: msg || '当前配置不可用，请到设置中修正后重试。' };
+    yield { type: 'done' };
+    return;
+  }
 
   const tmpDir = fileUriToPath(workspaceTmpPath(workspace.id));
 

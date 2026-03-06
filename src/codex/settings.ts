@@ -1,3 +1,4 @@
+import { parse as parseToml } from '@iarna/toml';
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { deleteAuth, loadAuth, saveAuth } from '@/src/auth/authStore';
@@ -25,6 +26,8 @@ export type CodexSettings = {
   debugLogToFile?: boolean;
   /** 调试：日志保留天数（全局）。 */
   debugLogRetentionDays?: number;
+  /** 高级配置：追加到自动生成内容后的补充片段。 */
+  extraConfigToml?: string;
   /** 专家模式：使用自定义 config.toml 文本。 */
   useRawConfigToml?: boolean;
   /** 专家模式：自定义 config.toml 内容（不要在这里粘贴密钥）。 */
@@ -226,6 +229,122 @@ export function generateCodexConfigToml(s: CodexSettings) {
   return `${lines.join('\n')}\n`;
 }
 
+function ensureTrailingNewline(text: string) {
+  return text.endsWith('\n') ? text : `${text}\n`;
+}
+
+function normalizeTomlText(text: string) {
+  return text.replace(/\r\n?/g, '\n');
+}
+
+export function mergeCodexConfigToml(baseToml: string, extraToml?: string) {
+  const base = normalizeTomlText(baseToml).trimEnd();
+  const extra = normalizeTomlText(extraToml ?? '').trim();
+  if (!extra) return ensureTrailingNewline(base);
+  return ensureTrailingNewline(`${base}\n\n${extra}`);
+}
+
+function summarizeTomlParseMessage(message: string) {
+  const firstLine = message.split('\n')[0]?.trim() ?? '格式有误。';
+  if (firstLine.includes('expected "="')) return '这一行缺少“=”号。';
+  if (firstLine.includes('Unterminated string')) return '字符串没有正确结束。';
+  if (firstLine.includes("Can't redefine existing key")) return '这里和前面的内容重复了，请直接修改对应设置项。';
+  if (firstLine.includes('expected whitespace, . or ]')) return '分组标题没有正确结束。';
+  return firstLine;
+}
+
+export function formatCodexConfigError(error: unknown, label = '配置') {
+  const message = error instanceof Error ? error.message : String(error);
+  const match = message.match(/row\s+(\d+),\s+col\s+(\d+)/i);
+  const location = match ? `第 ${match[1]} 行第 ${match[2]} 列附近` : '';
+  const summary = summarizeTomlParseMessage(message);
+  return `${label}${location}有格式问题：${summary}`;
+}
+
+export function validateCodexConfigToml(content: string, label = '配置') {
+  const raw = normalizeTomlText(content).trim();
+  if (!raw) return `${label}不能为空。`;
+  try {
+    parseToml(raw);
+    return null;
+  } catch (error) {
+    return formatCodexConfigError(error, label);
+  }
+}
+
+export function validateExtraCodexConfigToml(extraToml: string) {
+  const trimmed = normalizeTomlText(extraToml).trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = parseToml(trimmed) as Record<string, unknown>;
+    if (Object.prototype.hasOwnProperty.call(parsed, 'mcp_servers')) {
+      return '服务器配置请在单独的服务器页面管理，这里不要重复填写。';
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(parsed, 'model') ||
+      Object.prototype.hasOwnProperty.call(parsed, 'approval_policy') ||
+      Object.prototype.hasOwnProperty.call(parsed, 'model_provider') ||
+      Object.prototype.hasOwnProperty.call(parsed, 'model_providers') ||
+      Object.prototype.hasOwnProperty.call(parsed, 'sandbox_mode') ||
+      Object.prototype.hasOwnProperty.call(parsed, 'cli_auth_credentials_store')
+    ) {
+      return '这部分内容和上方表单重复，请直接修改对应设置项。';
+    }
+    return null;
+  } catch (error) {
+    return formatCodexConfigError(error, '补充内容');
+  }
+}
+
+export function migrateLegacyRawConfigToml(input: { generatedToml: string; rawConfigToml?: string | null }) {
+  const generated = normalizeTomlText(input.generatedToml).trim();
+  const raw = normalizeTomlText(input.rawConfigToml ?? '').trim();
+
+  if (!raw) {
+    return { canMigrate: true, extraConfigToml: '' };
+  }
+
+  if (raw === generated) {
+    return { canMigrate: true, extraConfigToml: '' };
+  }
+
+  if (raw.startsWith(`${generated}\n`)) {
+    return {
+      canMigrate: true,
+      extraConfigToml: raw.slice(generated.length).trim(),
+    };
+  }
+
+  return { canMigrate: false, extraConfigToml: '' };
+}
+
+function composeStoredCodexConfigToml(
+  s: CodexSettings,
+  opts?: {
+    mcpServers?: McpServer[];
+    enabledMcpServerIds?: string[];
+  }
+) {
+  const usingRaw = Boolean(s.useRawConfigToml && s.rawConfigToml?.trim());
+  let cfgRaw = usingRaw ? normalizeTomlText(s.rawConfigToml ?? '') : mergeCodexConfigToml(generateCodexConfigToml(s), s.extraConfigToml);
+
+  const enabledIds = new Set((opts?.enabledMcpServerIds ?? []).filter(Boolean));
+  let warnings: string[] | undefined = undefined;
+
+  if (!usingRaw && enabledIds.size && (opts?.mcpServers?.length ?? 0) > 0) {
+    const enabledServers = (opts?.mcpServers ?? []).filter((x) => enabledIds.has(x.id));
+    const snippet = generateMcpServersToml(enabledServers);
+    if (snippet.trim()) cfgRaw = `${cfgRaw.trimEnd()}\n\n${snippet.trim()}\n`;
+  }
+
+  if (usingRaw && enabledIds.size) {
+    warnings = ['已启用完整自定义内容：不会自动注入服务器配置，请在完整内容中自行配置。'];
+  }
+
+  const cfg = ensureTrailingNewline(cfgRaw.trimEnd());
+  return { cfg, warnings, usingRaw };
+}
+
 export function generateCodexAuthJson(apiKey: string) {
   // Mirrors codex-rs AuthDotJson for API-key auth:
   // { "auth_mode": "apikey", "OPENAI_API_KEY": "sk-..." }
@@ -242,23 +361,9 @@ export async function materializeCodexConfigFiles(opts?: {
 }) {
   const s = await getCodexSettings();
   await ensureCodexHomeDir();
-  const usingRaw = Boolean(s.useRawConfigToml && s.rawConfigToml?.trim());
-  let cfgRaw = usingRaw ? (s.rawConfigToml ?? '') : generateCodexConfigToml(s);
-
-  const enabledIds = new Set((opts?.enabledMcpServerIds ?? []).filter(Boolean));
-  let warnings: string[] | undefined = undefined;
-
-  if (!usingRaw && enabledIds.size && (opts?.mcpServers?.length ?? 0) > 0) {
-    const enabledServers = (opts?.mcpServers ?? []).filter((x) => enabledIds.has(x.id));
-    const snippet = generateMcpServersToml(enabledServers);
-    if (snippet.trim()) cfgRaw = `${cfgRaw.trimEnd()}\n\n${snippet.trim()}\n`;
-  }
-
-  if (usingRaw && enabledIds.size) {
-    warnings = ['已启用 rawConfigToml：不会自动注入 MCP 配置，请在 rawConfigToml 中自行配置。'];
-  }
-
-  const cfg = cfgRaw.endsWith('\n') ? cfgRaw : `${cfgRaw}\n`;
+  const { cfg, warnings } = composeStoredCodexConfigToml(s, opts);
+  const validationError = validateCodexConfigToml(cfg);
+  if (validationError) throw new Error(validationError);
   const configTomlUri = `${codexHomeUri()}config.toml`;
   await FileSystem.writeAsStringAsync(configTomlUri, cfg);
 

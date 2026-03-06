@@ -32,11 +32,17 @@ import {
   getCodexSettings,
   hasCodexApiKey,
   materializeCodexConfigFiles,
+  mergeCodexConfigToml,
+  migrateLegacyRawConfigToml,
   setCodexApiKey,
   updateCodexSettings,
+  validateCodexConfigToml,
+  validateExtraCodexConfigToml,
   type CodexPersonality,
 } from '@/src/codex/settings';
 import { useWorkspaces } from '@/src/workspaces/provider';
+
+type ConfigEditorMode = 'auto' | 'extra' | 'legacy';
 
 export default function SettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -62,6 +68,7 @@ export default function SettingsScreen() {
   const [skillNameDraft, setSkillNameDraft] = useState('');
   const [skillContentDraft, setSkillContentDraft] = useState('');
   const [personality, setPersonality] = useState<CodexPersonality>(defaultCodexSettings().personality);
+  const [featuresMultiAgent, setFeaturesMultiAgent] = useState(Boolean(defaultCodexSettings().featuresMultiAgent));
   const [uiShowThinking, setUiShowThinking] = useState(Boolean(defaultCodexSettings().uiShowThinking));
 
   const [debugLogToFile, setDebugLogToFile] = useState(Boolean(defaultCodexSettings().debugLogToFile));
@@ -73,8 +80,9 @@ export default function SettingsScreen() {
   const [newApiKey, setNewApiKey] = useState('');
 
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [useRawConfigToml, setUseRawConfigToml] = useState(false);
-  const [rawConfigToml, setRawConfigToml] = useState('');
+  const [configEditorMode, setConfigEditorMode] = useState<ConfigEditorMode>('auto');
+  const [extraConfigToml, setExtraConfigToml] = useState('');
+  const [legacyRawConfigToml, setLegacyRawConfigToml] = useState('');
 
   function validateApiKeyInput(v: string): string | null {
     const t = v.trim();
@@ -309,11 +317,33 @@ export default function SettingsScreen() {
         setModel(s.model ?? '');
         setOpenaiBaseUrl(s.openaiBaseUrl ?? '');
         setPersonality(s.personality);
+        setFeaturesMultiAgent(Boolean(s.featuresMultiAgent));
         setUiShowThinking(Boolean(s.uiShowThinking));
         setDebugLogToFile(Boolean(s.debugLogToFile));
         setDebugLogRetentionDays(String(s.debugLogRetentionDays ?? defaultCodexSettings().debugLogRetentionDays ?? 7));
-        setUseRawConfigToml(Boolean(s.useRawConfigToml));
-        setRawConfigToml(s.rawConfigToml ?? '');
+        const generated = generateCodexConfigToml({
+          version: 1,
+          enabled: true,
+          model: s.model?.trim() || undefined,
+          openaiBaseUrl: s.openaiBaseUrl?.trim() || undefined,
+          approvalPolicy: 'never',
+          personality: s.personality,
+          featuresMultiAgent: Boolean(s.featuresMultiAgent),
+        });
+        const legacyMigration = migrateLegacyRawConfigToml({
+          generatedToml: generated,
+          rawConfigToml: s.rawConfigToml,
+        });
+        if (s.useRawConfigToml && s.rawConfigToml?.trim() && !legacyMigration.canMigrate) {
+          setConfigEditorMode('legacy');
+          setLegacyRawConfigToml(s.rawConfigToml);
+          setExtraConfigToml(s.extraConfigToml ?? '');
+        } else {
+          const nextExtra = s.useRawConfigToml ? legacyMigration.extraConfigToml : (s.extraConfigToml ?? '');
+          setConfigEditorMode(nextExtra.trim() ? 'extra' : 'auto');
+          setExtraConfigToml(nextExtra);
+          setLegacyRawConfigToml('');
+        }
         setApiKeyConfigured(hasKey);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -342,15 +372,46 @@ export default function SettingsScreen() {
       openaiBaseUrl: openaiBaseUrl.trim() || undefined,
       approvalPolicy: 'never',
       personality,
-      useRawConfigToml,
-      rawConfigToml,
+      featuresMultiAgent,
     });
-  }, [model, openaiBaseUrl, personality, rawConfigToml, useRawConfigToml]);
+  }, [featuresMultiAgent, model, openaiBaseUrl, personality]);
 
   const effectiveToml = useMemo(() => {
-    if (useRawConfigToml && rawConfigToml.trim()) return rawConfigToml;
-    return generatedToml;
-  }, [generatedToml, rawConfigToml, useRawConfigToml]);
+    if (configEditorMode === 'legacy' && legacyRawConfigToml.trim()) return legacyRawConfigToml;
+    return mergeCodexConfigToml(generatedToml, configEditorMode === 'extra' ? extraConfigToml : '');
+  }, [configEditorMode, extraConfigToml, generatedToml, legacyRawConfigToml]);
+
+  const legacyMigration = useMemo(
+    () =>
+      migrateLegacyRawConfigToml({
+        generatedToml,
+        rawConfigToml: legacyRawConfigToml,
+      }),
+    [generatedToml, legacyRawConfigToml]
+  );
+
+  const hasLegacyDraft = configEditorMode === 'legacy' || Boolean(legacyRawConfigToml.trim());
+
+  const configValidationError = useMemo(() => {
+    if (configEditorMode === 'legacy') {
+      if (!legacyRawConfigToml.trim()) return '完整内容不能为空，请填写或切回“自动生成”。';
+      return validateCodexConfigToml(legacyRawConfigToml, '完整内容');
+    }
+    if (configEditorMode === 'extra') {
+      const extraError = validateExtraCodexConfigToml(extraConfigToml);
+      if (extraError) return extraError;
+    }
+    return validateCodexConfigToml(effectiveToml);
+  }, [configEditorMode, effectiveToml, extraConfigToml, legacyRawConfigToml]);
+
+  const configModeButtons = useMemo(() => {
+    const buttons: { value: ConfigEditorMode; label: string }[] = [
+      { value: 'auto', label: '自动生成' },
+      { value: 'extra', label: '补充内容' },
+    ];
+    if (hasLegacyDraft) buttons.push({ value: 'legacy', label: '旧版全文' });
+    return buttons;
+  }, [hasLegacyDraft]);
 
   const rippleColor = useMemo(
     () => (colorScheme === 'dark' ? 'rgba(255,255,255,0.14)' : 'rgba(2,6,23,0.08)'),
@@ -473,6 +534,22 @@ export default function SettingsScreen() {
                     { value: 'none', label: '默认' },
                     { value: 'friendly', label: '友好' },
                     { value: 'pragmatic', label: '务实' },
+                  ]}
+                />
+
+                <View style={{ height: 12 }} />
+                <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
+                  实验特性
+                </ThemedText>
+                <ThemedText style={[styles.muted, { marginBottom: 8 }]}>
+                  多智能体仍在实验中，默认关闭。
+                </ThemedText>
+                <SegmentedButtons
+                  value={featuresMultiAgent ? 'on' : 'off'}
+                  onValueChange={(v) => setFeaturesMultiAgent(v === 'on')}
+                  buttons={[
+                    { value: 'off', label: '关闭' },
+                    { value: 'on', label: '开启' },
                   ]}
                 />
 
@@ -629,77 +706,124 @@ export default function SettingsScreen() {
           </Card>
 
           <Card style={styles.card} mode="elevated">
-            <Card.Title title="配置文件" />
+            <Card.Title title="高级配置" />
             <Card.Content>
-        <ThemedText style={[styles.muted, { marginBottom: 8 }]}>
-          提示：不要在配置文件中粘贴密钥，密钥请在上方单独设置。
-        </ThemedText>
+              <ThemedText style={[styles.muted, { marginBottom: 8 }]}>
+                常用项已拆成上方表单。手机上建议优先使用“补充内容”，避免整段手动修改。
+              </ThemedText>
+              <ThemedText style={[styles.muted, { marginBottom: 8 }]}>
+                提示：不要在这里填写密钥，密钥请在上方单独设置。
+              </ThemedText>
 
-        <SegmentedButtons
-          value={useRawConfigToml ? 'custom' : 'auto'}
-          onValueChange={(v) => {
-            if (v === 'auto') {
-              setUseRawConfigToml(false);
-              return;
-            }
-            setUseRawConfigToml(true);
-            if (!rawConfigToml.trim()) setRawConfigToml(generatedToml);
-          }}
-          buttons={[
-            { value: 'auto', label: '自动生成' },
-            { value: 'custom', label: '自定义' },
-          ]}
-        />
+              <SegmentedButtons
+                value={configEditorMode}
+                onValueChange={(v) => setConfigEditorMode(v as ConfigEditorMode)}
+                buttons={configModeButtons}
+              />
 
-        <View style={{ height: 10 }} />
+              <View style={{ height: 10 }} />
 
-        {useRawConfigToml ? (
-          <>
-            <View style={styles.row2}>
-              <Button
-                mode="outlined"
-                disabled={busy}
-                onPress={() => {
-                  setUseRawConfigToml(true);
-                  setRawConfigToml(generatedToml);
-                }}>
-                从当前设置生成
-              </Button>
-              <Button
-                mode="outlined"
-                disabled={busy}
-                onPress={() => {
-                  setUseRawConfigToml(false);
-                  setRawConfigToml('');
-                }}>
-                恢复默认
-              </Button>
-            </View>
-            <View style={{ height: 10 }} />
-            <PaperTextInput
-              mode="outlined"
-              value={rawConfigToml}
-              onChangeText={setRawConfigToml}
-              placeholder="在这里编辑配置内容"
-              autoCapitalize="none"
-              autoCorrect={false}
-              multiline
-              style={styles.codeInput}
-              contentStyle={{ fontFamily: Fonts.mono, fontSize: 12, lineHeight: 16, minHeight: 180 }}
-            />
-          </>
-        ) : (
-          <ThemedView
-            style={[
-              styles.codeBox,
-              {
-                borderColor: Colors[colorScheme].outline,
-                backgroundColor: Colors[colorScheme].surface2,
-              },
-            ]}>
-            <ThemedText style={styles.code}>{effectiveToml}</ThemedText>
-          </ThemedView>
-        )}
+              {configEditorMode === 'extra' ? (
+                <>
+                  <View style={styles.row2}>
+                    <Button
+                      mode="outlined"
+                      disabled={busy || !extraConfigToml.trim()}
+                      onPress={() => setExtraConfigToml('')}>
+                      清空补充
+                    </Button>
+                    <Button
+                      mode="outlined"
+                      disabled={busy}
+                      onPress={() => {
+                        setExtraConfigToml('');
+                        setConfigEditorMode('auto');
+                      }}>
+                      切回自动
+                    </Button>
+                  </View>
+                  <View style={{ height: 10 }} />
+                  <PaperTextInput
+                    mode="outlined"
+                    value={extraConfigToml}
+                    onChangeText={setExtraConfigToml}
+                    placeholder="只填写额外内容"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    multiline
+                    style={styles.codeInput}
+                    contentStyle={{ fontFamily: Fonts.mono, fontSize: 12, lineHeight: 16, minHeight: 180 }}
+                  />
+                </>
+              ) : null}
+
+              {configEditorMode === 'legacy' ? (
+                <>
+                  <ThemedText style={[styles.muted, { marginBottom: 8 }]}>
+                    这是旧版完整内容。手机上更容易输错，建议改用“自动生成”或“补充内容”。
+                  </ThemedText>
+                  <View style={styles.row2}>
+                    {legacyMigration.canMigrate ? (
+                      <Button
+                        mode="outlined"
+                        disabled={busy}
+                        onPress={() => {
+                          setExtraConfigToml(legacyMigration.extraConfigToml);
+                          setLegacyRawConfigToml('');
+                          setConfigEditorMode(legacyMigration.extraConfigToml ? 'extra' : 'auto');
+                        }}>
+                        转为补充
+                      </Button>
+                    ) : null}
+                    <Button
+                      mode="outlined"
+                      disabled={busy}
+                      onPress={() => setLegacyRawConfigToml(generatedToml)}>
+                      按当前设置重建
+                    </Button>
+                    <Button
+                      mode="outlined"
+                      disabled={busy}
+                      onPress={() => setConfigEditorMode('auto')}>
+                      切回自动
+                    </Button>
+                  </View>
+                  <View style={{ height: 10 }} />
+                  <PaperTextInput
+                    mode="outlined"
+                    value={legacyRawConfigToml}
+                    onChangeText={setLegacyRawConfigToml}
+                    placeholder="完整内容"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    multiline
+                    style={styles.codeInput}
+                    contentStyle={{ fontFamily: Fonts.mono, fontSize: 12, lineHeight: 16, minHeight: 220 }}
+                  />
+                </>
+              ) : null}
+
+              <ThemedText type="defaultSemiBold" style={{ marginBottom: 6 }}>
+                当前内容预览
+              </ThemedText>
+              <ThemedView
+                style={[
+                  styles.codeBox,
+                  {
+                    borderColor: Colors[colorScheme].outline,
+                    backgroundColor: Colors[colorScheme].surface2,
+                  },
+                ]}>
+                <ThemedText style={styles.code}>{effectiveToml}</ThemedText>
+              </ThemedView>
+
+              {configValidationError ? (
+                <ThemedText style={[styles.error, { color: Colors[colorScheme].danger, marginTop: Spacing.md }]}>
+                  {configValidationError}
+                </ThemedText>
+              ) : (
+                <ThemedText style={[styles.muted, { marginTop: Spacing.md }]}>保存前会自动检查格式。</ThemedText>
+              )}
             </Card.Content>
           </Card>
 
@@ -708,7 +832,7 @@ export default function SettingsScreen() {
       <Button
         mode="contained"
         loading={busy}
-        disabled={busy}
+        disabled={busy || Boolean(configValidationError)}
         onPress={async () => {
           setBusy(true);
           setError(null);
@@ -718,8 +842,11 @@ export default function SettingsScreen() {
               const keyErr = validateApiKeyInput(apiKeyToSave);
               if (keyErr) throw new Error(keyErr);
             }
-            if (useRawConfigToml && !rawConfigToml.trim()) {
-              throw new Error('自定义配置不能为空，请填写或切换到“自动生成”。');
+            if (configEditorMode === 'legacy' && !legacyRawConfigToml.trim()) {
+              throw new Error('完整内容不能为空，请填写或切回“自动生成”。');
+            }
+            if (configValidationError) {
+              throw new Error(configValidationError);
             }
             const daysText = debugLogRetentionDays.trim();
             const daysRaw = daysText ? Number(daysText) : defaultCodexSettings().debugLogRetentionDays ?? 7;
@@ -733,11 +860,13 @@ export default function SettingsScreen() {
               openaiBaseUrl: openaiBaseUrl.trim() || undefined,
               approvalPolicy: 'never',
               personality,
+              featuresMultiAgent,
               uiShowThinking,
               debugLogToFile,
               debugLogRetentionDays: days,
-              useRawConfigToml,
-              rawConfigToml: rawConfigToml || undefined,
+              extraConfigToml: configEditorMode === 'extra' ? extraConfigToml.trim() || undefined : undefined,
+              useRawConfigToml: configEditorMode === 'legacy',
+              rawConfigToml: configEditorMode === 'legacy' ? legacyRawConfigToml : undefined,
             });
             if (apiKeyToSave) {
               await setCodexApiKey(apiKeyToSave);
@@ -745,6 +874,8 @@ export default function SettingsScreen() {
               setApiKeyConfigured(true);
             }
             await materializeCodexConfigFiles();
+            if (configEditorMode !== 'legacy') setLegacyRawConfigToml('');
+            if (configEditorMode === 'auto') setExtraConfigToml('');
             Alert.alert('已保存', '设置已更新。');
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
