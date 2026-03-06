@@ -1,68 +1,65 @@
-# CodexM Architecture (Expo + Codex app-server + libgit2 + WebDAV zip)
+# CodexM Flutter Android 架构
 
-## Scope & Phasing
+## 目标
 
-### Target (Phase A)
-- Mobile app (Expo Dev Client) is **the primary UX**.
-- Codex runs as an external **Codex app-server** (backend).
-- Workspace lives on-device; Codex access to workspace is enabled via **snapshot/patch sync**.
-- Git operations are local on-device via **libgit2 native module**.
-- WebDAV is used for **zip import/export** (not file-level mirroring).
+- 以 `flutter_app/` 作为唯一移动端主线
+- 仅支持 Android，优先 `arm64-v8a`
+- 复用已验证的 `Codex` Native Runtime 与 `libgit2` Git Native Core
+- 通过 Flutter UI、持久化与业务服务层提供完整工作流
 
-### Phase B/C (later)
-- Phase B: offline queueing and reduced Codex features when backend unreachable.
-- Phase C: full offline Codex execution (high cost; not required for initial delivery).
+## 代码分层
 
-## High-level Components
+### 1. Flutter App
 
-### On-device (React Native)
-- `WorkspaceManager`: create/list/open/delete workspaces; manages metadata and directory layout.
-- `GitService` (native): clone/checkout/fetch/pull/push/status/diff/commit with progress + cancel.
-- `WebDavZipService`: download/upload archives + checksum/etag validation.
-- `CodexClient`: talks to backend app-server (streaming) + workspace sync (snapshot/patch).
-- UI: workspace list, repo browser/editor integration, logs, progress, codex chat.
+- 路径：`flutter_app/`
+- 负责：
+  - 应用壳层、导航、主题
+  - 工作区 / 会话 / MCP / 设置 / WebDAV 页面与交互
+  - 本地 JSON store、配置生成、会话恢复
 
-### Backend
-- Codex [`app-server`](https://github.com/openai/codex).
-- Workspace adapter:
-  - Receives snapshot uploads from device.
-  - Runs codex tools on server-side workspace folder.
-  - Produces patch/diff back to device.
+主要功能域：
 
-## Workspace Model
+- `lib/features/workspaces/`
+- `lib/features/sessions/`
+- `lib/features/settings/`
+- `lib/features/mcp/`
+- `lib/features/webdav/`
+- `lib/features/codex/`
 
-### Metadata (device)
-- `id: string` (uuid)
-- `name: string`
-- `createdAt: number`
-- `localPath: string` (root)
-- `git?: { remoteUrl: string; defaultBranch?: string; authRef?: string }`
-- `webdav?: { endpoint: string; basePath?: string; authRef?: string }`
-- `codex?: { serverUrl: string }`
+### 2. Native Plugin
 
-### Directory layout (device)
-- `DocumentDirectory/workspaces/<id>/repo/` — git working tree
-- `DocumentDirectory/workspaces/<id>/.meta/` — metadata, state, indexes
-- `CacheDirectory/workspaces/<id>/tmp/` — unzip, temporary downloads
+- 路径：`flutter_app/packages/codexm_native/`
+- 负责：
+  - `MethodChannel` / `EventChannel`
+  - Android Kotlin Runtime / Git 桥接
+  - C++ `libgit2` JNI 实现
+  - `codex` 运行时可执行文件与共享库的 `jniLibs` 生成
 
-## Security
-- Secrets (token/password) are stored in OS keystore; workspace stores `authRef` only.
-- TLS is strict by default; enterprise CA/self-signed requires explicit allowlist/pinning.
+### 3. Release Tooling
 
-## Git (libgit2)
-- Exposed as async task-based APIs with progress events and cancel tokens.
-- Credentials via callback for GitHub/GHE PAT.
+- `scripts/fetch_android_codex_deps.py`
+  - 下载 `codex`、`codex-exec`、`rg`
+  - 下载 `libcodex_z.so`、`libcodex_lzma.so`
+  - 输出到 `flutter_app/packages/codexm_native/android/src/main/assets/codex/<abi>/`
+- `scripts/flutter_phase5_regression.sh`
+  - 执行依赖下载、`flutter analyze`、`flutter test`、Android debug 构建
+- `.github/workflows/flutter-android-release.yml`
+  - 执行 GitHub Actions 上的 Flutter Android release 构建
 
-## WebDAV (zip)
-- Download/import into `repo/` (requires clean tree or new workspace).
-- Export: zip current repo (optionally excluding `.git/`) and upload.
+## 运行时路径
 
-## Codex Workspace Sync Strategy (Phase A)
+1. Flutter 设置页生成运行配置与 `config.toml`
+2. `CodexLaunchContextService` 汇总工作区、MCP、skills、会话与鉴权信息
+3. `codexm_native` 从 `nativeLibraryDir` 解析 `libcodex.so` / `libcodex_exec.so` / `librg.so`
+4. Android 侧补齐 `LD_LIBRARY_PATH`，并在运行前做共享库依赖预检
+5. `CodexSessionRunner` 通过 JSON-RPC / SSE 驱动会话流式消息
 
-### Snapshot upload
-- App zips workspace (excluding heavy caches) and uploads to backend.
-- Backend unzips into an ephemeral working directory.
+## 当前产品约束
 
-### Patch return
-- Backend returns a patch (unified diff) or a changed-files bundle.
-- App applies changes to local `repo/` and optionally commits.
+- 每个 workspace 只保留一个主 session
+- MCP 与 skills 为全局作用域
+- MCP 仅支持：
+  - `Streamable HTTP/HTTP`
+  - `Rust stdio (aarch64 build)`
+- 多 session / worktree 冲突管理暂不进入当前主线
+- 真机 `arm64` 验收仍待执行

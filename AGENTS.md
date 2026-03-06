@@ -1,29 +1,26 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `app/`: Expo Router file-based routes and layouts (e.g. `app/_layout.tsx`, `app/(tabs)/_layout.tsx`).
-- `components/`: UI building blocks (`ThemedText`, parallax, collapsible, icons).
-- `hooks/`: Shared hooks (color scheme, theme colors).
-- `constants/`: Design tokens (see `constants/theme.ts`).
-- `src/`: Non-UI modules:
-  - `src/codex/`: Codex client + SSE streaming + local server manager stubs.
-  - `src/workspaces/`: On-device workspace metadata + filesystem layout (`expo-file-system`).
-  - `src/webdav/`: Simple WebDAV client (HEAD/GET/PUT).
-- `assets/`: Icons and images.
-- `docs/`: Architecture and runtime plans (`docs/architecture.md`, `docs/codex-mobile-runtime.md`).
+- `flutter_app/`: Flutter Android 主应用（页面、状态、业务服务层）。
+- `flutter_app/lib/features/`: 按业务域组织的 Flutter 代码（`workspaces` / `sessions` / `settings` / `mcp` / `webdav` / `codex`）。
+- `flutter_app/packages/codexm_native/`: Flutter Android 原生插件，承接 Runtime / Git Native Core。
+- `scripts/`: Flutter 构建辅助脚本（如 Android `codex` 依赖下载、回归脚本）。
+- `.github/workflows/`: Flutter Android CI/CD 工作流。
+- `docs/`: Flutter 主线架构与 MCP 说明。
+- `.helloagents/`: 迁移知识库、方案包与变更记录。
 
 ## Build, Test, and Development Commands
-- `npm install`: Install dependencies.
-- `npm start` (or `npx expo start`): Start the Expo dev server.
-- `npm run android` / `npm run ios` / `npm run web`: Launch on a specific platform.
-- `npm run lint`: Run ESLint via Expo (`eslint-config-expo` flat config).
-- `npx tsc --noEmit`: Typecheck (TypeScript `strict` mode).
-- `npm run reset-project`: Reset starter template (moves/removes template dirs and recreates `app/`).
+- `python3 scripts/fetch_android_codex_deps.py --abi arm64-v8a`: 下载 Flutter 插件需要的 Android `codex` 运行时文件。
+- `cd flutter_app && flutter pub get`: 安装 Flutter 依赖。
+- `cd flutter_app && flutter analyze`: 运行 Dart/Flutter 静态检查。
+- `cd flutter_app && flutter test`: 运行 Flutter 测试。
+- `cd flutter_app/android && ./gradlew :app:assembleDebug`: 验证 Android Debug 宿主构建。
+- `./scripts/flutter_phase5_regression.sh`: 执行当前推荐的本地回归命令集。
 
 ## Coding Style & Naming Conventions
-- TypeScript + React Native; prefer `import type { ... }` for type-only imports.
-- Use the `@/` path alias for internal imports (configured in `tsconfig.json`).
-- Keep formatting consistent with existing files: single quotes; UI code typically uses 2-space indentation.
+- Dart / Flutter 为主，原生桥接使用 Kotlin / C++。
+- 保持与现有文件风格一致；Dart 代码优先沿用现有 feature 分层与命名。
+- Android Native Core 属于冻结区，除非任务明确要求，否则避免改动运行时语义。
 - Recommended editor setup: enable ESLint fixes and import organization on save (see `.vscode/settings.json`).
 
 ## 用户界面文案规范
@@ -31,8 +28,9 @@
 - 技术细节、示例与排错指引请放在 `docs/` 或代码注释中，不得出现在用户可见文案里。
 
 ## Testing Guidelines
-- No test framework is configured yet. Keep business logic in `src/` as pure helpers to make future unit tests easy.
-- If adding tests, use `*.test.ts(x)` or `__tests__/` and add an `npm test` script in the same PR.
+- 使用 `flutter test` 作为默认测试入口。
+- 新增 Dart 逻辑优先放在 `lib/features/**/application/`，并在 `flutter_app/test/` 下补纯逻辑测试。
+- 原生插件相关验证优先使用现有 `flutter analyze`、`flutter test` 与 Android 构建校验组合。
 
 ## Commit & Pull Request Guidelines
 - Git history does not establish conventions yet (only “Initial commit”).
@@ -41,9 +39,9 @@
 
 ## Security & Configuration Tips
 - Never commit secrets (API keys/tokens). Use secure storage on device and store references only.
-- PowerShell tip: quote paths with parentheses, e.g. `Get-Content -Raw 'app/(tabs)/index.tsx'`.
+- Android `codex` 二进制与附属共享库默认通过脚本下载，不直接提交入库。
 
-## Known Gotchas (2026-03-05)
-- GitHub Actions Android release builds can fail with `OutOfMemoryError: Metaspace` during `lintVitalAnalyzeRelease` (seen in `react-native-screens`, `react-native-reanimated`, `expo-modules-core`). Current mitigation lives in `.github/workflows/android-release.yml`: increase Gradle JVM args, cap workers, and skip `lintVitalAnalyzeRelease` for release packaging.
+## Known Gotchas (2026-03-06)
+- GitHub Actions Flutter release 构建前必须先下载 Android `codex` 依赖，并安装 Android SDK `36`、NDK `28.2.13676358` 与 CMake。
 - Android: spawning packaged native executables (Codex runtime) can exit immediately with missing `libc++_shared.so`. When using `ProcessBuilder`, make sure `LD_LIBRARY_PATH` includes `applicationInfo.nativeLibraryDir` so the dynamic linker can find the app-bundled shared libraries.
-- OTA/online updates are intentionally disabled short-term. Keep Expo Updates config in sync between `app.json` (`updates.enabled=false`) and the checked-in native Android manifest meta-data (`expo.modules.updates.ENABLED=false`) to avoid “app.json says off but native still initializes updates” surprises.
+- Flutter 插件打包时需要同时映射 `libcodex_z.so` 与 `libcodex_lzma.so`，否则运行时可能出现动态链接失败。

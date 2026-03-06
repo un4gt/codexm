@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-下载并安装 Android 端 Codex 依赖到本仓库的 assets 目录（默认仅 arm64-v8a）。
+下载并安装 Android 端 Codex 依赖到 Flutter 插件的 assets 目录（默认仅 arm64-v8a）。
 
 产物路径：
-  packages/codexm-native/android/src/main/assets/codex/<abi>/{codex,codex-exec,rg}
-  packages/codexm-native/android/src/main/assets/codex/<abi>/{libcodex_z.so,libcodex_lzma.so}
+  flutter_app/packages/codexm_native/android/src/main/assets/codex/<abi>/{codex,codex-exec,rg}
+  flutter_app/packages/codexm_native/android/src/main/assets/codex/<abi>/{libcodex_z.so,libcodex_lzma.so}
 
 来源（默认）：
   - codex/codex-exec：DioNanos/codex-termux 的 GitHub Releases（Termux ARM64）
@@ -681,8 +681,9 @@ def _repo_root() -> Path:
 def _assets_out_dir(abi: str) -> Path:
   return (
     _repo_root()
+    / 'flutter_app'
     / 'packages'
-    / 'codexm-native'
+    / 'codexm_native'
     / 'android'
     / 'src'
     / 'main'

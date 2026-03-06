@@ -1,0 +1,110 @@
+name: Flutter Android Release APK
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'flutter-v*'
+      - 'flutter-android-v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: flutter-android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Flutter arm64 release
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flutter_app
+
+    env:
+      KEYSTORE_FILE: ${{ secrets.FLUTTER_ANDROID_KEYSTORE_FILE }}
+      KEYSTORE_PASSWORD: ${{ secrets.FLUTTER_ANDROID_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.FLUTTER_ANDROID_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.FLUTTER_ANDROID_KEY_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK deps
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+          set +o pipefail
+          yes 2>/dev/null | sdkmanager --licenses >/dev/null
+          set -o pipefail
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.4'
+          channel: stable
+          cache: true
+
+      - name: Fetch Codex Android deps
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/fetch_android_codex_deps.py --abi arm64-v8a
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Flutter analyze
+        run: flutter analyze
+
+      - name: Flutter test
+        run: flutter test
+
+      - name: Build arm64 release APK
+        run: flutter build apk --release --target-platform android-arm64 --split-per-abi
+
+      - name: Collect APK
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" "dist/codexm-flutter-${GITHUB_REF_NAME}-arm64-v8a.apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codexm-flutter-${{ github.ref_name }}-arm64-v8a
+          path: flutter_app/dist/codexm-flutter-${{ github.ref_name }}-arm64-v8a.apk
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/**/codexm-flutter-*.apk

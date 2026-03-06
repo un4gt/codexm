@@ -1,36 +1,51 @@
-# MCP 支持说明（远程 / 本地 Rust 可执行）
+# MCP 支持说明（Flutter Android）
 
-本项目通过 **Codex app-server** 的 `config.toml` 配置来对接 MCP（Model Context Protocol）。
+本项目通过 `config.toml` 配置对接 MCP（Model Context Protocol）。当前 Flutter 主线已经收敛为 **全局 MCP 管理**，不再按 workspace 单独维护一套服务器配置。
 
-## 1) 远程 MCP（HTTP URL）
+## 当前支持类型
 
-在 App 的 `MCP` Tab 里新增一个 `URL` 类型 Server，然后在新建会话时勾选启用即可。
+### 1. Streamable HTTP / HTTP
 
-底层会写入：
+适用于远程 MCP 服务。
+
+配置形态：
 
 ```toml
 [mcp_servers.<name>]
 url = "https://example.com/mcp"
 ```
 
-> 远程 MCP 可以部署在公网，也可以部署在同一台设备上（例如 `http://127.0.0.1:xxxx`），只要 Codex 进程能访问到即可。
+说明：
 
-## 2) 本地 MCP（Rust 可执行文件，stdio）
+- 支持公网地址，也支持局域网 / 回环地址
+- 只要 Android 设备上的 Codex Runtime 能访问该地址即可
 
-本地 MCP 需要 Codex 以子进程方式启动 Server（stdio）。
+### 2. Rust stdio（aarch64 build）
 
-在 `MCP` Tab 新增 `stdio` 类型 Server：
+适用于 Android `arm64` 可执行 MCP 服务。
 
-- `command`: 指向本地可执行文件（绝对路径或 `PATH` 可找到的命令名）
-- `args`: 由该 MCP server 决定（每行一个参数，可选）
+配置形态：
 
-### 2.1 运行时安装（Rust release 包）
+```toml
+[mcp_servers.<name>]
+command = "/absolute/path/to/server"
+args = ["--flag"]
+```
 
-本项目提供“运行时安装”的链路：在 App 内下载并安装 Rust-based MCP server（支持直接二进制、以及 `.tar.gz`/`.tgz` 发布包），安装后会自动把 `command` 写成已安装可执行文件的路径。
+说明：
 
-然后在新建 workspace / 新建 session 时选择启用。
+- 仅支持可直接在 Android `arm64` 环境执行的 Rust 二进制
+- 设置页支持“托管安装”模式，可下载并安装 release 包，再把可执行路径写回配置
 
-## 3) 限制与注意事项
+## 当前不支持
 
-- 当前仅考虑 **Rust/可执行式 MCP**（rmcp 生态）；不提供 Node.js / Python runtime 以运行对应 MCP server。
-- 在部分 Android 设备/系统策略下，可能会限制从 app 私有可写目录执行下载的 ELF（常见表现为 `Permission denied` / `execute_no_trans`）。如遇该问题，请改用远程 MCP，或在你的运行环境中放开该限制。
+- Node.js MCP
+- Python MCP
+- 非 Android `aarch64` 本地 stdio 可执行
+- workspace 级 MCP 选择
+
+## 注意事项
+
+- MCP 与 skills 现在都属于全局作用域
+- 运行时若设备限制私有目录 ELF 执行，优先改用远程 MCP
+- 真机验证前，建议先通过设置页的配置预览确认最终写出的 `config.toml`

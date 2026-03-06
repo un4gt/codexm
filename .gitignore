@@ -1,60 +1,44 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
 # 本地参考工程（不属于本仓库）
 happy/
 
-# dependencies
-node_modules/
-
-# Expo
+# 旧 RN 本地缓存（保留忽略，避免清理后继续污染状态）
 .expo/
-dist/
-web-build/
-expo-env.d.ts
+node_modules/
 .serena/
 
-# Native
-.kotlin/
-*.orig.*
+# Flutter / Dart
+flutter_app/.dart_tool/
+flutter_app/.flutter-plugins-dependencies
+flutter_app/.pub-cache/
+flutter_app/.pub/
+flutter_app/build/
+flutter_app/coverage/
+flutter_app/android/.gradle/
+flutter_app/android/.cxx/
+flutter_app/android/**/build/
+flutter_app/android/local.properties
+flutter_app/packages/codexm_native/android/.cxx/
+flutter_app/packages/codexm_native/android/build/
+flutter_app/packages/codexm_native/android/src/main/assets/codex/
+flutter_app/packages/codexm_native/example/.dart_tool/
+flutter_app/packages/codexm_native/example/android/.gradle/
+flutter_app/packages/codexm_native/example/android/**/build/
+flutter_app/packages/codexm_native/example/android/local.properties
+flutter_app/packages/codexm_native/build/
+
+# 签名与本地敏感文件
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
-
-# Codex Android deps（从 GitHub Releases 下载到本地，不入库）
-packages/codexm-native/android/src/main/assets/codex/
-android/app/src/main/assets/codex/
-assets/codex/
-
-# Metro
-.metro-health-check*
-
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-# macOS
-.DS_Store
 *.pem
-
-# local env files
 .env*.local
 
-# typescript
-*.tsbuildinfo
-
-app-example
-
-# generated native folders
-/ios/Pods/
-/ios/build/
-android/.gradle/
-android/.cxx/
-android/**/build/
-android/local.properties
-packages/codexm-native/android/.cxx/
-packages/codexm-native/android/build/
+# 通用本地噪音
+.DS_Store
+.kotlin/
+*.orig.*
 *.apk
 *.aab
+app-example
