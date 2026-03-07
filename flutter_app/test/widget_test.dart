@@ -17,21 +17,11 @@ void main() {
   testWidgets('renders user-facing settings sections', (WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('全局 Skills'),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-
+    
+    expect(find.text('交互偏好'), findsOneWidget);
     expect(find.text('全局 Skills'), findsOneWidget);
     expect(find.text('Android Smoke 验证'), findsNothing);
-    await tester.scrollUntilVisible(
-      find.text('配置预览'),
-      -300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('配置预览'), findsOneWidget);
+    expect(find.text('配置预览'), findsNothing);
+    expect(find.text('连接与模型'), findsNothing);
   });
 }

@@ -8,6 +8,245 @@ extension on String {
 }
 
 extension _SessionsPageActions on _SessionsPageState {
+  Future<String?> _promptSessionName({
+    required String title,
+    String? initialValue,
+    String? hintText,
+  }) async {
+    final controller = TextEditingController(text: initialValue ?? '');
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(title),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            textInputAction: TextInputAction.done,
+            decoration: InputDecoration(
+              labelText: '会话名称',
+              hintText: hintText,
+            ),
+            onSubmitted: (value) {
+              Navigator.of(dialogContext).pop(value.trim());
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(controller.text.trim());
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+    return result;
+  }
+
+  Future<void> _createSession() async {
+    final workspace = _activeWorkspace;
+    if (workspace == null || _busy || _running) {
+      return;
+    }
+    final name = await _promptSessionName(
+      title: '新建会话',
+      hintText: '例如：发布问题排查',
+    );
+    if (name == null) {
+      return;
+    }
+    await _runAction('正在创建会话...', () async {
+      final session = await _sessionStore.createSession(
+        workspace.id,
+        title: name.trim().isEmpty ? '新会话' : name.trim(),
+      );
+      _selectedSessionId = session.id;
+      return '已创建会话：${session.title}';
+    });
+  }
+
+  Future<void> _renameSession(Session session) async {
+    final workspace = _activeWorkspace;
+    if (workspace == null || _busy || _running) {
+      return;
+    }
+    final name = await _promptSessionName(
+      title: '重命名会话',
+      initialValue: session.title,
+    );
+    if (name == null) {
+      return;
+    }
+    await _runAction('正在保存会话名称...', () async {
+      await _sessionStore.renameSession(workspace.id, session.id, name);
+      return '已更新会话名称。';
+    });
+  }
+
+  Future<void> _deleteSession(Session session) async {
+    final workspace = _activeWorkspace;
+    if (workspace == null || _busy || _running) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('删除会话'),
+          content: Text('确认删除「${session.title}」吗？该会话中的消息将一并删除。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('删除'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) {
+      return;
+    }
+    await _runAction('正在删除会话...', () async {
+      await _sessionStore.deleteSession(workspace.id, session.id);
+      final remaining = await _sessionStore.listSessions(workspace.id);
+      _selectedSessionId = remaining.isEmpty ? null : remaining.first.id;
+      return '已删除会话：${session.title}';
+    });
+  }
+
+  Future<void> _selectSession(Session session) async {
+    final workspace = _activeWorkspace;
+    if (workspace == null || _busy || _running) {
+      return;
+    }
+    final messages = await _sessionStore.listMessages(workspace.id, session.id);
+    if (!mounted) {
+      return;
+    }
+    _updateView(() {
+      _selectedSessionId = session.id;
+      _messages = messages;
+      _status = '已切换到会话：${session.title}';
+    });
+    widget.onSessionSelected?.call(session);
+    _handleComposerChanged();
+    _scrollToBottom();
+  }
+
+  Future<void> _openSessionSwitcher() async {
+    if (_activeWorkspace == null || _busy || _running) {
+      return;
+    }
+    final selected = _selectedSession;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        '切换会话',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: () async {
+                        Navigator.of(sheetContext).pop();
+                        await _createSession();
+                      },
+                      icon: const Icon(Icons.add_comment_outlined),
+                      label: const Text('新建'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: _sessions.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final session = _sessions[index];
+                      final active = session.id == selected?.id;
+                      return ListTile(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        tileColor: active
+                            ? Theme.of(context).colorScheme.primaryContainer
+                            : Theme.of(context).colorScheme.surfaceContainerLow,
+                        leading: Icon(
+                          active
+                              ? Icons.chat_bubble
+                              : Icons.chat_bubble_outline,
+                        ),
+                        title: Text(session.title),
+                        subtitle: Text(
+                          session.codexThreadId?.trim().isNotEmpty == true
+                              ? '继续已有对话'
+                              : '尚未开始发送消息',
+                        ),
+                        trailing: PopupMenuButton<_SessionAction>(
+                          onSelected: (action) async {
+                            Navigator.of(sheetContext).pop();
+                            switch (action) {
+                              case _SessionAction.rename:
+                                await _renameSession(session);
+                              case _SessionAction.delete:
+                                await _deleteSession(session);
+                            }
+                          },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(
+                              value: _SessionAction.rename,
+                              child: Text('重命名'),
+                            ),
+                            PopupMenuItem(
+                              value: _SessionAction.delete,
+                              child: Text('删除'),
+                            ),
+                          ],
+                        ),
+                        onTap: () async {
+                          Navigator.of(sheetContext).pop();
+                          await _selectSession(session);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _runAction(
     String pendingStatus,
     Future<String> Function() action,
@@ -180,23 +419,6 @@ extension _SessionsPageActions on _SessionsPageState {
         });
       }
     }
-  }
-
-  Future<void> _changeCollaborationMode(CodexCollaborationMode mode) async {
-    final workspace = _activeWorkspace;
-    final session = _selectedSession;
-    if (workspace == null || session == null) {
-      return;
-    }
-
-    await _runAction('正在更新会话模式...', () async {
-      await _sessionStore.setSessionCodexCollaborationMode(
-        workspace.id,
-        session.id,
-        mode.wireValue,
-      );
-      return mode == CodexCollaborationMode.plan ? '已切换到计划模式。' : '已切换回默认模式。';
-    });
   }
 
   Future<void> _sendMessage() async {
@@ -782,33 +1004,6 @@ extension _SessionsPageActions on _SessionsPageState {
         <String, Object?>{'type': 'text', 'text': finalText},
       ],
       buildUserFacingInput(rawText, mentions),
-    );
-  }
-
-  Future<void> _runReview() async {
-    await _runCodexOperation(
-      pendingStatus: '正在审查当前工作区...',
-      successStatus: '审查结果已返回。',
-      kind: CodexTurnKind.review,
-      userMessage: '/review',
-      titleHint: '工作区审查',
-    );
-  }
-
-  Future<void> _compactThread() async {
-    await _runCodexOperation(
-      pendingStatus: '正在整理上下文...',
-      successStatus: '上下文整理完成。',
-      kind: CodexTurnKind.rpc,
-      userMessage: '/compact',
-      titleHint: '上下文整理',
-      rpcCalls: const <CodexRpcCall>[
-        CodexRpcCall(
-          method: 'thread/compact/start',
-          requiresThread: true,
-          title: '上下文整理结果',
-        ),
-      ],
     );
   }
 

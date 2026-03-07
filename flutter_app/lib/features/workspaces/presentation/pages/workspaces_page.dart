@@ -4,18 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:codexm_native/codexm_native.dart';
 
 import '../../../../shared/widgets/feature_scaffold.dart';
+import '../../../../shared/widgets/adaptive_breakpoints.dart';
 import '../../../settings/application/auth_store.dart';
 import '../../../settings/application/auth_types.dart' hide AuthRef;
 import '../../application/workspace_git_error_mapper.dart';
 import '../../application/workspace_models.dart';
 import '../../application/workspace_paths.dart';
 import '../../application/workspace_store.dart';
-import '../../../webdav/application/webdav_client.dart';
-import '../../../webdav/application/webdav_sync.dart';
-import '../../../webdav/application/webdav_types.dart';
 
 part 'workspaces_page_sections.dart';
-part 'workspaces_page_webdav.dart';
 
 class WorkspacesPage extends StatefulWidget {
   const WorkspacesPage({
@@ -62,46 +59,22 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
   final _workspaceStore = WorkspaceStore();
   final _workspaceDirectoryService = WorkspaceDirectoryService();
   final _authStore = AuthStore();
-  final _webDavSyncService = const WebDavSyncService();
-
-  late final TextEditingController _webDavEndpointController;
-  late final TextEditingController _webDavBasePathController;
-  late final TextEditingController _webDavRemoteRootController;
-  late final TextEditingController _webDavBasicUserController;
-  late final TextEditingController _webDavBasicPasswordController;
-  late final TextEditingController _webDavBearerTokenController;
 
   List<Workspace> _workspaces = const <Workspace>[];
   WorkspaceId? _activeWorkspaceId;
   WorkspaceId? _selectedWorkspaceId;
   WorkspacePaths? _selectedPaths;
   String _status = '正在加载工作区列表...';
-  String _webDavStatus = '当前工作区尚未配置 WebDAV。';
-  String _webDavAuthType = 'none';
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
-    _webDavEndpointController = TextEditingController();
-    _webDavBasePathController = TextEditingController();
-    _webDavRemoteRootController = TextEditingController();
-    _webDavBasicUserController = TextEditingController();
-    _webDavBasicPasswordController = TextEditingController();
-    _webDavBearerTokenController = TextEditingController();
     _refresh();
   }
 
   @override
-  void dispose() {
-    _webDavEndpointController.dispose();
-    _webDavBasePathController.dispose();
-    _webDavRemoteRootController.dispose();
-    _webDavBasicUserController.dispose();
-    _webDavBasicPasswordController.dispose();
-    _webDavBearerTokenController.dispose();
-    super.dispose();
-  }
+  void dispose() => super.dispose();
 
   @override
   void didUpdateWidget(covariant WorkspacesPage oldWidget) {
@@ -123,20 +96,16 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
     final paths = selected == null
         ? null
         : await _workspaceDirectoryService.pathsFor(selected.id);
-    final webDavDraft = await _loadWebDavDraft(selected);
 
     if (!mounted) {
       return;
     }
 
-    _applyWebDavDraft(webDavDraft);
     setState(() {
       _workspaces = workspaces;
       _activeWorkspaceId = activeId;
       _selectedWorkspaceId = selected?.id;
       _selectedPaths = paths;
-      _webDavAuthType = webDavDraft.authType;
-      _webDavStatus = webDavDraft.status;
       _status =
           status ??
           (workspaces.isEmpty
@@ -179,9 +148,6 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
     }
     return null;
   }
-
-  Workspace? get _selectedWorkspace =>
-      _findWorkspace(_workspaces, _selectedWorkspaceId);
 
   void _updateView(VoidCallback change) {
     if (!mounted) {
@@ -726,30 +692,14 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
       _selectedWorkspaceId = workspace.id;
       _status = '已查看工作区详情：${workspace.name}';
     });
-    _workspaceDirectoryService.pathsFor(workspace.id).then((paths) async {
-      final webDavDraft = await _loadWebDavDraft(workspace);
+    _workspaceDirectoryService.pathsFor(workspace.id).then((paths) {
       if (!mounted || _selectedWorkspaceId != workspace.id) {
         return;
       }
-      _applyWebDavDraft(webDavDraft);
       setState(() {
         _selectedPaths = paths;
-        _webDavAuthType = webDavDraft.authType;
-        _webDavStatus = webDavDraft.status;
       });
     });
-  }
-
-  String _formatDate(int millis) {
-    if (millis <= 0) {
-      return '未知';
-    }
-    final value = DateTime.fromMillisecondsSinceEpoch(millis);
-    final month = value.month.toString().padLeft(2, '0');
-    final day = value.day.toString().padLeft(2, '0');
-    final hour = value.hour.toString().padLeft(2, '0');
-    final minute = value.minute.toString().padLeft(2, '0');
-    return '${value.year}-$month-$day $hour:$minute';
   }
 
   @override
@@ -757,29 +707,6 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
     return FeatureScaffold(
       title: '工作区',
       description: '在这里创建或克隆工作区，并在准备完成后快速进入会话。',
-      headerActions: [
-        FilledButton.icon(
-          onPressed: _busy ? null : _createWorkspace,
-          icon: const Icon(Icons.create_new_folder_outlined),
-          label: const Text('新建工作区'),
-        ),
-        FilledButton.tonalIcon(
-          onPressed: _busy ? null : _cloneWorkspace,
-          icon: const Icon(Icons.download_for_offline_outlined),
-          label: const Text('克隆仓库'),
-        ),
-        OutlinedButton.icon(
-          onPressed: _busy ? null : () => _refresh(),
-          icon: const Icon(Icons.refresh_outlined),
-          label: const Text('刷新列表'),
-        ),
-        if (_activeWorkspaceId != null)
-          OutlinedButton.icon(
-            onPressed: widget.onOpenSessionsRequested,
-            icon: const Icon(Icons.chat_outlined),
-            label: const Text('进入当前会话'),
-          ),
-      ],
       children: [
         Card(
           child: ListTile(
@@ -788,9 +715,13 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
             subtitle: Text(_status),
           ),
         ),
-        _WorkspaceMetricsCard(
-          workspaces: _workspaces,
-          activeWorkspace: _findWorkspace(_workspaces, _activeWorkspaceId),
+        _WorkspacePrimaryActionsRow(
+          busy: _busy,
+          hasActiveWorkspace: _activeWorkspaceId != null,
+          onCreateWorkspace: _createWorkspace,
+          onCloneWorkspace: _cloneWorkspace,
+          onRefresh: _refresh,
+          onOpenSessionsRequested: widget.onOpenSessionsRequested,
         ),
         _WorkspaceListCard(
           workspaces: _workspaces,
@@ -800,51 +731,10 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
           onActivateWorkspace: _activateWorkspace,
           onRenameWorkspace: _renameWorkspace,
           onDeleteWorkspace: _deleteWorkspace,
-        ),
-        _WorkspaceDetailCard(
-          workspace: _selectedWorkspace,
-          paths: _selectedPaths,
-          busy: _busy,
-          activeWorkspaceId: _activeWorkspaceId,
-          formatDate: _formatDate,
-          onActivateWorkspace: _activateWorkspace,
-          onRenameWorkspace: _renameWorkspace,
           onOpenSessionsRequested: widget.onOpenSessionsRequested,
-        ),
-        _WorkspaceGitCard(
-          workspace: _selectedWorkspace,
-          paths: _selectedPaths,
-          busy: _busy,
-          repoReady: _isRepoReady(_selectedPaths),
           onSyncGit: _syncWorkspaceGit,
-        ),
-        _WorkspaceWebDavCard(
-          workspace: _selectedWorkspace,
-          paths: _selectedPaths,
-          busy: _busy,
-          endpointController: _webDavEndpointController,
-          basePathController: _webDavBasePathController,
-          remoteRootController: _webDavRemoteRootController,
-          basicUserController: _webDavBasicUserController,
-          basicPasswordController: _webDavBasicPasswordController,
-          bearerTokenController: _webDavBearerTokenController,
-          authType: _webDavAuthType,
-          status: _webDavStatus,
-          onDraftChanged: () {
-            if (!mounted) {
-              return;
-            }
-            setState(() {});
-          },
-          onAuthTypeChanged: (value) {
-            setState(() {
-              _webDavAuthType = value;
-            });
-          },
-          onSave: _saveWebDavSettings,
-          onTestConnection: _testWebDavConnection,
-          onPull: _pullFromWebDav,
-          onPush: _pushToWebDav,
+          repoReadyResolver: _isRepoReady,
+          selectedPaths: _selectedPaths,
         ),
         if (_busy) const _WorkspaceBusyCard(),
       ],

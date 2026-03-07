@@ -1,180 +1,24 @@
 part of 'settings_page.dart';
 
-class _BridgeStatusCard extends StatelessWidget {
-  const _BridgeStatusCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Card(
-      child: ListTile(
-        leading: Icon(Icons.memory_outlined),
-        title: Text('运行能力已就绪'),
-        subtitle: Text(
-          'Android 运行时、Git、MCP 与技能扩展都已接入当前应用，并统一按全局配置管理。',
-        ),
-      ),
-    );
-  }
-}
-
-class _ConnectionSection extends StatelessWidget {
-  const _ConnectionSection({
-    required this.settings,
-    required this.busy,
-    required this.modelController,
-    required this.baseUrlController,
-    required this.apiKeyController,
-    required this.approvalPolicyController,
-    required this.personalityController,
-    required this.availableModelCount,
-    required this.modelsLoading,
-    required this.modelsError,
-    required this.onSettingsChanged,
-    required this.onSave,
-    required this.onRefresh,
-    required this.onRefreshModels,
-    required this.onOpenModelPicker,
-  });
-
-  final CodexSettings settings;
-  final bool busy;
-  final TextEditingController modelController;
-  final TextEditingController baseUrlController;
-  final TextEditingController apiKeyController;
-  final TextEditingController approvalPolicyController;
-  final TextEditingController personalityController;
-  final int availableModelCount;
-  final bool modelsLoading;
-  final String? modelsError;
-  final ValueChanged<CodexSettings> onSettingsChanged;
-  final VoidCallback onSave;
-  final Future<void> Function({String? status}) onRefresh;
-  final Future<void> Function({bool openPicker}) onRefreshModels;
-  final Future<void> Function() onOpenModelPicker;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('连接与模型', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 12),
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('启用 Codex'),
-              subtitle: const Text('关闭后会保留本地数据，但不会在会话页发起运行。'),
-              value: settings.enabled,
-              onChanged: busy
-                  ? null
-                  : (value) =>
-                        onSettingsChanged(settings.copyWith(enabled: value)),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: modelController,
-              enabled: !busy,
-              decoration: const InputDecoration(labelText: '模型名称'),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: busy || modelsLoading
-                      ? null
-                      : () => onRefreshModels(openPicker: false),
-                  icon: const Icon(Icons.cloud_download_outlined),
-                  label: Text(modelsLoading ? '获取中...' : '获取模型'),
-                ),
-                FilledButton.tonalIcon(
-                  onPressed: busy || modelsLoading ? null : onOpenModelPicker,
-                  icon: const Icon(Icons.list_alt_outlined),
-                  label: const Text('从列表选择'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              availableModelCount > 0
-                  ? '已缓存 $availableModelCount 个模型，可直接从列表选择。'
-                  : '填写地址与密钥后，可直接拉取模型列表。',
-              style: theme.textTheme.bodySmall,
-            ),
-            if (modelsError?.trim().isNotEmpty == true) ...[
-              const SizedBox(height: 8),
-              Text(
-                modelsError!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ],
-            const SizedBox(height: 12),
-            TextField(
-              controller: baseUrlController,
-              enabled: !busy,
-              decoration: const InputDecoration(labelText: '服务地址'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: apiKeyController,
-              enabled: !busy,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: '访问令牌'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: approvalPolicyController,
-              enabled: !busy,
-              decoration: const InputDecoration(labelText: '审批策略'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: personalityController,
-              enabled: !busy,
-              decoration: const InputDecoration(labelText: '回复风格'),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                FilledButton(
-                  onPressed: busy ? null : onSave,
-                  child: const Text('保存设置'),
-                ),
-                OutlinedButton(
-                  onPressed: busy ? null : () => onRefresh(),
-                  child: const Text('刷新'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _PreferenceSection extends StatelessWidget {
   const _PreferenceSection({
     required this.settings,
     required this.busy,
-    required this.onSettingsChanged,
+    required this.onUpdatePreference,
   });
 
   final CodexSettings settings;
   final bool busy;
-  final ValueChanged<CodexSettings> onSettingsChanged;
+  final Future<void> Function(
+    CodexSettings Function(CodexSettings current) update, {
+    required String status,
+  })
+  onUpdatePreference;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -182,44 +26,54 @@ class _PreferenceSection extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('交互偏好', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(
+              '这里只保留会影响日常会话体验的偏好，修改后会立即保存。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
             const SizedBox(height: 12),
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
-              title: const Text('启用多代理特性'),
-              subtitle: const Text('在支持的场景下启用多代理协作能力。'),
-              value: settings.featuresMultiAgent,
-              onChanged: busy
-                  ? null
-                  : (value) => onSettingsChanged(
-                      settings.copyWith(featuresMultiAgent: value),
-                    ),
-            ),
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
               title: const Text('显示思考内容'),
-              subtitle: const Text('会话页会据此决定是否展示更详细的思路片段。'),
+              subtitle: const Text('会话页会显示更详细的过程片段。'),
               value: settings.uiShowThinking,
               onChanged: busy
                   ? null
-                  : (value) => onSettingsChanged(
-                      settings.copyWith(uiShowThinking: value),
+                  : (value) => onUpdatePreference(
+                      (current) => current.copyWith(uiShowThinking: value),
+                      status: value ? '已开启思考内容展示。' : '已关闭思考内容展示。',
                     ),
             ),
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
               title: const Text('保留运行日志'),
-              subtitle: const Text('开启后，可在当前会话中查看最近一次运行记录。'),
+              subtitle: const Text('用于保留最近运行记录，便于回看问题。'),
               value: settings.debugLogToFile,
               onChanged: busy
                   ? null
-                  : (value) => onSettingsChanged(
-                      settings.copyWith(debugLogToFile: value),
+                  : (value) => onUpdatePreference(
+                      (current) => current.copyWith(debugLogToFile: value),
+                      status: value ? '已开启运行日志。' : '已关闭运行日志。',
                     ),
             ),
             const SizedBox(height: 8),
-            Text(
-              '日志保留天数：${settings.debugLogRetentionDays}',
-              style: theme.textTheme.titleSmall,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '日志保留天数：${settings.debugLogRetentionDays} 天',
+                    style: theme.textTheme.titleSmall,
+                  ),
+                ),
+                Text(
+                  '${settings.debugLogRetentionDays}',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ],
             ),
             Slider.adaptive(
               min: 1,
@@ -228,145 +82,12 @@ class _PreferenceSection extends StatelessWidget {
               value: settings.debugLogRetentionDays.clamp(1, 30).toDouble(),
               onChanged: busy
                   ? null
-                  : (value) => onSettingsChanged(
-                      settings.copyWith(debugLogRetentionDays: value.round()),
+                  : (value) => onUpdatePreference(
+                      (current) => current.copyWith(
+                        debugLogRetentionDays: value.round(),
+                      ),
+                      status: '已更新日志保留天数。',
                     ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AdvancedSection extends StatelessWidget {
-  const _AdvancedSection({
-    required this.settings,
-    required this.busy,
-    required this.extraConfigController,
-    required this.rawConfigController,
-    required this.onSettingsChanged,
-  });
-
-  final CodexSettings settings;
-  final bool busy;
-  final TextEditingController extraConfigController;
-  final TextEditingController rawConfigController;
-  final ValueChanged<CodexSettings> onSettingsChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('高级配置', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 12),
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('使用完整自定义内容'),
-              subtitle: const Text('开启后，将直接使用下方完整内容，并跳过自动拼接。'),
-              value: settings.useRawConfigToml,
-              onChanged: busy
-                  ? null
-                  : (value) => onSettingsChanged(
-                      settings.copyWith(useRawConfigToml: value),
-                    ),
-            ),
-            const SizedBox(height: 12),
-            if (!settings.useRawConfigToml)
-              TextField(
-                controller: extraConfigController,
-                enabled: !busy,
-                minLines: 4,
-                maxLines: 8,
-                decoration: const InputDecoration(labelText: '附加配置片段'),
-              ),
-            if (settings.useRawConfigToml)
-              TextField(
-                controller: rawConfigController,
-                enabled: !busy,
-                minLines: 6,
-                maxLines: 10,
-                decoration: const InputDecoration(labelText: '完整自定义内容'),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ConfigPreviewSection extends StatelessWidget {
-  const _ConfigPreviewSection({
-    required this.previewText,
-    required this.previewError,
-    required this.previewWarnings,
-    required this.busy,
-    required this.onRefreshPreview,
-  });
-
-  final String previewText;
-  final String? previewError;
-  final List<String> previewWarnings;
-  final bool busy;
-  final Future<void> Function({String? status}) onRefreshPreview;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(child: Text('配置预览', style: theme.textTheme.titleMedium)),
-                OutlinedButton.icon(
-                  onPressed: busy ? null : () => onRefreshPreview(),
-                  icon: const Icon(Icons.refresh_outlined),
-                  label: const Text('刷新预览'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Text('保存前可先确认当前设置将生成的最终配置内容。'),
-            if (previewError?.trim().isNotEmpty == true) ...[
-              const SizedBox(height: 12),
-              Text(
-                previewError!,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ],
-            if (previewWarnings.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text('提醒', style: theme.textTheme.titleSmall),
-              const SizedBox(height: 6),
-              for (final warning in previewWarnings) Text('• $warning'),
-            ],
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest.withValues(
-                  alpha: 0.55,
-                ),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: SelectableText(
-                previewText.trim().isEmpty ? '当前还没有可预览的内容。' : previewText,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontFamily: 'monospace',
-                ),
-              ),
             ),
           ],
         ),
@@ -403,6 +124,7 @@ class _SkillsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -411,7 +133,21 @@ class _SkillsSection extends StatelessWidget {
           children: [
             Text('全局 Skills', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
-            const Text('统一管理全局扩展；在会话中输入 \$技能名 即可启用对应能力。'),
+            Text(
+              '统一管理会话里可调用的全局技能。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (skillsDirPath?.trim().isNotEmpty == true) ...[
+              const SizedBox(height: 8),
+              Text(
+                '当前目录：$skillsDirPath',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Wrap(
               spacing: 12,
@@ -429,16 +165,20 @@ class _SkillsSection extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Text('已安装：${installedSkills.length} 项'),
+            const SizedBox(height: 16),
+            Text('已安装 ${installedSkills.length} 项', style: theme.textTheme.titleSmall),
             const SizedBox(height: 12),
             if (installedSkills.isEmpty)
-              const Text('还没有全局 skills。')
+              const _SettingsHint(
+                icon: Icons.extension_off_outlined,
+                title: '还没有全局技能',
+                description: '新建后即可在会话里直接调用。',
+              )
             else
               Container(
                 decoration: BoxDecoration(
                   border: Border.all(color: theme.colorScheme.outlineVariant),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Column(
                   children: [
@@ -447,11 +187,9 @@ class _SkillsSection extends StatelessWidget {
                         leading: const Icon(Icons.extension_outlined),
                         title: Text('\$${installedSkills[index]}'),
                         subtitle: const Text('点击载入到编辑区'),
-                        trailing: const Icon(Icons.edit_outlined),
+                        trailing: const Icon(Icons.chevron_right),
                         enabled: !busy,
-                        onTap: busy
-                            ? null
-                            : () => onLoadSkill(installedSkills[index]),
+                        onTap: busy ? null : () => onLoadSkill(installedSkills[index]),
                       ),
                       if (index < installedSkills.length - 1)
                         Divider(
@@ -483,21 +221,42 @@ class _SkillsSection extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                FilledButton.icon(
-                  onPressed: busy ? null : onSaveSkill,
-                  icon: const Icon(Icons.save_outlined),
-                  label: const Text('保存技能'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: busy ? null : onDeleteSkill,
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('删除技能'),
-                ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final widthClass = context.adaptiveWidthClassOf(
+                  constraints.maxWidth,
+                );
+                final compact = widthClass.isCompact;
+                final actions = <Widget>[
+                  FilledButton.icon(
+                    onPressed: busy ? null : onSaveSkill,
+                    icon: const Icon(Icons.save_outlined),
+                    label: const Text('保存技能'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: busy ? null : onDeleteSkill,
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('删除技能'),
+                  ),
+                ];
+                return compact
+                    ? Column(
+                        children: [
+                          for (final action in actions) ...[
+                            SizedBox(width: double.infinity, child: action),
+                            if (action != actions.last) const SizedBox(height: 12),
+                          ],
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          for (final action in actions) ...[
+                            Expanded(child: action),
+                            if (action != actions.last) const SizedBox(width: 12),
+                          ],
+                        ],
+                      );
+              },
             ),
           ],
         ),
@@ -506,69 +265,47 @@ class _SkillsSection extends StatelessWidget {
   }
 }
 
-class _RuntimeSummarySection extends StatelessWidget {
-  const _RuntimeSummarySection({
-    required this.settings,
-    required this.apiKeySaved,
-    required this.mcpServerCount,
-    required this.installedSkills,
-    required this.materializedWarnings,
-    required this.busy,
-    required this.onMaterialize,
+class _SettingsHint extends StatelessWidget {
+  const _SettingsHint({
+    required this.icon,
+    required this.title,
+    required this.description,
   });
 
-  final CodexSettings settings;
-  final bool apiKeySaved;
-  final int mcpServerCount;
-  final List<String> installedSkills;
-  final List<String> materializedWarnings;
-  final bool busy;
-  final VoidCallback onMaterialize;
+  final IconData icon;
+  final String title;
+  final String description;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+        padding: const EdgeInsets.all(14),
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('运行摘要', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 12),
-            Text(
-              '模型：${settings.model?.trim().isNotEmpty == true ? settings.model : '未设置'}',
-            ),
-            Text(
-              '服务地址：${settings.openaiBaseUrl?.trim().isNotEmpty == true ? settings.openaiBaseUrl : '未设置'}',
-            ),
-            Text('访问令牌：${apiKeySaved ? '已保存' : '未保存'}'),
-            Text('审批策略：${settings.approvalPolicy}'),
-            Text('回复风格：${settings.personality}'),
-            Text('已配置扩展服务：$mcpServerCount 个'),
-            Text('当前启用 MCP：${settings.enabledGlobalMcpServerIds.length} 项'),
-            Text('可用快捷命令：${visibleCodexSlashCommands.length} 项'),
-            Text('全局扩展：${installedSkills.length} 项'),
-            if (installedSkills.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+            Icon(icon, color: theme.colorScheme.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  for (final skill in installedSkills) Chip(label: Text(skill)),
+                  Text(title, style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ],
               ),
-            ],
-            if (materializedWarnings.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text('提醒', style: theme.textTheme.titleSmall),
-              const SizedBox(height: 6),
-              for (final warning in materializedWarnings) Text('• $warning'),
-            ],
-            const SizedBox(height: 12),
-            FilledButton.tonal(
-              onPressed: busy ? null : onMaterialize,
-              child: const Text('生成运行配置'),
             ),
           ],
         ),
@@ -590,7 +327,7 @@ class _BusySettingsCard extends StatelessWidget {
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
         title: Text('正在同步设置'),
-        subtitle: Text('完成后会自动刷新摘要。'),
+        subtitle: Text('完成后会自动刷新当前内容。'),
       ),
     );
   }

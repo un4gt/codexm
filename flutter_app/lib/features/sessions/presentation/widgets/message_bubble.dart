@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../shared/widgets/adaptive_breakpoints.dart';
 import 'simple_markdown_view.dart';
 
 class MessageBubble extends StatelessWidget {
@@ -22,7 +23,12 @@ class MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final spec = _messageStyle(theme, role);
-    final maxBubbleWidth = MediaQuery.sizeOf(context).width >= 700 ? 720.0 : 560.0;
+    final widthClass = context.adaptiveWidthClass;
+    final maxBubbleWidth = switch (widthClass) {
+      AdaptiveWidthClass.compact => 560.0,
+      AdaptiveWidthClass.medium => 680.0,
+      AdaptiveWidthClass.expanded => 760.0,
+    };
 
     return Align(
       alignment: spec.alignment,

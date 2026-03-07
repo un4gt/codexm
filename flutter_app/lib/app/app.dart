@@ -115,11 +115,6 @@ class _AppShellState extends State<_AppShell> {
             _selectedIndex = 0;
           });
         },
-        onOpenSettingsRequested: () {
-          setState(() {
-            _selectedIndex = 3;
-          });
-        },
       ),
       const McpPage(),
       const SettingsPage(),

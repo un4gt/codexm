@@ -13,7 +13,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('请先创建并激活工作区'), findsOneWidget);
+    expect(find.text('先准备一个工作区'), findsOneWidget);
     expect(find.text('前往工作区'), findsOneWidget);
   });
 }

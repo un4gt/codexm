@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme/app_theme.dart';
+import 'adaptive_breakpoints.dart';
 
 class FeatureScaffold extends StatelessWidget {
   const FeatureScaffold({
@@ -22,6 +23,8 @@ class FeatureScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = context.appTokens;
+    final pagePadding = context.adaptivePagePadding;
+    final headerPadding = context.adaptiveHeaderPadding;
 
     return Scaffold(
       appBar: appBar,
@@ -32,7 +35,7 @@ class FeatureScaffold extends StatelessWidget {
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: tokens.maxContentWidth),
             child: ListView(
-              padding: tokens.pagePadding,
+              padding: pagePadding,
               children: [
                 DecoratedBox(
                   decoration: BoxDecoration(
@@ -43,7 +46,7 @@ class FeatureScaffold extends StatelessWidget {
                     ),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(20),
+                    padding: headerPadding,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -71,7 +74,7 @@ class FeatureScaffold extends StatelessWidget {
                   SizedBox(height: index == 0 ? tokens.sectionSpacing : tokens.compactSpacing),
                   children[index],
                 ],
-                SizedBox(height: MediaQuery.paddingOf(context).bottom + tokens.sectionSpacing),
+                SizedBox(height: MediaQuery.paddingOf(context).bottom + pagePadding.bottom),
               ],
             ),
           ),

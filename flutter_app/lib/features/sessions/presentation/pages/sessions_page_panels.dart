@@ -1,78 +1,6 @@
 part of 'sessions_page.dart';
 
-class _StatusHeader extends StatelessWidget {
-  const _StatusHeader({
-    required this.status,
-    required this.workspace,
-    required this.settingsReady,
-    required this.compact,
-  });
-
-  final String status;
-  final Workspace? workspace;
-  final bool settingsReady;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = context.appTokens;
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(tokens.cardRadius),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
-        ),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(compact ? 14 : 16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: settingsReady
-                    ? theme.colorScheme.primaryContainer
-                    : theme.colorScheme.errorContainer,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Icon(
-                  settingsReady ? Icons.chat_outlined : Icons.warning_amber_outlined,
-                  color: settingsReady
-                      ? theme.colorScheme.onPrimaryContainer
-                      : theme.colorScheme.onErrorContainer,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    workspace?.name ?? '尚未选择工作区',
-                    style: theme.textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    status,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+enum _SessionAction { rename, delete }
 
 class _WorkspaceEmptyState extends StatelessWidget {
   const _WorkspaceEmptyState({this.onOpenWorkspacesRequested});
@@ -96,12 +24,12 @@ class _WorkspaceEmptyState extends StatelessWidget {
                 DecoratedBox(
                   decoration: BoxDecoration(
                     color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(24),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(18),
                     child: Icon(
-                      Icons.folder_off_outlined,
+                      Icons.chat_bubble_outline,
                       size: 36,
                       color: theme.colorScheme.onPrimaryContainer,
                     ),
@@ -109,13 +37,13 @@ class _WorkspaceEmptyState extends StatelessWidget {
                 ),
                 SizedBox(height: tokens.compactSpacing),
                 Text(
-                  '请先创建并激活工作区',
+                  '先准备一个工作区',
                   style: theme.textTheme.titleLarge,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '会话依附于工作区运行。准备好工作区后，这里会自动恢复主会话与历史对话。',
+                  '会话会围绕当前工作区展开。准备好工作区后，这里会直接显示消息列表和底部输入区。',
                   style: theme.textTheme.bodyLarge?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -136,70 +64,17 @@ class _WorkspaceEmptyState extends StatelessWidget {
   }
 }
 
-class _SessionOverviewPanel extends StatelessWidget {
-  const _SessionOverviewPanel({
-    required this.workspace,
-    required this.session,
-    required this.legacySessionCount,
-  });
-
-  final Workspace workspace;
-  final Session? session;
-  final int legacySessionCount;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('会话概览', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 12),
-            _InfoTile(
-              icon: Icons.folder_special_outlined,
-              title: '当前工作区',
-              description: workspace.name,
-            ),
-            _InfoTile(
-              icon: Icons.chat_bubble_outline,
-              title: '当前会话',
-              description: session?.title ?? '主会话',
-            ),
-            _InfoTile(
-              icon: Icons.history_outlined,
-              title: '历史恢复',
-              description: legacySessionCount > 0
-                  ? '检测到 $legacySessionCount 个历史会话，已自动继续最近一条。'
-                  : '当前工作区保持单主会话，下次进入会自动恢复历史消息。',
-            ),
-            _InfoTile(
-              icon: Icons.hub_outlined,
-              title: '线程状态',
-              description: session?.codexThreadId?.trim().isNotEmpty == true
-                  ? '已保存，可自动继续。'
-                  : '尚未建立，首次发送时会自动创建。',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _ChatPanel extends StatelessWidget {
   const _ChatPanel({
     required this.workspace,
+    required this.sessions,
     required this.selectedSession,
     required this.messages,
-    required this.debugTail,
     required this.showThinking,
     required this.settingsEnabled,
     required this.hasApiKey,
     required this.running,
+    required this.status,
     required this.pendingAssistantText,
     required this.pendingStartedAt,
     required this.scrollController,
@@ -212,23 +87,21 @@ class _ChatPanel extends StatelessWidget {
     required this.onSelectMentionSuggestion,
     required this.onRemovePendingMention,
     required this.onSendMessage,
-    required this.onRunReview,
-    required this.onCompactThread,
-    required this.onOpenSettingsRequested,
-    required this.currentMode,
-    required this.onModeChanged,
+    required this.onOpenSessionSwitcher,
+    required this.onCreateSession,
     required this.canSend,
     required this.canEditComposer,
   });
 
   final Workspace workspace;
+  final List<Session> sessions;
   final Session? selectedSession;
   final List<ChatMessage> messages;
-  final String debugTail;
   final bool showThinking;
   final bool settingsEnabled;
   final bool hasApiKey;
   final bool running;
+  final String status;
   final String pendingAssistantText;
   final int pendingStartedAt;
   final ScrollController scrollController;
@@ -241,268 +114,528 @@ class _ChatPanel extends StatelessWidget {
   final ValueChanged<ComposerMentionSuggestion> onSelectMentionSuggestion;
   final ValueChanged<ComposerPendingMention> onRemovePendingMention;
   final VoidCallback onSendMessage;
-  final VoidCallback onRunReview;
-  final VoidCallback onCompactThread;
-  final VoidCallback? onOpenSettingsRequested;
-  final CodexCollaborationMode currentMode;
-  final ValueChanged<CodexCollaborationMode> onModeChanged;
+  final VoidCallback onOpenSessionSwitcher;
+  final VoidCallback onCreateSession;
   final bool canSend;
   final bool canEditComposer;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final tokens = context.appTokens;
     final mentionToken = extractMentionToken(composerController.text);
     final showSuggestions = slashSuggestions.isNotEmpty ||
         mentionLoading ||
         mentionSuggestions.isNotEmpty ||
         mentionToken != null;
+    final widthClass = context.adaptiveWidthClass;
+    final contentMaxWidth = widthClass.isExpanded ? 980.0 : double.infinity;
 
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: contentMaxWidth),
+        child: Column(
+          children: [
+            _ChatHeader(
+              workspace: workspace,
+              selectedSession: selectedSession,
+              sessionCount: sessions.length,
+              status: status,
+              settingsReady: settingsEnabled && hasApiKey,
+              onOpenSessionSwitcher: onOpenSessionSwitcher,
+              onCreateSession: onCreateSession,
+            ),
+            SizedBox(height: tokens.compactSpacing),
+            Expanded(
+              child: Card(
+                clipBehavior: Clip.antiAlias,
+                child: Column(
                   children: [
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            selectedSession?.title ?? '主会话',
-                            style: theme.textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            workspace.localPath,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
+                      child: messages.isEmpty && pendingAssistantText.trim().isEmpty
+                          ? _ChatEmptyState(
+                              workspaceName: workspace.name,
+                              canDirectChat: settingsEnabled && hasApiKey,
+                            )
+                          : ListView(
+                              controller: scrollController,
+                              padding: EdgeInsets.fromLTRB(
+                                widthClass.isExpanded ? 24 : 16,
+                                16,
+                                widthClass.isExpanded ? 24 : 16,
+                                24,
+                              ),
+                              children: [
+                                for (final message in messages)
+                                  MessageBubble(
+                                    role: message.role,
+                                    content: message.content,
+                                    createdAt: message.createdAt,
+                                    showThinking: showThinking,
+                                  ),
+                                if (pendingAssistantText.trim().isNotEmpty)
+                                  MessageBubble(
+                                    role: 'assistant',
+                                    content: pendingAssistantText,
+                                    createdAt: pendingStartedAt,
+                                    showThinking: showThinking,
+                                    isStreaming: true,
+                                  ),
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
                     ),
-                    const SizedBox(width: 12),
-                    SegmentedButton<CodexCollaborationMode>(
-                      segments: const [
-                        ButtonSegment(
-                          value: CodexCollaborationMode.standard,
-                          label: Text('默认'),
-                        ),
-                        ButtonSegment(
-                          value: CodexCollaborationMode.plan,
-                          label: Text('规划'),
-                        ),
-                      ],
-                      selected: <CodexCollaborationMode>{currentMode},
-                      onSelectionChanged: selectedSession == null || running
-                          ? null
-                          : (selection) => onModeChanged(selection.first),
-                    ),
-                  ],
-                ),
-                SizedBox(height: tokens.compactSpacing),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    FilledButton.tonalIcon(
-                      onPressed: running || selectedSession == null ? null : onRunReview,
-                      icon: const Icon(Icons.rule_folder_outlined),
-                      label: const Text('审查工作区'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: running ||
-                              selectedSession == null ||
-                              selectedSession?.codexThreadId?.trim().isEmpty == true
-                          ? null
-                          : onCompactThread,
-                      icon: const Icon(Icons.compress_outlined),
-                      label: const Text('整理上下文'),
-                    ),
-                  ],
-                ),
-                if (!settingsEnabled || !hasApiKey) ...[
-                  SizedBox(height: tokens.compactSpacing),
-                  _NoticeBanner(
-                    icon: Icons.vpn_key_outlined,
-                    title: '连接设置尚未完整',
-                    description: settingsEnabled
-                        ? '本地命令仍可使用；若要直接对话，请先在设置中补齐访问令牌。'
-                        : '当前已暂停 Codex 运行；本地命令仍可使用。',
-                    trailing: onOpenSettingsRequested == null
-                        ? null
-                        : TextButton(
-                            onPressed: onOpenSettingsRequested,
-                            child: const Text('前往设置'),
-                          ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: messages.isEmpty && pendingAssistantText.trim().isEmpty
-                ? _ChatEmptyState(
-                    workspaceName: workspace.name,
-                    showDirectChatHint: settingsEnabled && hasApiKey,
-                  )
-                : ListView(
-                    controller: scrollController,
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                    children: [
-                      for (final message in messages)
-                        MessageBubble(
-                          role: message.role,
-                          content: message.content,
-                          createdAt: message.createdAt,
-                          showThinking: showThinking,
-                        ),
-                      if (pendingAssistantText.trim().isNotEmpty)
-                        MessageBubble(
-                          role: 'assistant',
-                          content: pendingAssistantText,
-                          createdAt: pendingStartedAt,
-                          showThinking: showThinking,
-                          isStreaming: true,
-                        ),
-                    ],
-                  ),
-          ),
-          if (debugTail.trim().isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                childrenPadding: const EdgeInsets.only(bottom: 12),
-                title: const Text('最近运行日志'),
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: SelectableText(
-                      debugTail,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontFamily: 'monospace',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerLow,
-              border: Border(
-                top: BorderSide(
-                  color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
-                ),
-              ),
-            ),
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                16,
-                16,
-                16 + MediaQuery.paddingOf(context).bottom,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '在这里输入消息',
-                    style: theme.textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    running ? 'Codex 正在回复中，请稍候。' : '支持直接提问，也支持 `/` 命令与 `@` 文件/提交标记。',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  if (pendingMentions.isNotEmpty) ...[
-                    SizedBox(height: tokens.compactSpacing),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final mention in pendingMentions)
-                          InputChip(
-                            label: Text('@${mention.label}'),
-                            avatar: Icon(
-                              mention.kind == ComposerMentionKind.file
-                                  ? Icons.insert_drive_file_outlined
-                                  : Icons.account_tree_outlined,
-                              size: 18,
-                            ),
-                            onDeleted: () => onRemovePendingMention(mention),
-                          ),
-                      ],
-                    ),
-                  ],
-                  SizedBox(height: tokens.compactSpacing),
-                  TextField(
-                    controller: composerController,
-                    enabled: canEditComposer,
-                    minLines: 4,
-                    maxLines: 6,
-                    textInputAction: TextInputAction.newline,
-                    decoration: const InputDecoration(
-                      labelText: '输入消息',
-                      hintText: '例如：帮我检查当前工作区，或输入 /review。',
-                    ),
-                  ),
-                  if (showSuggestions) ...[
-                    SizedBox(height: tokens.compactSpacing),
-                    _ComposerSuggestionsPanel(
+                    _ComposerPanel(
+                      settingsEnabled: settingsEnabled,
+                      hasApiKey: hasApiKey,
+                      running: running,
+                      composerController: composerController,
+                      pendingMentions: pendingMentions,
                       slashSuggestions: slashSuggestions,
-                      mentionLoading: mentionLoading,
                       mentionSuggestions: mentionSuggestions,
+                      mentionLoading: mentionLoading,
                       onSelectSlashSuggestion: onSelectSlashSuggestion,
                       onSelectMentionSuggestion: onSelectMentionSuggestion,
+                      onRemovePendingMention: onRemovePendingMention,
+                      onSendMessage: onSendMessage,
+                      canSend: canSend,
+                      canEditComposer: canEditComposer,
+                      showSuggestions: showSuggestions,
                     ),
                   ],
-                  SizedBox(height: tokens.compactSpacing),
-                  Row(
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatHeader extends StatelessWidget {
+  const _ChatHeader({
+    required this.workspace,
+    required this.selectedSession,
+    required this.sessionCount,
+    required this.status,
+    required this.settingsReady,
+    required this.onOpenSessionSwitcher,
+    required this.onCreateSession,
+  });
+
+  final Workspace workspace;
+  final Session? selectedSession;
+  final int sessionCount;
+  final String status;
+  final bool settingsReady;
+  final VoidCallback onOpenSessionSwitcher;
+  final VoidCallback onCreateSession;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = context.appTokens;
+    final widthClass = context.adaptiveWidthClass;
+    final compact = widthClass.isCompact;
+    final panelPadding = switch (widthClass) {
+      AdaptiveWidthClass.compact => const EdgeInsets.all(16),
+      AdaptiveWidthClass.medium => const EdgeInsets.all(20),
+      AdaptiveWidthClass.expanded => const EdgeInsets.all(24),
+    };
+    final sectionGap = widthClass.isExpanded ? 16.0 : 12.0;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(tokens.cardRadius),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
+        ),
+      ),
+      child: Padding(
+        padding: panelPadding,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            compact
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        selectedSession?.title ?? '主会话',
+                        style: theme.textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        workspace.name,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      SizedBox(height: sectionGap),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonalIcon(
+                          onPressed: onOpenSessionSwitcher,
+                          icon: const Icon(Icons.swap_horiz_outlined),
+                          label: Text('会话 $sessionCount'),
+                        ),
+                      ),
+                    ],
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              selectedSession?.title ?? '主会话',
+                              style: theme.textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              workspace.name,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton.tonalIcon(
+                        onPressed: onOpenSessionSwitcher,
+                        icon: const Icon(Icons.swap_horiz_outlined),
+                        label: Text('会话 $sessionCount'),
+                      ),
+                    ],
+                  ),
+            SizedBox(height: sectionGap),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _HeaderBadge(
+                  icon: settingsReady
+                      ? Icons.check_circle_outline
+                      : Icons.vpn_key_outlined,
+                  label: settingsReady ? '可直接发送消息' : '发送前需完成连接设置',
+                  emphasized: settingsReady,
+                ),
+                _HeaderBadge(
+                  icon: Icons.folder_open_outlined,
+                  label: workspace.localPath,
+                ),
+              ],
+            ),
+            SizedBox(height: sectionGap),
+            compact
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        status,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: onCreateSession,
+                          icon: const Icon(Icons.add_comment_outlined),
+                          label: const Text('新建会话'),
+                        ),
+                      ),
+                    ],
+                  )
+                : Row(
                     children: [
                       Expanded(
                         child: Text(
-                          canEditComposer
-                              ? '底部输入区始终可用；输入后点右侧“发送”即可。'
-                              : '当前无法输入，请等待当前操作完成或先准备工作区。',
+                          status,
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
-                      FilledButton.icon(
-                        onPressed: canSend ? onSendMessage : null,
-                        icon: const Icon(Icons.send_outlined),
-                        label: const Text('发送'),
+                      OutlinedButton.icon(
+                        onPressed: onCreateSession,
+                        icon: const Icon(Icons.add_comment_outlined),
+                        label: const Text('新建会话'),
                       ),
                     ],
                   ),
-                ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HeaderBadge extends StatelessWidget {
+  const _HeaderBadge({
+    required this.icon,
+    required this.label,
+    this.emphasized = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: emphasized
+            ? theme.colorScheme.primaryContainer
+            : theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 18),
+            const SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 260),
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelLarge,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ComposerPanel extends StatelessWidget {
+  const _ComposerPanel({
+    required this.settingsEnabled,
+    required this.hasApiKey,
+    required this.running,
+    required this.composerController,
+    required this.pendingMentions,
+    required this.slashSuggestions,
+    required this.mentionSuggestions,
+    required this.mentionLoading,
+    required this.onSelectSlashSuggestion,
+    required this.onSelectMentionSuggestion,
+    required this.onRemovePendingMention,
+    required this.onSendMessage,
+    required this.canSend,
+    required this.canEditComposer,
+    required this.showSuggestions,
+  });
+
+  final bool settingsEnabled;
+  final bool hasApiKey;
+  final bool running;
+  final TextEditingController composerController;
+  final List<ComposerPendingMention> pendingMentions;
+  final List<CodexSlashCommand> slashSuggestions;
+  final List<ComposerMentionSuggestion> mentionSuggestions;
+  final bool mentionLoading;
+  final ValueChanged<CodexSlashCommand> onSelectSlashSuggestion;
+  final ValueChanged<ComposerMentionSuggestion> onSelectMentionSuggestion;
+  final ValueChanged<ComposerPendingMention> onRemovePendingMention;
+  final VoidCallback onSendMessage;
+  final bool canSend;
+  final bool canEditComposer;
+  final bool showSuggestions;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = context.appTokens;
+    final widthClass = context.adaptiveWidthClass;
+    final compact = widthClass.isCompact;
+    final horizontalPadding = switch (widthClass) {
+      AdaptiveWidthClass.compact => 16.0,
+      AdaptiveWidthClass.medium => 20.0,
+      AdaptiveWidthClass.expanded => 24.0,
+    };
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        border: Border(
+          top: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
           ),
-        ],
+        ),
+      ),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          horizontalPadding,
+          14,
+          horizontalPadding,
+          14 + MediaQuery.paddingOf(context).bottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!settingsEnabled || !hasApiKey)
+              _InlineNotice(
+                icon: Icons.vpn_key_outlined,
+                text: settingsEnabled
+                    ? '还未完成连接设置，本地命令仍可使用；直接对话前请先补齐访问令牌。'
+                    : '当前已暂停运行能力，暂时只能使用本地命令。',
+              ),
+            if (!settingsEnabled || !hasApiKey)
+              SizedBox(height: tokens.compactSpacing),
+            Text(
+              '直接输入消息',
+              style: theme.textTheme.titleSmall,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              running ? '正在回复中，请稍候。' : '消息输入区固定在底部，支持 `/` 命令与 `@` 文件/提交标记。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (pendingMentions.isNotEmpty) ...[
+              SizedBox(height: tokens.compactSpacing),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final mention in pendingMentions)
+                    InputChip(
+                      label: Text('@${mention.label}'),
+                      avatar: Icon(
+                        mention.kind == ComposerMentionKind.file
+                            ? Icons.insert_drive_file_outlined
+                            : Icons.account_tree_outlined,
+                        size: 18,
+                      ),
+                      onDeleted: () => onRemovePendingMention(mention),
+                    ),
+                ],
+              ),
+            ],
+            SizedBox(height: tokens.compactSpacing),
+            compact
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        controller: composerController,
+                        enabled: canEditComposer,
+                        minLines: 3,
+                        maxLines: 6,
+                        textInputAction: TextInputAction.newline,
+                        decoration: const InputDecoration(
+                          hintText: '输入消息，或输入 /review、@文件名 ...',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton(
+                          onPressed: canSend ? onSendMessage : null,
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(56, 56),
+                            shape: const CircleBorder(),
+                            padding: EdgeInsets.zero,
+                          ),
+                          child: const Icon(Icons.arrow_upward_rounded),
+                        ),
+                      ),
+                    ],
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: composerController,
+                          enabled: canEditComposer,
+                          minLines: 3,
+                          maxLines: 6,
+                          textInputAction: TextInputAction.newline,
+                          decoration: const InputDecoration(
+                            hintText: '输入消息，或输入 /review、@文件名 ...',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton(
+                        onPressed: canSend ? onSendMessage : null,
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(56, 56),
+                          shape: const CircleBorder(),
+                          padding: EdgeInsets.zero,
+                        ),
+                        child: const Icon(Icons.arrow_upward_rounded),
+                      ),
+                    ],
+                  ),
+            if (showSuggestions) ...[
+              SizedBox(height: tokens.compactSpacing),
+              _ComposerSuggestionsPanel(
+                slashSuggestions: slashSuggestions,
+                mentionLoading: mentionLoading,
+                mentionSuggestions: mentionSuggestions,
+                onSelectSlashSuggestion: onSelectSlashSuggestion,
+                onSelectMentionSuggestion: onSelectMentionSuggestion,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineNotice extends StatelessWidget {
+  const _InlineNotice({
+    required this.icon,
+    required this.text,
+  });
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.errorContainer.withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: theme.colorScheme.onErrorContainer),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                text,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onErrorContainer,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -589,11 +722,11 @@ class _ComposerSuggestionsPanel extends StatelessWidget {
 class _ChatEmptyState extends StatelessWidget {
   const _ChatEmptyState({
     required this.workspaceName,
-    required this.showDirectChatHint,
+    required this.canDirectChat,
   });
 
   final String workspaceName;
-  final bool showDirectChatHint;
+  final bool canDirectChat;
 
   @override
   Widget build(BuildContext context) {
@@ -610,139 +743,32 @@ class _ChatEmptyState extends StatelessWidget {
               DecoratedBox(
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(24),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(18),
                   child: Icon(
-                    Icons.chat_bubble_outline,
-                    size: 32,
+                    Icons.forum_outlined,
+                    size: 36,
                     color: theme.colorScheme.onPrimaryContainer,
                   ),
                 ),
               ),
               const SizedBox(height: 16),
               Text(
-                '已进入 $workspaceName',
+                '开始和 $workspaceName 对话',
                 style: theme.textTheme.titleLarge,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
               Text(
-                showDirectChatHint
-                    ? '请直接在页面底部输入消息，然后点击“发送”。也可以先用 /review 审查当前工作区。'
-                    : '页面底部就是输入区。若要直接对话，请先在设置中补齐访问令牌。',
+                canDirectChat
+                    ? '页面底部就是输入区。输入你的第一条消息后，发送按钮会立即可用。'
+                    : '页面底部就是输入区。补齐连接设置后，即可直接发送消息。',
                 style: theme.textTheme.bodyLarge?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
                 textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NoticeBanner extends StatelessWidget {
-  const _NoticeBanner({
-    required this.icon,
-    required this.title,
-    required this.description,
-    this.trailing,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.errorContainer.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: theme.colorScheme.onErrorContainer),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: theme.textTheme.titleSmall),
-                  const SizedBox(height: 4),
-                  Text(
-                    description,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onErrorContainer,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (trailing != null) ...[
-              const SizedBox(width: 12),
-              trailing!,
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoTile extends StatelessWidget {
-  const _InfoTile({
-    required this.icon,
-    required this.title,
-    required this.description,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: theme.textTheme.labelLarge),
-                    const SizedBox(height: 4),
-                    Text(
-                      description,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),

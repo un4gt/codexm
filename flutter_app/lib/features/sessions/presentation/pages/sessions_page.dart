@@ -4,6 +4,7 @@ import 'package:codexm_native/codexm_native.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_theme.dart';
+import '../../../../shared/widgets/adaptive_breakpoints.dart';
 import '../../../codex/application/codex_models.dart';
 import '../../../codex/application/codex_session_runner.dart';
 import '../../../codex/application/codex_skills_store.dart';
@@ -13,7 +14,6 @@ import '../../../settings/application/codex_settings_store.dart';
 import '../../../workspaces/application/workspace_models.dart';
 import '../../../workspaces/application/workspace_paths.dart';
 import '../../../workspaces/application/workspace_store.dart';
-import '../../application/debug_log_store.dart';
 import '../../application/session_composer_logic.dart';
 import '../../application/session_models.dart';
 import '../../application/session_store.dart';
@@ -30,7 +30,6 @@ class SessionsPage extends StatefulWidget {
     this.onActiveWorkspaceChanged,
     this.onSessionSelected,
     this.onOpenWorkspacesRequested,
-    this.onOpenSettingsRequested,
   });
 
   final WorkspaceId? activeWorkspaceId;
@@ -38,7 +37,6 @@ class SessionsPage extends StatefulWidget {
   final ValueChanged<Workspace?>? onActiveWorkspaceChanged;
   final ValueChanged<Session?>? onSessionSelected;
   final VoidCallback? onOpenWorkspacesRequested;
-  final VoidCallback? onOpenSettingsRequested;
 
   @override
   State<SessionsPage> createState() => _SessionsPageState();
@@ -49,7 +47,6 @@ class _SessionsPageState extends State<SessionsPage> {
   final _workspaceStore = WorkspaceStore();
   final _workspaceDirectoryService = WorkspaceDirectoryService();
   final _sessionStore = SessionStore();
-  final _debugLogStore = DebugLogStore();
   final _settingsStore = CodexSettingsStore();
   final _mcpStore = McpStore();
   final _skillsStore = CodexSkillsStore();
@@ -61,7 +58,6 @@ class _SessionsPageState extends State<SessionsPage> {
   List<Session> _sessions = const <Session>[];
   SessionId? _selectedSessionId;
   List<ChatMessage> _messages = const <ChatMessage>[];
-  String _debugTail = '';
   CodexSettings _settings = const CodexSettings();
   bool _hasApiKey = false;
   bool _busy = false;
@@ -122,7 +118,6 @@ class _SessionsPageState extends State<SessionsPage> {
         _sessions = const <Session>[];
         _selectedSessionId = null;
         _messages = const <ChatMessage>[];
-        _debugTail = '';
         _settings = settings;
         _hasApiKey = apiKey?.trim().isNotEmpty == true;
         _installedSkills = skills;
@@ -145,12 +140,21 @@ class _SessionsPageState extends State<SessionsPage> {
       title: '主会话',
     );
     final sessions = await _sessionStore.listSessions(workspace.id);
-    final messages = await _sessionStore.listMessages(workspace.id, primary.id);
-    final debugTail = await _debugLogStore.readLatestDebugLogTail(
-      workspaceId: workspace.id,
-      maxChars: 1200,
+    final preferredSessionId =
+        widget.selectedSessionId ??
+        (workspace.id == previousWorkspaceId ? _selectedSessionId : null) ??
+        primary.id;
+    final selectedSessionId = sessions.any(
+      (session) => session.id == preferredSessionId,
+    )
+        ? preferredSessionId
+        : primary.id;
+    final messages = await _sessionStore.listMessages(
+      workspace.id,
+      selectedSessionId,
     );
     final workspaceChanged = previousWorkspaceId != workspace.id;
+    final legacySessionCount = sessions.length > 1 ? sessions.length - 1 : 0;
 
     if (!mounted) {
       return;
@@ -159,13 +163,12 @@ class _SessionsPageState extends State<SessionsPage> {
     setState(() {
       _activeWorkspace = workspace;
       _sessions = sessions;
-      _selectedSessionId = primary.id;
+      _selectedSessionId = selectedSessionId;
       _messages = messages;
-      _debugTail = debugTail;
       _settings = settings;
       _hasApiKey = apiKey?.trim().isNotEmpty == true;
       _installedSkills = skills;
-      _legacySessionCount = sessions.length > 1 ? sessions.length - 1 : 0;
+      _legacySessionCount = legacySessionCount;
       if (workspaceChanged) {
         _pendingMentions = const <ComposerPendingMention>[];
         _slashSuggestions = const <CodexSlashCommand>[];
@@ -176,13 +179,15 @@ class _SessionsPageState extends State<SessionsPage> {
         _activeMentionQuery = null;
       }
       _status = status ??
-          (_legacySessionCount > 0
-              ? '检测到 $_legacySessionCount 个历史会话，已自动继续最近主会话。'
+          (legacySessionCount > 0
+              ? '检测到 $legacySessionCount 个历史会话，已自动继续最近主会话。'
               : '已恢复当前工作区的主会话。');
     });
 
     widget.onActiveWorkspaceChanged?.call(workspace);
-    widget.onSessionSelected?.call(primary);
+    widget.onSessionSelected?.call(
+      _findSessionById(sessions, selectedSessionId) ?? primary,
+    );
     _handleComposerChanged();
     _scrollToBottom();
   }
@@ -196,12 +201,15 @@ class _SessionsPageState extends State<SessionsPage> {
   }
 
   Session? get _selectedSession {
-    final selectedId = _selectedSessionId;
-    if (selectedId == null) {
+    return _findSessionById(_sessions, _selectedSessionId);
+  }
+
+  Session? _findSessionById(List<Session> sessions, SessionId? sessionId) {
+    if (sessionId == null) {
       return null;
     }
-    for (final session in _sessions) {
-      if (session.id == selectedId) {
+    for (final session in sessions) {
+      if (session.id == sessionId) {
         return session;
       }
     }
@@ -358,100 +366,42 @@ class _SessionsPageState extends State<SessionsPage> {
     final selectedSession = _selectedSession;
     final canEditComposer = !_busy && !_running && _activeWorkspace != null;
     final canSend = canEditComposer && _composerController.text.trim().isNotEmpty;
-    final tokens = context.appTokens;
+    final pagePadding = context.adaptivePagePadding;
 
     return SafeArea(
       child: Scaffold(
-        appBar: AppBar(title: const Text('会话')),
         body: Padding(
-          padding: tokens.pagePadding,
+          padding: pagePadding,
           child: _activeWorkspace == null
               ? _WorkspaceEmptyState(
                   onOpenWorkspacesRequested: widget.onOpenWorkspacesRequested,
                 )
-              : LayoutBuilder(
-                  builder: (context, constraints) {
-                    final wide = constraints.maxWidth >= 960;
-                    final summaryPanel = _SessionOverviewPanel(
-                      workspace: _activeWorkspace!,
-                      session: selectedSession,
-                      legacySessionCount: _legacySessionCount,
-                    );
-                    final chatPanel = _ChatPanel(
-                      workspace: _activeWorkspace!,
-                      selectedSession: selectedSession,
-                      messages: _messages,
-                      debugTail: _debugTail,
-                      showThinking: _settings.uiShowThinking,
-                      settingsEnabled: _settings.enabled,
-                      hasApiKey: _hasApiKey,
-                      running: _running,
-                      pendingAssistantText: _pendingAssistantText,
-                      pendingStartedAt: _pendingStartedAt,
-                      scrollController: _messagesScrollController,
-                      composerController: _composerController,
-                      pendingMentions: _pendingMentions,
-                      slashSuggestions: _slashSuggestions,
-                      mentionSuggestions: _mentionSuggestions,
-                      mentionLoading: _mentionLoading,
-                      onSelectSlashSuggestion: _applySlashSuggestion,
-                      onSelectMentionSuggestion: _applyMentionSuggestion,
-                      onRemovePendingMention: _removePendingMention,
-                      onSendMessage: _sendMessage,
-                      onRunReview: _runReview,
-                      onCompactThread: _compactThread,
-                      onOpenSettingsRequested: widget.onOpenSettingsRequested,
-                      currentMode:
-                          selectedSession?.codexCollaborationMode == 'plan'
-                          ? CodexCollaborationMode.plan
-                          : CodexCollaborationMode.standard,
-                      onModeChanged: _changeCollaborationMode,
-                      canSend: canSend,
-                      canEditComposer: canEditComposer,
-                    );
-
-                    if (wide) {
-                      return Column(
-                        children: [
-                          _StatusHeader(
-                            status: _status,
-                            workspace: _activeWorkspace,
-                            settingsReady: _settings.enabled && _hasApiKey,
-                            compact: false,
-                          ),
-                          SizedBox(height: tokens.sectionSpacing),
-                          Expanded(
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                SizedBox(width: 320, child: summaryPanel),
-                                SizedBox(width: tokens.sectionSpacing),
-                                Expanded(child: chatPanel),
-                              ],
-                            ),
-                          ),
-                        ],
-                      );
-                    }
-
-                    return Column(
-                      children: [
-                        _StatusHeader(
-                          status: _status,
-                          workspace: _activeWorkspace,
-                          settingsReady: _settings.enabled && _hasApiKey,
-                          compact: true,
-                        ),
-                        SizedBox(height: tokens.compactSpacing),
-                        SizedBox(
-                          height: 184,
-                          child: summaryPanel,
-                        ),
-                        SizedBox(height: tokens.sectionSpacing),
-                        Expanded(child: chatPanel),
-                      ],
-                    );
-                  },
+              : _ChatPanel(
+                  workspace: _activeWorkspace!,
+                  sessions: _sessions,
+                  selectedSession: selectedSession,
+                  messages: _messages,
+                  showThinking: _settings.uiShowThinking,
+                  settingsEnabled: _settings.enabled,
+                  hasApiKey: _hasApiKey,
+                  running: _running,
+                  status: _status,
+                  pendingAssistantText: _pendingAssistantText,
+                  pendingStartedAt: _pendingStartedAt,
+                  scrollController: _messagesScrollController,
+                  composerController: _composerController,
+                  pendingMentions: _pendingMentions,
+                  slashSuggestions: _slashSuggestions,
+                  mentionSuggestions: _mentionSuggestions,
+                  mentionLoading: _mentionLoading,
+                  onSelectSlashSuggestion: _applySlashSuggestion,
+                  onSelectMentionSuggestion: _applyMentionSuggestion,
+                  onRemovePendingMention: _removePendingMention,
+                  onSendMessage: _sendMessage,
+                  onOpenSessionSwitcher: _openSessionSwitcher,
+                  onCreateSession: _createSession,
+                  canSend: canSend,
+                  canEditComposer: canEditComposer,
                 ),
         ),
       ),
