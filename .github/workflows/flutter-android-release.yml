@@ -17,6 +17,10 @@ jobs:
   build:
     name: Build Flutter arm64 release
     runs-on: ubuntu-latest
+    outputs:
+      version_name: ${{ steps.version.outputs.version_name }}
+      version_code: ${{ steps.version.outputs.version_code }}
+      artifact_basename: ${{ steps.version.outputs.artifact_basename }}
     defaults:
       run:
         working-directory: flutter_app
@@ -81,6 +85,7 @@ jobs:
         run: flutter test
 
       - name: Derive version from tag
+        id: version
         working-directory: .
         shell: bash
         run: |
@@ -98,10 +103,17 @@ jobs:
           MINOR="${BASH_REMATCH[2]}"
           PATCH="${BASH_REMATCH[3]}"
           VERSION_CODE="$((10#${MAJOR} * 1000000 + 10#${MINOR} * 1000 + 10#${PATCH}))"
+          ARTIFACT_BASENAME="codexm-${VERSION_NAME}-arm64-v8a"
           {
             echo "VERSION_NAME=${VERSION_NAME}"
             echo "VERSION_CODE=${VERSION_CODE}"
+            echo "ARTIFACT_BASENAME=${ARTIFACT_BASENAME}"
           } >> "${GITHUB_ENV}"
+          {
+            echo "version_name=${VERSION_NAME}"
+            echo "version_code=${VERSION_CODE}"
+            echo "artifact_basename=${ARTIFACT_BASENAME}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Build arm64 release APK
         run: >
@@ -112,17 +124,23 @@ jobs:
           --build-name "${VERSION_NAME}"
           --build-number "${VERSION_CODE}"
 
-      - name: Collect APK
+      - name: Collect release files
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" "dist/codexm-${VERSION_NAME}-arm64-v8a.apk"
+          cp "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" "dist/${ARTIFACT_BASENAME}.apk"
+          (
+            cd dist
+            zip -9 "${ARTIFACT_BASENAME}.zip" "${ARTIFACT_BASENAME}.apk"
+          )
 
-      - name: Upload APK artifact
+      - name: Upload release artifact bundle
         uses: actions/upload-artifact@v4
         with:
-          name: codexm-${{ env.VERSION_NAME }}-arm64-v8a
-          path: flutter_app/dist/codexm-${{ env.VERSION_NAME }}-arm64-v8a.apk
+          name: ${{ steps.version.outputs.artifact_basename }}
+          path: |
+            flutter_app/dist/${{ steps.version.outputs.artifact_basename }}.apk
+            flutter_app/dist/${{ steps.version.outputs.artifact_basename }}.zip
           if-no-files-found: error
 
   release:
@@ -133,10 +151,12 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
+          name: ${{ needs.build.outputs.artifact_basename }}
           path: dist
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/**/codexm-${{ env.VERSION_NAME }}-arm64-v8a.apk
+            dist/**/${{ needs.build.outputs.artifact_basename }}.apk
+            dist/**/${{ needs.build.outputs.artifact_basename }}.zip
