@@ -139,4 +139,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/**/codexm-flutter-*.apk
+            dist/**/codexm-${{ env.VERSION_NAME }}-arm64-v8a.apk
