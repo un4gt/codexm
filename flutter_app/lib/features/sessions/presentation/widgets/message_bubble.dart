@@ -22,17 +22,18 @@ class MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final spec = _messageStyle(theme, role);
+    final maxBubbleWidth = MediaQuery.sizeOf(context).width >= 700 ? 720.0 : 560.0;
 
     return Align(
       alignment: spec.alignment,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
+        constraints: BoxConstraints(maxWidth: maxBubbleWidth),
         child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          padding: const EdgeInsets.all(14),
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
           decoration: BoxDecoration(
             color: spec.backgroundColor,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(24),
             border: Border.all(color: spec.borderColor),
           ),
           child: Column(
@@ -50,11 +51,13 @@ class MessageBubble extends StatelessWidget {
                   ),
                   Text(
                     _formatTime(createdAt),
-                    style: theme.textTheme.labelSmall,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               SimpleMarkdownView(
                 content: content,
                 showThinking: showThinking,

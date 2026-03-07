@@ -6,6 +6,7 @@ import 'package:codexm_native/codexm_native.dart';
 import '../../../../shared/widgets/feature_scaffold.dart';
 import '../../../settings/application/auth_store.dart';
 import '../../../settings/application/auth_types.dart' hide AuthRef;
+import '../../application/workspace_git_error_mapper.dart';
 import '../../application/workspace_models.dart';
 import '../../application/workspace_paths.dart';
 import '../../application/workspace_store.dart';
@@ -53,6 +54,8 @@ class _WorkspaceCloneDraft {
   final String? userEmail;
   final bool allowInsecure;
 }
+
+enum _WorkspaceCloneAuthMode { none, token }
 
 class _WorkspacesPageState extends State<WorkspacesPage> {
   final _native = const CodexmNative();
@@ -208,7 +211,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
         return;
       }
       setState(() {
-        _status = '执行失败：$error';
+        _status = _mapWorkspaceError(error);
       });
     } finally {
       if (mounted) {
@@ -217,6 +220,10 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
         });
       }
     }
+  }
+
+  String _mapWorkspaceError(Object error) {
+    return mapWorkspaceGitError(error).message;
   }
 
   Future<String?> _promptWorkspaceName({
@@ -308,135 +315,221 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
     final userNameController = TextEditingController();
     final userEmailController = TextEditingController();
     var allowInsecure = false;
+    var authMode = _WorkspaceCloneAuthMode.none;
 
     final result = await showDialog<_WorkspaceCloneDraft>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setLocalState) {
-            return AlertDialog(
-              title: const Text('克隆仓库工作区'),
-              content: SizedBox(
-                width: 460,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+            final theme = Theme.of(context);
+            return Dialog.fullscreen(
+              child: SafeArea(
+                child: Scaffold(
+                  appBar: AppBar(
+                    title: const Text('克隆仓库工作区'),
+                    leading: IconButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ),
+                  body: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                     children: [
-                      TextField(
-                        controller: nameController,
-                        autofocus: true,
-                        decoration: const InputDecoration(
-                          labelText: '工作区名称',
-                          hintText: '例如：Flutter 主线',
+                      _CloneFormSection(
+                        title: '1. 仓库信息',
+                        description: '先填写仓库地址和工作区名称，系统会用它创建本地工作区。',
+                        child: Column(
+                          children: [
+                            TextField(
+                              controller: nameController,
+                              autofocus: true,
+                              decoration: const InputDecoration(
+                                labelText: '工作区名称',
+                                hintText: '例如：Flutter 主线',
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: remoteUrlController,
+                              decoration: const InputDecoration(
+                                labelText: '仓库地址',
+                                hintText: 'https://github.com/org/repo.git',
+                              ),
+                              onChanged: (value) {
+                                final currentName = nameController.text.trim();
+                                if (currentName.isNotEmpty) {
+                                  return;
+                                }
+                                final derived = _deriveWorkspaceNameFromRemoteUrl(value);
+                                if (derived == null) {
+                                  return;
+                                }
+                                nameController.text = derived;
+                                nameController.selection = TextSelection.collapsed(
+                                  offset: derived.length,
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: branchController,
+                              decoration: const InputDecoration(
+                                labelText: '分支（可选）',
+                                hintText: '留空时使用仓库默认分支',
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: remoteUrlController,
-                        decoration: const InputDecoration(
-                          labelText: '仓库地址',
-                          hintText: 'https://github.com/org/repo.git',
-                        ),
-                        onChanged: (value) {
-                          final currentName = nameController.text.trim();
-                          if (currentName.isNotEmpty) {
-                            return;
-                          }
-                          final derived = _deriveWorkspaceNameFromRemoteUrl(value);
-                          if (derived == null) {
-                            return;
-                          }
-                          nameController.text = derived;
-                          nameController.selection = TextSelection.collapsed(
-                            offset: derived.length,
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: branchController,
-                        decoration: const InputDecoration(
-                          labelText: '分支（可选）',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: usernameController,
-                        decoration: const InputDecoration(
-                          labelText: '访问账号（可选）',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: tokenController,
-                        obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: '访问令牌（可选）',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: userNameController,
-                        decoration: const InputDecoration(
-                          labelText: '提交用户名（可选）',
+                      const SizedBox(height: 16),
+                      _CloneFormSection(
+                        title: '2. 认证方式',
+                        description: '公开仓库可直接连接；私有仓库请填写访问账号和令牌。',
+                        child: Column(
+                          children: [
+                            SegmentedButton<_WorkspaceCloneAuthMode>(
+                              segments: const [
+                                ButtonSegment(
+                                  value: _WorkspaceCloneAuthMode.none,
+                                  label: Text('公开仓库'),
+                                ),
+                                ButtonSegment(
+                                  value: _WorkspaceCloneAuthMode.token,
+                                  label: Text('账号 + 令牌'),
+                                ),
+                              ],
+                              selected: <_WorkspaceCloneAuthMode>{authMode},
+                              onSelectionChanged: (selection) {
+                                setLocalState(() {
+                                  authMode = selection.first;
+                                });
+                              },
+                            ),
+                            if (authMode == _WorkspaceCloneAuthMode.token) ...[
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: usernameController,
+                                decoration: const InputDecoration(
+                                  labelText: '访问账号',
+                                  hintText: '例如：git 用户名 / oauth2 / x-access-token',
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: tokenController,
+                                obscureText: true,
+                                decoration: const InputDecoration(
+                                  labelText: '访问令牌',
+                                  hintText: '请输入仓库访问令牌',
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: userEmailController,
-                        decoration: const InputDecoration(
-                          labelText: '提交邮箱（可选）',
+                      const SizedBox(height: 16),
+                      _CloneFormSection(
+                        title: '3. 安全与提交身份',
+                        description: '仅在需要时填写，用于自签名仓库或后续提交身份设置。',
+                        child: Column(
+                          children: [
+                            SwitchListTile.adaptive(
+                              contentPadding: EdgeInsets.zero,
+                              value: allowInsecure,
+                              onChanged: (value) {
+                                setLocalState(() {
+                                  allowInsecure = value;
+                                });
+                              },
+                              title: const Text('允许跳过证书校验'),
+                              subtitle: const Text('仅在内网或自签名证书场景下使用。'),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: userNameController,
+                              decoration: const InputDecoration(
+                                labelText: '提交用户名（可选）',
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: userEmailController,
+                              decoration: const InputDecoration(
+                                labelText: '提交邮箱（可选）',
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      SwitchListTile.adaptive(
-                        contentPadding: EdgeInsets.zero,
-                        value: allowInsecure,
-                        onChanged: (value) {
-                          setLocalState(() {
-                            allowInsecure = value;
-                          });
-                        },
-                        title: const Text('允许跳过证书校验'),
-                        subtitle: const Text('仅在内网或自签名证书场景下使用。'),
+                      const SizedBox(height: 16),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
+                          ),
+                        ),
+                        child: const Padding(
+                          padding: EdgeInsets.all(14),
+                          child: Text(
+                            '创建后会自动激活工作区；完成仓库准备后，可直接进入会话。',
+                          ),
+                        ),
                       ),
                     ],
                   ),
+                  bottomNavigationBar: SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.of(dialogContext).pop(),
+                              child: const Text('取消'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: () {
+                                Navigator.of(dialogContext).pop(
+                                  _WorkspaceCloneDraft(
+                                    name: nameController.text.trim(),
+                                    remoteUrl: remoteUrlController.text.trim(),
+                                    branch: branchController.text.trim().isEmpty
+                                        ? null
+                                        : branchController.text.trim(),
+                                    username: authMode == _WorkspaceCloneAuthMode.token &&
+                                            usernameController.text.trim().isNotEmpty
+                                        ? usernameController.text.trim()
+                                        : null,
+                                    token: authMode == _WorkspaceCloneAuthMode.token &&
+                                            tokenController.text.trim().isNotEmpty
+                                        ? tokenController.text.trim()
+                                        : null,
+                                    userName: userNameController.text.trim().isEmpty
+                                        ? null
+                                        : userNameController.text.trim(),
+                                    userEmail: userEmailController.text.trim().isEmpty
+                                        ? null
+                                        : userEmailController.text.trim(),
+                                    allowInsecure: allowInsecure,
+                                  ),
+                                );
+                              },
+                              child: const Text('开始克隆'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    Navigator.of(dialogContext).pop(
-                      _WorkspaceCloneDraft(
-                        name: nameController.text.trim(),
-                        remoteUrl: remoteUrlController.text.trim(),
-                        branch: branchController.text.trim().isEmpty
-                            ? null
-                            : branchController.text.trim(),
-                        username: usernameController.text.trim().isEmpty
-                            ? null
-                            : usernameController.text.trim(),
-                        token: tokenController.text.trim().isEmpty
-                            ? null
-                            : tokenController.text.trim(),
-                        userName: userNameController.text.trim().isEmpty
-                            ? null
-                            : userNameController.text.trim(),
-                        userEmail: userEmailController.text.trim().isEmpty
-                            ? null
-                            : userEmailController.text.trim(),
-                        allowInsecure: allowInsecure,
-                      ),
-                    );
-                  },
-                  child: const Text('开始克隆'),
-                ),
-              ],
             );
           },
         );
@@ -663,45 +756,36 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
   Widget build(BuildContext context) {
     return FeatureScaffold(
       title: '工作区',
-      description: '管理 Flutter 迁移线的本地工作区，支持创建、激活、查看目录摘要与继续进入会话。',
+      description: '在这里创建或克隆工作区，并在准备完成后快速进入会话。',
+      headerActions: [
+        FilledButton.icon(
+          onPressed: _busy ? null : _createWorkspace,
+          icon: const Icon(Icons.create_new_folder_outlined),
+          label: const Text('新建工作区'),
+        ),
+        FilledButton.tonalIcon(
+          onPressed: _busy ? null : _cloneWorkspace,
+          icon: const Icon(Icons.download_for_offline_outlined),
+          label: const Text('克隆仓库'),
+        ),
+        OutlinedButton.icon(
+          onPressed: _busy ? null : () => _refresh(),
+          icon: const Icon(Icons.refresh_outlined),
+          label: const Text('刷新列表'),
+        ),
+        if (_activeWorkspaceId != null)
+          OutlinedButton.icon(
+            onPressed: widget.onOpenSessionsRequested,
+            icon: const Icon(Icons.chat_outlined),
+            label: const Text('进入当前会话'),
+          ),
+      ],
       children: [
         Card(
           child: ListTile(
             leading: const Icon(Icons.folder_outlined),
             title: const Text('当前状态'),
             subtitle: Text(_status),
-          ),
-        ),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                FilledButton.icon(
-                  onPressed: _busy ? null : _createWorkspace,
-                  icon: const Icon(Icons.create_new_folder_outlined),
-                  label: const Text('新建工作区'),
-                ),
-                FilledButton.tonalIcon(
-                  onPressed: _busy ? null : _cloneWorkspace,
-                  icon: const Icon(Icons.download_for_offline_outlined),
-                  label: const Text('克隆仓库'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _busy ? null : () => _refresh(),
-                  icon: const Icon(Icons.refresh_outlined),
-                  label: const Text('刷新列表'),
-                ),
-                if (_activeWorkspaceId != null)
-                  TextButton.icon(
-                    onPressed: widget.onOpenSessionsRequested,
-                    icon: const Icon(Icons.chat_outlined),
-                    label: const Text('进入当前会话'),
-                  ),
-              ],
-            ),
           ),
         ),
         _WorkspaceMetricsCard(
@@ -764,6 +848,50 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
         ),
         if (_busy) const _WorkspaceBusyCard(),
       ],
+    );
+  }
+}
+
+class _CloneFormSection extends StatelessWidget {
+  const _CloneFormSection({
+    required this.title,
+    required this.description,
+    required this.child,
+  });
+
+  final String title;
+  final String description;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: theme.textTheme.titleMedium),
+            const SizedBox(height: 6),
+            Text(
+              description,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 14),
+            child,
+          ],
+        ),
+      ),
     );
   }
 }

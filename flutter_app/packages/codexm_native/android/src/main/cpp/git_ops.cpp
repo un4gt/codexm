@@ -4,6 +4,8 @@
 
 #include <sys/stat.h>
 
+#include <dirent.h>
+
 #include <mutex>
 #include <string>
 #include <vector>
@@ -14,6 +16,21 @@ std::once_flag g_libgit2_once;
 bool dir_exists(const char *path) {
   struct stat st;
   return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+bool directory_empty(const char *path) {
+  DIR *dir = opendir(path);
+  if (!dir) return false;
+  bool empty = true;
+  while (const dirent *entry = readdir(dir)) {
+    const std::string name = entry->d_name;
+    if (name != "." && name != "..") {
+      empty = false;
+      break;
+    }
+  }
+  closedir(dir);
+  return empty;
 }
 
 void ensure_libgit2() {
@@ -40,15 +57,33 @@ struct CredPayload {
   bool allowInsecure = false;
 };
 
+std::string fallback_username(const char *username_from_url) {
+  if (username_from_url && username_from_url[0] != '\0') {
+    return std::string(username_from_url);
+  }
+  return "git";
+}
+
 int credentials_cb(git_credential **out,
                    const char * /*url*/,
-                   const char * /*username_from_url*/,
+                   const char *username_from_url,
                    unsigned int allowed_types,
                    void *payload) {
   auto *p = reinterpret_cast<CredPayload *>(payload);
   if (!p || !p->hasCreds) return 0;
-  if ((allowed_types & GIT_CREDENTIAL_USERPASS_PLAINTEXT) == 0) return 0;
-  return git_credential_userpass_plaintext_new(out, p->username.c_str(), p->token.c_str());
+  const std::string username =
+      p->username.empty() ? fallback_username(username_from_url) : p->username;
+
+  if ((allowed_types & GIT_CREDENTIAL_USERNAME) != 0 &&
+      (allowed_types & GIT_CREDENTIAL_USERPASS_PLAINTEXT) == 0) {
+    return git_credential_username_new(out, username.c_str());
+  }
+
+  if ((allowed_types & GIT_CREDENTIAL_USERPASS_PLAINTEXT) != 0) {
+    return git_credential_userpass_plaintext_new(out, username.c_str(), p->token.c_str());
+  }
+
+  return 0;
 }
 
 int cert_check_cb(git_cert * /*cert*/, int valid, const char * /*host*/, void *payload) {
@@ -92,7 +127,7 @@ void git_clone_repo(const GitCloneOptions &opts) {
 
   CredPayload payload;
   payload.allowInsecure = opts.allowInsecure;
-  if (!opts.username.empty() && !opts.token.empty()) {
+  if (!opts.token.empty()) {
     payload.username = opts.username;
     payload.token = opts.token;
     payload.hasCreds = true;
@@ -104,9 +139,15 @@ void git_clone_repo(const GitCloneOptions &opts) {
 
   fetch_opts.callbacks = callbacks;
   clone_opts.fetch_opts = fetch_opts;
+  clone_opts.checkout_opts.checkout_strategy =
+      GIT_CHECKOUT_SAFE | GIT_CHECKOUT_RECREATE_MISSING;
 
   if (!opts.branch.empty()) {
     clone_opts.checkout_branch = opts.branch.c_str();
+  }
+
+  if (dir_exists(opts.localPath.c_str()) && !directory_empty(opts.localPath.c_str())) {
+    throw GitException("destination path already exists and is not an empty directory");
   }
 
   int rc = git_clone(&repo, opts.remoteUrl.c_str(), opts.localPath.c_str(), &clone_opts);
@@ -173,7 +214,7 @@ void git_pull_ff_only(const GitPullOptions &opts) {
 
   CredPayload payload;
   payload.allowInsecure = opts.allowInsecure;
-  if (!opts.username.empty() && !opts.token.empty()) {
+  if (!opts.token.empty()) {
     payload.username = opts.username;
     payload.token = opts.token;
     payload.hasCreds = true;
@@ -293,7 +334,7 @@ void git_push_branch(const GitPushOptions &opts) {
 
   CredPayload payload;
   payload.allowInsecure = opts.allowInsecure;
-  if (!opts.username.empty() && !opts.token.empty()) {
+  if (!opts.token.empty()) {
     payload.username = opts.username;
     payload.token = opts.token;
     payload.hasCreds = true;

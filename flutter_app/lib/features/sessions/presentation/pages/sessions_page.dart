@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:codexm_native/codexm_native.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../app/theme/app_theme.dart';
 import '../../../codex/application/codex_models.dart';
 import '../../../codex/application/codex_session_runner.dart';
 import '../../../codex/application/codex_skills_store.dart';
@@ -357,90 +358,101 @@ class _SessionsPageState extends State<SessionsPage> {
     final selectedSession = _selectedSession;
     final canEditComposer = !_busy && !_running && _activeWorkspace != null;
     final canSend = canEditComposer && _composerController.text.trim().isNotEmpty;
+    final tokens = context.appTokens;
 
     return SafeArea(
       child: Scaffold(
         appBar: AppBar(title: const Text('会话')),
-        body: Column(
-          children: [
-            _StatusHeader(
-              status: _status,
-              workspace: _activeWorkspace,
-              settingsReady: _settings.enabled && _hasApiKey,
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: _activeWorkspace == null
-                    ? _WorkspaceEmptyState(
-                        onOpenWorkspacesRequested:
-                            widget.onOpenWorkspacesRequested,
-                      )
-                    : LayoutBuilder(
-                        builder: (context, constraints) {
-                          final wide = constraints.maxWidth >= 960;
-                          final summaryPanel = _SessionOverviewPanel(
-                            workspace: _activeWorkspace!,
-                            session: selectedSession,
-                            legacySessionCount: _legacySessionCount,
-                          );
-                          final chatPanel = _ChatPanel(
-                            workspace: _activeWorkspace!,
-                            selectedSession: selectedSession,
-                            messages: _messages,
-                            debugTail: _debugTail,
-                            showThinking: _settings.uiShowThinking,
-                            settingsEnabled: _settings.enabled,
-                            hasApiKey: _hasApiKey,
-                            running: _running,
-                            pendingAssistantText: _pendingAssistantText,
-                            pendingStartedAt: _pendingStartedAt,
-                            scrollController: _messagesScrollController,
-                            composerController: _composerController,
-                            pendingMentions: _pendingMentions,
-                            slashSuggestions: _slashSuggestions,
-                            mentionSuggestions: _mentionSuggestions,
-                            mentionLoading: _mentionLoading,
-                            onSelectSlashSuggestion: _applySlashSuggestion,
-                            onSelectMentionSuggestion: _applyMentionSuggestion,
-                            onRemovePendingMention: _removePendingMention,
-                            onSendMessage: _sendMessage,
-                            onRunReview: _runReview,
-                            onCompactThread: _compactThread,
-                            onOpenSettingsRequested:
-                                widget.onOpenSettingsRequested,
-                            currentMode:
-                                selectedSession?.codexCollaborationMode == 'plan'
-                                ? CodexCollaborationMode.plan
-                                : CodexCollaborationMode.standard,
-                            onModeChanged: _changeCollaborationMode,
-                            canSend: canSend,
-                            canEditComposer: canEditComposer,
-                          );
+        body: Padding(
+          padding: tokens.pagePadding,
+          child: _activeWorkspace == null
+              ? _WorkspaceEmptyState(
+                  onOpenWorkspacesRequested: widget.onOpenWorkspacesRequested,
+                )
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final wide = constraints.maxWidth >= 960;
+                    final summaryPanel = _SessionOverviewPanel(
+                      workspace: _activeWorkspace!,
+                      session: selectedSession,
+                      legacySessionCount: _legacySessionCount,
+                    );
+                    final chatPanel = _ChatPanel(
+                      workspace: _activeWorkspace!,
+                      selectedSession: selectedSession,
+                      messages: _messages,
+                      debugTail: _debugTail,
+                      showThinking: _settings.uiShowThinking,
+                      settingsEnabled: _settings.enabled,
+                      hasApiKey: _hasApiKey,
+                      running: _running,
+                      pendingAssistantText: _pendingAssistantText,
+                      pendingStartedAt: _pendingStartedAt,
+                      scrollController: _messagesScrollController,
+                      composerController: _composerController,
+                      pendingMentions: _pendingMentions,
+                      slashSuggestions: _slashSuggestions,
+                      mentionSuggestions: _mentionSuggestions,
+                      mentionLoading: _mentionLoading,
+                      onSelectSlashSuggestion: _applySlashSuggestion,
+                      onSelectMentionSuggestion: _applyMentionSuggestion,
+                      onRemovePendingMention: _removePendingMention,
+                      onSendMessage: _sendMessage,
+                      onRunReview: _runReview,
+                      onCompactThread: _compactThread,
+                      onOpenSettingsRequested: widget.onOpenSettingsRequested,
+                      currentMode:
+                          selectedSession?.codexCollaborationMode == 'plan'
+                          ? CodexCollaborationMode.plan
+                          : CodexCollaborationMode.standard,
+                      onModeChanged: _changeCollaborationMode,
+                      canSend: canSend,
+                      canEditComposer: canEditComposer,
+                    );
 
-                          if (wide) {
-                            return Row(
+                    if (wide) {
+                      return Column(
+                        children: [
+                          _StatusHeader(
+                            status: _status,
+                            workspace: _activeWorkspace,
+                            settingsReady: _settings.enabled && _hasApiKey,
+                            compact: false,
+                          ),
+                          SizedBox(height: tokens.sectionSpacing),
+                          Expanded(
+                            child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                SizedBox(width: 300, child: summaryPanel),
-                                const SizedBox(width: 16),
+                                SizedBox(width: 320, child: summaryPanel),
+                                SizedBox(width: tokens.sectionSpacing),
                                 Expanded(child: chatPanel),
                               ],
-                            );
-                          }
+                            ),
+                          ),
+                        ],
+                      );
+                    }
 
-                          return Column(
-                            children: [
-                              SizedBox(height: 180, child: summaryPanel),
-                              const SizedBox(height: 16),
-                              Expanded(child: chatPanel),
-                            ],
-                          );
-                        },
-                      ),
-              ),
-            ),
-          ],
+                    return Column(
+                      children: [
+                        _StatusHeader(
+                          status: _status,
+                          workspace: _activeWorkspace,
+                          settingsReady: _settings.enabled && _hasApiKey,
+                          compact: true,
+                        ),
+                        SizedBox(height: tokens.compactSpacing),
+                        SizedBox(
+                          height: 184,
+                          child: summaryPanel,
+                        ),
+                        SizedBox(height: tokens.sectionSpacing),
+                        Expanded(child: chatPanel),
+                      ],
+                    );
+                  },
+                ),
         ),
       ),
     );

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../features/mcp/presentation/pages/mcp_page.dart';
 import '../features/sessions/application/session_models.dart';
-import '../features/settings/presentation/pages/settings_page.dart';
 import '../features/sessions/presentation/pages/sessions_page.dart';
+import '../features/settings/presentation/pages/settings_page.dart';
 import '../features/workspaces/application/workspace_models.dart';
 import '../features/workspaces/application/workspace_store.dart';
 import '../features/workspaces/presentation/pages/workspaces_page.dart';
@@ -39,10 +39,26 @@ class _AppShellState extends State<_AppShell> {
   bool _loadingContext = true;
 
   static const _destinations = <NavigationDestination>[
-    NavigationDestination(icon: Icon(Icons.folder_outlined), selectedIcon: Icon(Icons.folder), label: '工作区'),
-    NavigationDestination(icon: Icon(Icons.chat_bubble_outline), selectedIcon: Icon(Icons.chat_bubble), label: '会话'),
-    NavigationDestination(icon: Icon(Icons.extension_outlined), selectedIcon: Icon(Icons.extension), label: 'MCP'),
-    NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: '设置'),
+    NavigationDestination(
+      icon: Icon(Icons.folder_outlined),
+      selectedIcon: Icon(Icons.folder),
+      label: '工作区',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.chat_bubble_outline),
+      selectedIcon: Icon(Icons.chat_bubble),
+      label: '会话',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.extension_outlined),
+      selectedIcon: Icon(Icons.extension),
+      label: 'MCP',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.settings_outlined),
+      selectedIcon: Icon(Icons.settings),
+      label: '设置',
+    ),
   ];
 
   @override
@@ -112,6 +128,8 @@ class _AppShellState extends State<_AppShell> {
 
   Widget _buildContextBar(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = context.appTokens;
+
     if (_loadingContext) {
       return LinearProgressIndicator(
         minHeight: 2,
@@ -126,24 +144,38 @@ class _AppShellState extends State<_AppShell> {
         ? _activeWorkspace!.localPath
         : '${_activeWorkspace!.name} · ${_selectedSession!.title}';
 
-    return Material(
-      color: theme.colorScheme.surface,
-      child: ListTile(
-        dense: true,
-        leading: const Icon(Icons.folder_special_outlined),
-        title: Text(_activeWorkspace!.name),
-        subtitle: Text(
-          subtitle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        tokens.pagePadding.left,
+        8,
+        tokens.pagePadding.right,
+        10,
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(tokens.cardRadius),
+          border: Border.all(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
+          ),
         ),
-        trailing: TextButton(
-          onPressed: () {
-            setState(() {
-              _selectedIndex = _selectedSession == null ? 0 : 1;
-            });
-          },
-          child: Text(_selectedSession == null ? '查看工作区' : '回到会话'),
+        child: ListTile(
+          dense: true,
+          leading: const Icon(Icons.folder_special_outlined),
+          title: Text(_activeWorkspace!.name),
+          subtitle: Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: TextButton(
+            onPressed: () {
+              setState(() {
+                _selectedIndex = _selectedSession == null ? 0 : 1;
+              });
+            },
+            child: Text(_selectedSession == null ? '查看工作区' : '回到会话'),
+          ),
         ),
       ),
     );
@@ -151,22 +183,44 @@ class _AppShellState extends State<_AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bottomPadding = MediaQuery.paddingOf(context).bottom;
+
     return Scaffold(
-      body: IndexedStack(index: _selectedIndex, children: _buildPages()),
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildContextBar(context),
-          NavigationBar(
-            selectedIndex: _selectedIndex,
-            destinations: _destinations,
-            onDestinationSelected: (index) {
-              setState(() {
-                _selectedIndex = index;
-              });
-            },
+      body: ColoredBox(
+        color: theme.colorScheme.surface,
+        child: IndexedStack(index: _selectedIndex, children: _buildPages()),
+      ),
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          boxShadow: [
+            BoxShadow(
+              color: theme.colorScheme.shadow.withValues(alpha: 0.08),
+              blurRadius: 20,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildContextBar(context),
+              NavigationBar(
+                selectedIndex: _selectedIndex,
+                destinations: _destinations,
+                onDestinationSelected: (index) {
+                  setState(() {
+                    _selectedIndex = index;
+                  });
+                },
+              ),
+              if (bottomPadding == 0) const SizedBox(height: 8),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

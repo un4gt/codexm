@@ -4,6 +4,7 @@ import 'package:codexm_native/codexm_native.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../shared/widgets/feature_scaffold.dart';
+import '../../../workspaces/application/workspace_git_error_mapper.dart';
 import '../../application/codex_smoke_rpc.dart';
 import '../../application/smoke_workspace_paths.dart';
 
@@ -429,7 +430,7 @@ class _AndroidSmokePageState extends State<AndroidSmokePage> {
     try {
       await action();
     } catch (error) {
-      _addStatus('$label失败：$error');
+      _addStatus('$label失败：${mapWorkspaceGitError(error).message}');
     } finally {
       if (mounted) {
         setState(() {
