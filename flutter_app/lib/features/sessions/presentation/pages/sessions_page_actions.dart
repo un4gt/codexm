@@ -387,12 +387,10 @@ extension _SessionsPageActions on _SessionsPageState {
             '- /model <id>：设置模型',
             '- /permissions <policy>：设置审批策略',
             '- /personality <style>：设置风格',
-            '- /experimental multi_agent on|off：实验特性',
             '- /logout：清除本地密钥',
             '',
             '说明',
             '- /new、/resume：当前工作区固定单会话，自动恢复最近历史。',
-            '- /statusline、/sandbox-add-read-dir、/fork、/agent：移动端暂不支持。',
           ].join('\n'),
         );
         return true;
@@ -490,25 +488,14 @@ extension _SessionsPageActions on _SessionsPageState {
               '- 会话：${session.title}',
               '- 单会话模式：已启用',
               '- 历史隐藏会话：$_legacySessionCount',
-              '- 线程：${session.codexThreadId?.trim().isNotEmpty == true ? '已建立' : '未建立'}',
               '- 模式：${session.codexCollaborationMode == 'plan' ? '计划' : '默认'}',
               '- 模型：${_settings.model?.trim().isNotEmpty == true ? _settings.model : '默认'}',
               '- 权限：${_settings.approvalPolicy}',
               '- 风格：${_settings.personality}',
               '- MCP：启用 $enabledCount/${servers.length}',
-              '- 调试日志：${_settings.debugLogToFile ? '开启' : '关闭'}',
             ];
             if (slashArgs == 'raw' || slashArgs == 'debug') {
-              lines.addAll([
-                '',
-                '```json',
-                '{',
-                '  "workspaceId": "${workspace.id}",',
-                '  "sessionId": "${session.id}",',
-                '  "threadId": "${session.codexThreadId ?? ''}"',
-                '}',
-                '```',
-              ]);
+              lines.addAll(['', '如需更详细的内部诊断信息，请在桌面端进行排查。']);
             }
             return lines.join('\n');
           },
@@ -583,7 +570,7 @@ extension _SessionsPageActions on _SessionsPageState {
           action: () async {
             final parts = slashArgs.split(RegExp(r'\s+')).where((item) => item.isNotEmpty).toList(growable: false);
             if (parts.isEmpty) {
-              return '当前实验特性：\n- multi_agent = ${_settings.featuresMultiAgent ? 'on' : 'off'}\n\n用法：/experimental multi_agent on|off';
+              return '当前多代理协作：${_settings.featuresMultiAgent ? '已开启' : '已关闭'}\n\n用法：/experimental multi_agent on|off';
             }
             final feature = parts.first.replaceAll('-', '_');
             final value = parts.length > 1 ? parts[1] : '';
@@ -598,7 +585,7 @@ extension _SessionsPageActions on _SessionsPageState {
             await _settingsStore.materializeCodexConfigFiles(
               mcpServers: await _mcpStore.listServers(),
             );
-            return '已更新 experimental multi_agent = ${enabled ? 'on' : 'off'}';
+            return '已${enabled ? '开启' : '关闭'}多代理协作。';
           },
         );
         return true;
@@ -695,8 +682,7 @@ extension _SessionsPageActions on _SessionsPageState {
         await _runLocalCommandAction(
           rawText: rawText,
           pendingStatus: '正在整理诊断提示...',
-          action: () async =>
-              '如需导出诊断信息，请前往“设置”页面中的 Android Smoke 验证入口查看运行日志和调试信息。',
+          action: () async => '请整理问题现象、触发步骤与当前工作区信息后再反馈，可帮助更快定位问题。',
         );
         return true;
       case '/statusline':

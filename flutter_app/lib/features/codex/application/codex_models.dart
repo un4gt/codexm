@@ -119,11 +119,13 @@ class CodexSlashCommand {
     required this.command,
     required this.purpose,
     required this.when,
+    this.mobileVisible = true,
   });
 
   final String command;
   final String purpose;
   final String when;
+  final bool mobileVisible;
 }
 
 class CodexRuntimeLaunchContext {

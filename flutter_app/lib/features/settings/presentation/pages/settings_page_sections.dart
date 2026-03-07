@@ -8,9 +8,9 @@ class _BridgeStatusCard extends StatelessWidget {
     return const Card(
       child: ListTile(
         leading: Icon(Icons.memory_outlined),
-        title: Text('运行桥接状态'),
+        title: Text('运行能力已就绪'),
         subtitle: Text(
-          'Android 运行时与 Git 桥接已接入 Flutter 宿主；MCP 与 skills 统一按全局配置管理。',
+          'Android 运行时、Git、MCP 与技能扩展都已接入当前应用，并统一按全局配置管理。',
         ),
       ),
     );
@@ -186,7 +186,7 @@ class _PreferenceSection extends StatelessWidget {
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
               title: const Text('启用多代理特性'),
-              subtitle: const Text('用于后续多代理编排与运行能力验证。'),
+              subtitle: const Text('在支持的场景下启用多代理协作能力。'),
               value: settings.featuresMultiAgent,
               onChanged: busy
                   ? null
@@ -197,7 +197,7 @@ class _PreferenceSection extends StatelessWidget {
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
               title: const Text('显示思考内容'),
-              subtitle: const Text('会话页会据此决定是否展示思考片段。'),
+              subtitle: const Text('会话页会据此决定是否展示更详细的思路片段。'),
               value: settings.uiShowThinking,
               onChanged: busy
                   ? null
@@ -208,7 +208,7 @@ class _PreferenceSection extends StatelessWidget {
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
               title: const Text('保留运行日志'),
-              subtitle: const Text('开启后，会话页会显示最近一段运行日志。'),
+              subtitle: const Text('开启后，可在当前会话中查看最近一次运行记录。'),
               value: settings.debugLogToFile,
               onChanged: busy
                   ? null
@@ -326,9 +326,7 @@ class _ConfigPreviewSection extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(
-                  child: Text('运行配置预览', style: theme.textTheme.titleMedium),
-                ),
+                Expanded(child: Text('配置预览', style: theme.textTheme.titleMedium)),
                 OutlinedButton.icon(
                   onPressed: busy ? null : () => onRefreshPreview(),
                   icon: const Icon(Icons.refresh_outlined),
@@ -337,7 +335,7 @@ class _ConfigPreviewSection extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            const Text('保存前可先在这里确认最终会写入运行目录的配置内容。'),
+            const Text('保存前可先确认当前设置将生成的最终配置内容。'),
             if (previewError?.trim().isNotEmpty == true) ...[
               const SizedBox(height: 12),
               Text(
@@ -433,8 +431,6 @@ class _SkillsSection extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text('已安装：${installedSkills.length} 项'),
-            if (skillsDirPath?.trim().isNotEmpty == true)
-              Text('全局目录：$skillsDirPath'),
             const SizedBox(height: 12),
             if (installedSkills.isEmpty)
               const Text('还没有全局 skills。')
@@ -516,9 +512,6 @@ class _RuntimeSummarySection extends StatelessWidget {
     required this.apiKeySaved,
     required this.mcpServerCount,
     required this.installedSkills,
-    required this.skillsDirPath,
-    required this.materializedHomeDir,
-    required this.materializedAuthPresent,
     required this.materializedWarnings,
     required this.busy,
     required this.onMaterialize,
@@ -528,9 +521,6 @@ class _RuntimeSummarySection extends StatelessWidget {
   final bool apiKeySaved;
   final int mcpServerCount;
   final List<String> installedSkills;
-  final String? skillsDirPath;
-  final String? materializedHomeDir;
-  final bool materializedAuthPresent;
   final List<String> materializedWarnings;
   final bool busy;
   final VoidCallback onMaterialize;
@@ -556,12 +546,9 @@ class _RuntimeSummarySection extends StatelessWidget {
             Text('审批策略：${settings.approvalPolicy}'),
             Text('回复风格：${settings.personality}'),
             Text('已配置扩展服务：$mcpServerCount 个'),
-            Text('全局启用 MCP：${settings.enabledGlobalMcpServerIds.length} 项'),
-            Text('内置快捷能力：${codexSlashCommands.length} 项'),
-            Text('Skills 作用域：全局'),
-            Text('已安装全局扩展：${installedSkills.length} 项'),
-            if (skillsDirPath?.trim().isNotEmpty == true)
-              Text('Skills 目录：$skillsDirPath'),
+            Text('当前启用 MCP：${settings.enabledGlobalMcpServerIds.length} 项'),
+            Text('可用快捷命令：${visibleCodexSlashCommands.length} 项'),
+            Text('全局扩展：${installedSkills.length} 项'),
             if (installedSkills.isNotEmpty) ...[
               const SizedBox(height: 8),
               Wrap(
@@ -571,11 +558,6 @@ class _RuntimeSummarySection extends StatelessWidget {
                   for (final skill in installedSkills) Chip(label: Text(skill)),
                 ],
               ),
-            ],
-            if (materializedHomeDir != null) ...[
-              const SizedBox(height: 8),
-              Text('运行目录：$materializedHomeDir'),
-              Text('认证信息：${materializedAuthPresent ? '已生成' : '未生成'}'),
             ],
             if (materializedWarnings.isNotEmpty) ...[
               const SizedBox(height: 8),

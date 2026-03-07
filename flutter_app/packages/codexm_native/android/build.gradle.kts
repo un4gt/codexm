@@ -68,6 +68,7 @@ android {
     sourceSets {
         getByName("main") {
             java.srcDirs("src/main/kotlin")
+            assets.setSrcDirs(emptyList<String>())
             jniLibs.srcDir(layout.buildDirectory.dir("generated/codexJniLibs"))
         }
         getByName("test") {
@@ -99,19 +100,26 @@ dependencies {
     testImplementation("org.mockito:mockito-core:5.0.0")
 }
 
-val codexAssetRoot = file("src/main/assets/codex")
+val codexRuntimeInputRoot = file("runtime_inputs/codex")
+val legacyCodexAssetRoot = file("src/main/assets/codex")
 val generatedCodexJniLibsDir = layout.buildDirectory.dir("generated/codexJniLibs")
 
 val generateCodexJniLibsTask = tasks.register("generateCodexJniLibs") {
-    onlyIf { codexAssetRoot.exists() }
-    inputs.dir(codexAssetRoot)
+    onlyIf { codexRuntimeInputRoot.exists() || legacyCodexAssetRoot.exists() }
+    inputs.dir(if (codexRuntimeInputRoot.exists()) codexRuntimeInputRoot else legacyCodexAssetRoot)
     outputs.dir(generatedCodexJniLibsDir)
 
     doLast {
         val outputDir = generatedCodexJniLibsDir.get().asFile
         outputDir.deleteRecursively()
 
-        codexAssetRoot.listFiles()
+        val runtimeInputRoot = if (codexRuntimeInputRoot.exists()) {
+            codexRuntimeInputRoot
+        } else {
+            legacyCodexAssetRoot
+        }
+
+        runtimeInputRoot.listFiles()
             ?.filter { it.isDirectory }
             ?.forEach { abiDir ->
                 val outAbiDir = File(outputDir, abiDir.name).apply { mkdirs() }

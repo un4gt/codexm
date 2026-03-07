@@ -84,9 +84,9 @@ List<CodexSlashCommand> filterSlashCommands(String input) {
   }
   final query = token.substring(1).toLowerCase();
   if (query.isEmpty) {
-    return codexSlashCommands;
+    return visibleCodexSlashCommands;
   }
-  return codexSlashCommands
+  return visibleCodexSlashCommands
       .where((item) => item.command.substring(1).toLowerCase().startsWith(query))
       .toList(growable: false);
 }

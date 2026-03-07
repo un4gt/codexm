@@ -80,20 +80,49 @@ jobs:
       - name: Flutter test
         run: flutter test
 
+      - name: Derive version from tag
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            echo "This workflow expects a tag trigger." >&2
+            exit 1
+          fi
+          VERSION_NAME="${GITHUB_REF_NAME#v}"
+          if [[ ! "${VERSION_NAME}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)([-+].*)?$ ]]; then
+            echo "Unsupported tag format: ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+          MAJOR="${BASH_REMATCH[1]}"
+          MINOR="${BASH_REMATCH[2]}"
+          PATCH="${BASH_REMATCH[3]}"
+          VERSION_CODE="$((10#${MAJOR} * 1000000 + 10#${MINOR} * 1000 + 10#${PATCH}))"
+          {
+            echo "VERSION_NAME=${VERSION_NAME}"
+            echo "VERSION_CODE=${VERSION_CODE}"
+          } >> "${GITHUB_ENV}"
+
       - name: Build arm64 release APK
-        run: flutter build apk --release --target-platform android-arm64 --split-per-abi
+        run: >
+          flutter build apk
+          --release
+          --target-platform android-arm64
+          --split-per-abi
+          --build-name "${VERSION_NAME}"
+          --build-number "${VERSION_CODE}"
 
       - name: Collect APK
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" "dist/codexm-flutter-${GITHUB_REF_NAME}-arm64-v8a.apk"
+          cp "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" "dist/codexm-${VERSION_NAME}-arm64-v8a.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: codexm-flutter-${{ github.ref_name }}-arm64-v8a
-          path: flutter_app/dist/codexm-flutter-${{ github.ref_name }}-arm64-v8a.apk
+          name: codexm-${{ env.VERSION_NAME }}-arm64-v8a
+          path: flutter_app/dist/codexm-${{ env.VERSION_NAME }}-arm64-v8a.apk
           if-no-files-found: error
 
   release:

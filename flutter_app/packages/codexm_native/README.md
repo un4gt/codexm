@@ -18,7 +18,7 @@ python3 scripts/fetch_android_codex_deps.py --abi arm64-v8a
 
 脚本会把以下产物下载到：
 
-`flutter_app/packages/codexm_native/android/src/main/assets/codex/arm64-v8a/`
+`flutter_app/packages/codexm_native/android/runtime_inputs/codex/arm64-v8a/`
 
 - `codex`
 - `codex-exec`

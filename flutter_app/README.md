@@ -1,4 +1,4 @@
-# codexm_flutter
+# codexm
 
 `flutter_app/` 是 CodexM 的 Flutter Android 主应用。
 

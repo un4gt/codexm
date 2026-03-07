@@ -40,7 +40,7 @@
 - `scripts/fetch_android_codex_deps.py`
   - 下载 `codex`、`codex-exec`、`rg`
   - 下载 `libcodex_z.so`、`libcodex_lzma.so`
-  - 输出到 `flutter_app/packages/codexm_native/android/src/main/assets/codex/<abi>/`
+  - 输出到 `flutter_app/packages/codexm_native/android/runtime_inputs/codex/<abi>/`
 - `scripts/flutter_phase5_regression.sh`
   - 执行依赖下载、`flutter analyze`、`flutter test`、Android debug 构建
 - `.github/workflows/flutter-android-release.yml`
@@ -48,7 +48,7 @@
 
 ## 运行时路径
 
-1. Flutter 设置页生成运行配置与 `config.toml`
+1. Flutter 设置页生成连接配置
 2. `CodexLaunchContextService` 汇总工作区、MCP、skills、会话与鉴权信息
 3. `codexm_native` 从 `nativeLibraryDir` 解析 `libcodex.so` / `libcodex_exec.so` / `librg.so`
 4. Android 侧补齐 `LD_LIBRARY_PATH`，并在运行前做共享库依赖预检

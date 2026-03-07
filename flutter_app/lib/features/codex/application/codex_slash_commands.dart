@@ -15,11 +15,13 @@ const codexSlashCommands = <CodexSlashCommand>[
     command: '/sandbox-add-read-dir',
     purpose: '扩展可读取的目录（仅桌面端）',
     when: '移动端不适用；桌面端需要读取额外目录时使用。',
+    mobileVisible: false,
   ),
   CodexSlashCommand(
     command: '/agent',
     purpose: '查看/切换线程',
     when: '并行任务较多，需要切换工作线程时。',
+    mobileVisible: false,
   ),
   CodexSlashCommand(
     command: '/apps',
@@ -45,6 +47,7 @@ const codexSlashCommands = <CodexSlashCommand>[
     command: '/experimental',
     purpose: '切换/启用实验性功能',
     when: '需要开启可选功能（例如多 Agent）时。',
+    mobileVisible: false,
   ),
   CodexSlashCommand(
     command: '/feedback',
@@ -55,6 +58,7 @@ const codexSlashCommands = <CodexSlashCommand>[
     command: '/init',
     purpose: '在当前目录生成 AGENTS.md 脚手架',
     when: '需要固化仓库约定与持久化指令时。',
+    mobileVisible: false,
   ),
   CodexSlashCommand(
     command: '/logout',
@@ -90,11 +94,13 @@ const codexSlashCommands = <CodexSlashCommand>[
     command: '/ps',
     purpose: '查看后台任务与输出',
     when: '想检查耗时操作的进度与输出时。',
+    mobileVisible: false,
   ),
   CodexSlashCommand(
     command: '/fork',
     purpose: '把当前对话 Fork 到新的线程',
     when: '需要并行探索另一种方案且保留现有对话轨迹。',
+    mobileVisible: false,
   ),
   CodexSlashCommand(
     command: '/resume',
@@ -125,13 +131,19 @@ const codexSlashCommands = <CodexSlashCommand>[
     command: '/debug-config',
     purpose: '导出配置与诊断信息',
     when: '排查设置未生效或行为异常时。',
+    mobileVisible: false,
   ),
   CodexSlashCommand(
     command: '/statusline',
     purpose: '配置状态栏（仅桌面端）',
     when: '移动端不适用。',
+    mobileVisible: false,
   ),
 ];
+
+final visibleCodexSlashCommands = List<CodexSlashCommand>.unmodifiable(
+  codexSlashCommands.where((item) => item.mobileVisible),
+);
 
 CodexSlashCommand? findCodexSlashCommand(String rawInput) {
   final command = rawInput.trim().split(RegExp(r'\s+')).firstOrNull;

@@ -8,8 +8,6 @@ import '../../../codex/application/codex_skills_store.dart';
 import '../../../codex/application/codex_slash_commands.dart';
 import '../../../mcp/application/mcp_store.dart';
 import '../../application/codex_settings_store.dart';
-import 'android_smoke_page.dart';
-
 part 'settings_page_sections.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -39,8 +37,6 @@ class _SettingsPageState extends State<SettingsPage> {
   String _status = '正在加载设置...';
   CodexSettings _settings = const CodexSettings();
   bool _busy = false;
-  bool _materializedAuthPresent = false;
-  String? _materializedHomeDir;
   List<String> _materializedWarnings = const <String>[];
   List<String> _availableModels = const <String>[];
   bool _modelsLoading = false;
@@ -211,7 +207,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _configPreview = preview.configToml;
         _configPreviewWarnings = preview.warnings ?? const <String>[];
         _configPreviewError = validationError ?? preview.validationError;
-        _status = status ?? '已刷新运行配置预览。';
+        _status = status ?? '已刷新配置预览。';
       });
     } catch (error) {
       if (!mounted) {
@@ -219,7 +215,7 @@ class _SettingsPageState extends State<SettingsPage> {
       }
       setState(() {
         _configPreviewError = '$error';
-        _status = '预览刷新失败：$error';
+        _status = '配置预览刷新失败：$error';
       });
     }
   }
@@ -349,7 +345,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _modelController.text = selected;
       _status = '已选择模型：$selected';
     });
-    await _refreshConfigPreview(status: '已刷新运行配置预览。');
+    await _refreshConfigPreview(status: '已刷新配置预览。');
   }
 
   void _setDraftSettings(CodexSettings next) {
@@ -408,15 +404,13 @@ class _SettingsPageState extends State<SettingsPage> {
       final authFileExists = File(result.authJsonPath).existsSync();
 
       if (!mounted) {
-        return '已生成运行配置。';
+        return authFileExists ? '已生成并保存连接配置。' : '已生成连接配置。';
       }
 
       setState(() {
-        _materializedHomeDir = result.codexHomePath;
-        _materializedAuthPresent = authFileExists;
         _materializedWarnings = result.warnings ?? const <String>[];
       });
-      return '已生成运行配置。';
+      return authFileExists ? '已生成并保存连接配置。' : '已生成连接配置。';
     });
   }
 
@@ -617,25 +611,9 @@ class _SettingsPageState extends State<SettingsPage> {
           apiKeySaved: _apiKeyController.text.trim().isNotEmpty,
           mcpServerCount: _mcpServerCount,
           installedSkills: _installedSkills,
-          skillsDirPath: _skillsDirPath,
-          materializedHomeDir: _materializedHomeDir,
-          materializedAuthPresent: _materializedAuthPresent,
           materializedWarnings: _materializedWarnings,
           busy: _busy,
           onMaterialize: _materializeCodexHome,
-        ),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.science_outlined),
-            title: const Text('Android Smoke 验证'),
-            subtitle: const Text('继续保留 1.5 阶段入口；当前先不执行真机测试。'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => AndroidSmokePage()),
-              );
-            },
-          ),
         ),
         if (_busy) const _BusySettingsCard(),
       ],

@@ -762,11 +762,6 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
           onPull: _pullFromWebDav,
           onPush: _pushToWebDav,
         ),
-        _WorkspaceDebugInfoCard(
-          workspace: _selectedWorkspace,
-          paths: _selectedPaths,
-          activeWorkspaceId: _activeWorkspaceId,
-        ),
         if (_busy) const _WorkspaceBusyCard(),
       ],
     );

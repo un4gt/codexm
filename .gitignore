@@ -21,6 +21,7 @@ flutter_app/android/**/build/
 flutter_app/android/local.properties
 flutter_app/packages/codexm_native/android/.cxx/
 flutter_app/packages/codexm_native/android/build/
+flutter_app/packages/codexm_native/android/runtime_inputs/
 flutter_app/packages/codexm_native/android/src/main/assets/codex/
 flutter_app/packages/codexm_native/example/.dart_tool/
 flutter_app/packages/codexm_native/example/android/.gradle/

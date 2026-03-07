@@ -12,8 +12,8 @@ CodexM 是一个以移动端为主的 Codex 交互与 coding 工作台，当前�
 
 ## 已完成能力
 
-- 设置：密钥 / 地址 / 模型列表拉取、配置预览与 `config.toml` 物化
-- 工作区：空白工作区创建、Git clone / pull、调试信息、WebDAV 配置与同步
+- 设置：密钥 / 地址 / 模型列表拉取、配置预览与连接配置生成
+- 工作区：空白工作区创建、Git clone / pull、WebDAV 配置与同步
 - 会话：单工作区单 session、历史恢复、流式消息、review / compact
 - 输入增强：slash command、本地命令、`@` 文件与最近 commit mention
 - MCP：全局作用域，仅支持 `Streamable HTTP/HTTP` 与 `Rust stdio (aarch64 build)`
@@ -50,7 +50,7 @@ flutter test
 python3 scripts/fetch_android_codex_deps.py --abi arm64-v8a
 ```
 
-脚本会把以下产物放到 Flutter 插件资产目录：
+脚本会把以下产物放到 Flutter 插件运行时输入目录，随后由插件构建任务转换成 `jniLibs`：
 
 - `codex`
 - `codex-exec`

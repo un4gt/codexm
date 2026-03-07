@@ -324,6 +324,10 @@ class CodexSettingsStore {
       }
       final out = ids.toList(growable: false)..sort((left, right) => left.compareTo(right));
       return out;
+    } on SocketException {
+      throw StateError('无法连接到服务地址，请检查地址、网络连接或 DNS 配置。');
+    } on HandshakeException {
+      throw StateError('连接已建立，但证书校验失败；请检查 HTTPS 证书配置。');
     } finally {
       if (shouldCloseClient) {
         client.close(force: true);

@@ -162,7 +162,7 @@ class _WorkspaceDetailCard extends StatelessWidget {
           children: [
             Text('工作区详情', style: theme.textTheme.titleMedium),
             const SizedBox(height: 12),
-            if (workspace == null) const Text('选择一个工作区后，这里会展示本地目录与运行摘要。'),
+            if (workspace == null) const Text('选择一个工作区后，这里会展示当前位置与准备状态。'),
             if (workspace != null) ...[
               ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -191,12 +191,12 @@ class _WorkspaceDetailCard extends StatelessWidget {
               ),
               _PathTile(
                 icon: Icons.play_circle_outline,
-                title: '运行目录',
+                title: '工作环境',
                 value: paths?.codexHomeDir.path ?? '尚未准备',
               ),
               _PathTile(
                 icon: Icons.timer_outlined,
-                title: '临时目录',
+                title: '缓存目录',
                 value: paths?.tmpDir.path ?? '尚未准备',
               ),
               const SizedBox(height: 12),
@@ -332,82 +332,6 @@ class _WorkspaceBusyCard extends StatelessWidget {
         ),
         title: Text('正在更新工作区'),
         subtitle: Text('完成后会自动刷新列表和详情。'),
-      ),
-    );
-  }
-}
-
-class _WorkspaceDebugInfoCard extends StatelessWidget {
-  const _WorkspaceDebugInfoCard({
-    required this.workspace,
-    required this.paths,
-    required this.activeWorkspaceId,
-  });
-
-  final Workspace? workspace;
-  final WorkspacePaths? paths;
-  final WorkspaceId? activeWorkspaceId;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final logsDirPath = paths == null
-        ? '尚未准备'
-        : '${paths!.codexHomeDir.path}/logs';
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('调试信息', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 12),
-            if (workspace == null)
-              const Text('选择一个工作区后，这里会展示 Android Flutter 迁移线的调试路径信息。'),
-            if (workspace != null) ...[
-              _PathTile(
-                icon: Icons.tag_outlined,
-                title: '工作区 ID',
-                value: workspace!.id,
-              ),
-              _PathTile(
-                icon: Icons.check_circle_outline,
-                title: '当前激活',
-                value: workspace!.id == activeWorkspaceId ? '是' : '否',
-              ),
-              _PathTile(
-                icon: Icons.description_outlined,
-                title: '清单文件',
-                value: paths?.workspaceJsonFile.path ?? '尚未准备',
-              ),
-              _PathTile(
-                icon: Icons.data_object_outlined,
-                title: '元数据目录',
-                value: paths?.metaDir.path ?? '尚未准备',
-              ),
-              _PathTile(
-                icon: Icons.play_circle_outline,
-                title: 'Codex Home',
-                value: paths?.codexHomeDir.path ?? '尚未准备',
-              ),
-              _PathTile(
-                icon: Icons.settings_outlined,
-                title: '配置文件',
-                value: paths?.configTomlFile.path ?? '尚未准备',
-              ),
-              _PathTile(
-                icon: Icons.key_outlined,
-                title: '认证文件',
-                value: paths?.authJsonFile.path ?? '尚未准备',
-              ),
-              _PathTile(
-                icon: Icons.bug_report_outlined,
-                title: '日志目录',
-                value: logsDirPath,
-              ),
-            ],
-          ],
-        ),
       ),
     );
   }

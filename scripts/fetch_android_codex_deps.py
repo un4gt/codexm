@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-下载并安装 Android 端 Codex 依赖到 Flutter 插件的 assets 目录（默认仅 arm64-v8a）。
+下载并安装 Android 端 Codex 依赖到 Flutter 插件的运行时输入目录（默认仅 arm64-v8a）。
 
 产物路径：
-  flutter_app/packages/codexm_native/android/src/main/assets/codex/<abi>/{codex,codex-exec,rg}
-  flutter_app/packages/codexm_native/android/src/main/assets/codex/<abi>/{libcodex_z.so,libcodex_lzma.so}
+  flutter_app/packages/codexm_native/android/runtime_inputs/codex/<abi>/{codex,codex-exec,rg}
+  flutter_app/packages/codexm_native/android/runtime_inputs/codex/<abi>/{libcodex_z.so,libcodex_lzma.so}
 
 来源（默认）：
   - codex/codex-exec：DioNanos/codex-termux 的 GitHub Releases（Termux ARM64）
@@ -678,16 +678,14 @@ def _repo_root() -> Path:
   return here.parents[1]
 
 
-def _assets_out_dir(abi: str) -> Path:
+def _runtime_input_dir(abi: str) -> Path:
   return (
     _repo_root()
     / 'flutter_app'
     / 'packages'
     / 'codexm_native'
     / 'android'
-    / 'src'
-    / 'main'
-    / 'assets'
+    / 'runtime_inputs'
     / 'codex'
     / abi
   )
@@ -762,7 +760,7 @@ def main(argv: list[str]) -> int:
     download_headers['Authorization'] = f'Bearer {token}'
 
   for abi in abis:
-    out_dir = _assets_out_dir(abi)
+    out_dir = _runtime_input_dir(abi)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f'== ABI: {abi} ==')

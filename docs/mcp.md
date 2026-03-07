@@ -1,6 +1,6 @@
 # MCP 支持说明（Flutter Android）
 
-本项目通过 `config.toml` 配置对接 MCP（Model Context Protocol）。当前 Flutter 主线已经收敛为 **全局 MCP 管理**，不再按 workspace 单独维护一套服务器配置。
+本项目通过运行配置对接 MCP（Model Context Protocol）。当前 Flutter 主线已经收敛为 **全局 MCP 管理**，不再按 workspace 单独维护一套服务器配置。
 
 ## 当前支持类型
 
@@ -48,4 +48,4 @@ args = ["--flag"]
 
 - MCP 与 skills 现在都属于全局作用域
 - 运行时若设备限制私有目录 ELF 执行，优先改用远程 MCP
-- 真机验证前，建议先通过设置页的配置预览确认最终写出的 `config.toml`
+- 真机验证前，建议先通过设置页的配置预览确认最终生成的连接配置

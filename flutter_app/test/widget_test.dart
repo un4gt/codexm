@@ -14,7 +14,7 @@ void main() {
     expect(find.text('设置'), findsAtLeastNWidgets(1));
   });
 
-  testWidgets('renders smoke entry on settings page', (WidgetTester tester) async {
+  testWidgets('renders user-facing settings sections', (WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
@@ -25,14 +25,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('全局 Skills'), findsOneWidget);
-
+    expect(find.text('Android Smoke 验证'), findsNothing);
     await tester.scrollUntilVisible(
-      find.text('Android Smoke 验证'),
-      300,
+      find.text('配置预览'),
+      -300,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
-
-    expect(find.text('Android Smoke 验证'), findsOneWidget);
+    expect(find.text('配置预览'), findsOneWidget);
   });
 }
