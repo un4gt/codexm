@@ -45,3 +45,4 @@ flutter_app/packages/codexm_native/build/
 *.apk
 *.aab
 app-example
+.env
