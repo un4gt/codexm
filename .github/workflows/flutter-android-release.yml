@@ -52,7 +52,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+          # App targets Android 36, while some plugin modules still compile against older SDKs.
+          # Install both to avoid relying on whatever the hosted runner happens to preinstall.
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-34" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;28.2.13676358" \
+            "cmake;3.22.1"
           set +o pipefail
           yes 2>/dev/null | sdkmanager --licenses >/dev/null
           set -o pipefail
@@ -64,9 +72,34 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Prepare Android signing keystore (optional)
+        if: ${{ env.KEYSTORE_FILE != '' }}
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f "${KEYSTORE_FILE}" ]]; then
+            echo "Using existing keystore file: ${KEYSTORE_FILE}"
+            exit 0
+          fi
+
+          OUT="${GITHUB_WORKSPACE}/flutter_app/android/release.keystore.jks"
+          mkdir -p "$(dirname "${OUT}")"
+
+          if ! printf '%s' "${KEYSTORE_FILE}" | base64 --decode > "${OUT}" 2>/dev/null; then
+            echo "KEYSTORE_FILE is set but is neither an existing file path nor valid base64 keystore content." >&2
+            exit 1
+          fi
+
+          chmod 600 "${OUT}" || true
+          echo "KEYSTORE_FILE=${OUT}" >> "${GITHUB_ENV}"
+          echo "Prepared keystore file for release signing."
+
       - name: Fetch Codex Android deps
         working-directory: .
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           python3 scripts/fetch_android_codex_deps.py --abi arm64-v8a
@@ -90,20 +123,34 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
-            echo "This workflow expects a tag trigger." >&2
-            exit 1
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION_NAME="${GITHUB_REF_NAME#v}"
+            if [[ ! "${VERSION_NAME}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)([-+].*)?$ ]]; then
+              echo "Unsupported tag format: ${GITHUB_REF_NAME}" >&2
+              exit 1
+            fi
+            MAJOR="${BASH_REMATCH[1]}"
+            MINOR="${BASH_REMATCH[2]}"
+            PATCH="${BASH_REMATCH[3]}"
+            VERSION_CODE="$((10#${MAJOR} * 1000000 + 10#${MINOR} * 1000 + 10#${PATCH}))"
+            ARTIFACT_BASENAME="codexm-${VERSION_NAME}-arm64-v8a"
+          else
+            # workflow_dispatch (and other non-tag triggers): fall back to pubspec version
+            # and use the run number as a unique Android versionCode.
+            PUBSPEC_VERSION="$(
+              grep -E '^[[:space:]]*version:[[:space:]]*' flutter_app/pubspec.yaml \
+                | head -n 1 \
+                | sed -E 's/^[[:space:]]*version:[[:space:]]*//'
+            )"
+            PUBSPEC_VERSION="${PUBSPEC_VERSION%%[[:space:]]*}"
+            if [[ -z "${PUBSPEC_VERSION}" ]]; then
+              echo "Unable to read version from flutter_app/pubspec.yaml" >&2
+              exit 1
+            fi
+            VERSION_NAME="${PUBSPEC_VERSION%%+*}"
+            VERSION_CODE="${GITHUB_RUN_NUMBER}"
+            ARTIFACT_BASENAME="codexm-${VERSION_NAME}-arm64-v8a-ci-${GITHUB_RUN_NUMBER}"
           fi
-          VERSION_NAME="${GITHUB_REF_NAME#v}"
-          if [[ ! "${VERSION_NAME}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)([-+].*)?$ ]]; then
-            echo "Unsupported tag format: ${GITHUB_REF_NAME}" >&2
-            exit 1
-          fi
-          MAJOR="${BASH_REMATCH[1]}"
-          MINOR="${BASH_REMATCH[2]}"
-          PATCH="${BASH_REMATCH[3]}"
-          VERSION_CODE="$((10#${MAJOR} * 1000000 + 10#${MINOR} * 1000 + 10#${PATCH}))"
-          ARTIFACT_BASENAME="codexm-${VERSION_NAME}-arm64-v8a"
           {
             echo "VERSION_NAME=${VERSION_NAME}"
             echo "VERSION_CODE=${VERSION_CODE}"
@@ -147,6 +194,7 @@ jobs:
     name: GitHub Release
     needs: build
     runs-on: ubuntu-latest
+    if: ${{ github.ref_type == 'tag' }}
     steps:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -156,6 +204,8 @@ jobs:
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           files: |
             dist/**/${{ needs.build.outputs.artifact_basename }}.apk
