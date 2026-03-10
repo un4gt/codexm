@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../../../shared/widgets/feature_scaffold.dart';
+import '../../../../app/theme/app_theme.dart';
 import '../../../../shared/widgets/adaptive_breakpoints.dart';
+import '../../../../shared/widgets/stitch_ui.dart';
 import '../../../codex/application/codex_skills_store.dart';
 import '../../application/codex_settings_store.dart';
 part 'settings_page_sections.dart';
@@ -17,7 +18,6 @@ class _SettingsPageState extends State<SettingsPage> {
   final _settingsStore = CodexSettingsStore();
   final _skillsStore = CodexSkillsStore();
 
-  late final TextEditingController _apiKeyController;
   late final TextEditingController _skillNameController;
   late final TextEditingController _skillContentController;
 
@@ -26,21 +26,26 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _busy = false;
   String? _skillsDirPath;
   List<String> _installedSkills = const <String>[];
+  String? _apiKeyValue;
+  bool _apiKeyVisible = false;
+  late final TextEditingController _baseUrlController;
+  List<String> _availableModels = const <String>[];
+  bool _modelsLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _apiKeyController = TextEditingController();
     _skillNameController = TextEditingController();
     _skillContentController = TextEditingController();
+    _baseUrlController = TextEditingController();
     _loadSnapshot();
   }
 
   @override
   void dispose() {
-    _apiKeyController.dispose();
     _skillNameController.dispose();
     _skillContentController.dispose();
+    _baseUrlController.dispose();
     super.dispose();
   }
 
@@ -54,11 +59,12 @@ class _SettingsPageState extends State<SettingsPage> {
         return;
       }
 
-      _apiKeyController.text = apiKey ?? '';
+      _baseUrlController.text = settings.openaiBaseUrl ?? '';
       setState(() {
         _settings = settings;
         _installedSkills = skills;
         _skillsDirPath = skillsDir.path;
+        _apiKeyValue = apiKey;
         _status = status ?? '已加载当前设置。';
       });
     } catch (error) {
@@ -68,6 +74,66 @@ class _SettingsPageState extends State<SettingsPage> {
       setState(() {
         _status = '读取设置失败：$error';
       });
+    }
+  }
+
+  Future<void> _saveApiKeyDraft(String value) async {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      await _runAction('正在清除密钥...', () async {
+        await _settingsStore.clearCodexApiKey();
+        return '已清除密钥。';
+      });
+      return;
+    }
+    await _runAction('正在保存密钥...', () async {
+      await _settingsStore.saveCodexApiKey(trimmed);
+      return '已保存密钥。';
+    });
+  }
+
+  Future<void> _saveBaseUrlDraft(String value) async {
+    final trimmed = value.trim();
+    await _runAction('正在保存服务地址...', () async {
+      await _settingsStore.updateSettings(
+        (current) =>
+            current.copyWith(openaiBaseUrl: trimmed.isEmpty ? null : trimmed),
+      );
+      return trimmed.isEmpty ? '已清除服务地址。' : '已保存服务地址。';
+    });
+  }
+
+  Future<void> _refreshModels() async {
+    if (_modelsLoading) {
+      return;
+    }
+    setState(() {
+      _modelsLoading = true;
+    });
+    try {
+      final models = await _settingsStore.fetchAvailableModels(
+        draftBaseUrl: _baseUrlController.text,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _availableModels = models;
+        _status = models.isEmpty ? '未返回可用模型列表。' : '已刷新模型列表。';
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _status = '获取模型列表失败：$error';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _modelsLoading = false;
+        });
+      }
     }
   }
 
@@ -234,16 +300,56 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return FeatureScaffold(
-      title: '设置',
-      description: '这里仅保留真正会影响日常使用体验的设置，避免把运行时和开发配置直接暴露到主界面。',
+    return StitchPageScaffold(
+      pageTitle: '设置',
+      brandIcon: Icons.settings_outlined,
+      kickerText: '偏好与连接',
+      topActions: [
+        IconButton.filledTonal(
+          onPressed: _busy ? null : _refreshModels,
+          tooltip: '刷新模型列表',
+          icon: _modelsLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.refresh_outlined),
+        ),
+      ],
       children: [
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.settings_outlined),
-            title: const Text('设置状态'),
-            subtitle: Text(_status),
-          ),
+        StitchInfoBanner(
+          icon: Icons.info_outline,
+          title: '设置状态',
+          subtitle: _status,
+        ),
+        _ConnectionSection(
+          apiKeyValue: _apiKeyValue,
+          apiKeyVisible: _apiKeyVisible,
+          baseUrlController: _baseUrlController,
+          busy: _busy,
+          modelsLoading: _modelsLoading,
+          availableModels: _availableModels,
+          selectedModel: _settings.model,
+          onToggleApiKeyVisible: () {
+            if (_busy) {
+              return;
+            }
+            setState(() {
+              _apiKeyVisible = !_apiKeyVisible;
+            });
+          },
+          onSaveApiKey: _saveApiKeyDraft,
+          onSaveBaseUrl: _saveBaseUrlDraft,
+          onSelectModel: (value) {
+            if (_busy) {
+              return;
+            }
+            _updatePreference(
+              (current) => current.copyWith(model: value),
+              status: '已更新模型为：$value',
+            );
+          },
         ),
         _PreferenceSection(
           settings: _settings,

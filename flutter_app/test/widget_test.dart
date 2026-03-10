@@ -18,7 +18,20 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
     await tester.pumpAndSettle();
     
+    expect(find.text('连接设置'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('交互偏好'),
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('交互偏好'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('全局 Skills'),
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('全局 Skills'), findsOneWidget);
     expect(find.text('Android Smoke 验证'), findsNothing);
     expect(find.text('配置预览'), findsNothing);

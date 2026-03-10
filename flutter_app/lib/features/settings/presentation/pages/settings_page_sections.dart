@@ -1,5 +1,186 @@
 part of 'settings_page.dart';
 
+class _ConnectionSection extends StatelessWidget {
+  const _ConnectionSection({
+    required this.apiKeyValue,
+    required this.apiKeyVisible,
+    required this.baseUrlController,
+    required this.busy,
+    required this.modelsLoading,
+    required this.availableModels,
+    required this.selectedModel,
+    required this.onToggleApiKeyVisible,
+    required this.onSaveApiKey,
+    required this.onSaveBaseUrl,
+    required this.onSelectModel,
+  });
+
+  final String? apiKeyValue;
+  final bool apiKeyVisible;
+  final TextEditingController baseUrlController;
+  final bool busy;
+  final bool modelsLoading;
+  final List<String> availableModels;
+  final String? selectedModel;
+  final VoidCallback onToggleApiKeyVisible;
+  final ValueChanged<String> onSaveApiKey;
+  final ValueChanged<String> onSaveBaseUrl;
+  final ValueChanged<String> onSelectModel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = context.appTokens;
+
+    final apiKeyMasked = (apiKeyValue ?? '').trim().isNotEmpty
+        ? 'sk-••••••••••••••••••••••'
+        : '未设置';
+    final apiKeyDisplay =
+        apiKeyVisible ? ((apiKeyValue ?? '').trim().isEmpty ? '' : apiKeyValue!.trim()) : apiKeyMasked;
+    final modelValue = (selectedModel ?? '').trim().isEmpty ? '默认' : selectedModel!.trim();
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(tokens.cardRadius),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const StitchSectionHeader(title: '连接设置'),
+            SizedBox(height: tokens.compactSpacing),
+            Text(
+              '密钥与服务地址会用于生成运行时配置；修改后会立即写入本地。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            SizedBox(height: tokens.sectionSpacing),
+            StitchListItem(
+              title: 'API Key',
+              subtitle: apiKeyDisplay,
+              leading: const Icon(Icons.vpn_key_outlined),
+              trailing: IconButton(
+                onPressed: busy ? null : onToggleApiKeyVisible,
+                tooltip: apiKeyVisible ? '隐藏' : '显示',
+                icon: Icon(apiKeyVisible ? Icons.visibility_off : Icons.visibility),
+              ),
+            ),
+            SizedBox(height: tokens.compactSpacing),
+            OutlinedButton.icon(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      final controller = TextEditingController(text: apiKeyValue ?? '');
+                      final result = await showDialog<String>(
+                        context: context,
+                        builder: (dialogContext) {
+                          return AlertDialog(
+                            title: const Text('设置 API Key'),
+                            content: TextField(
+                              controller: controller,
+                              autofocus: true,
+                              obscureText: true,
+                              decoration: const InputDecoration(
+                                labelText: 'API Key',
+                                hintText: 'sk-...',
+                              ),
+                              onSubmitted: (value) {
+                                Navigator.of(dialogContext).pop(value.trim());
+                              },
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(dialogContext).pop(),
+                                child: const Text('取消'),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
+                                child: const Text('保存'),
+                              ),
+                            ],
+                          );
+                        },
+                      );
+                      controller.dispose();
+                      if (result == null) {
+                        return;
+                      }
+                      onSaveApiKey(result);
+                    },
+              icon: const Icon(Icons.edit_outlined),
+              label: Text((apiKeyValue ?? '').trim().isEmpty ? '设置密钥' : '更新密钥'),
+            ),
+            SizedBox(height: tokens.sectionSpacing),
+            TextField(
+              controller: baseUrlController,
+              enabled: !busy,
+              decoration: const InputDecoration(
+                labelText: 'Base URL（可选）',
+                hintText: 'https://api.openai.com/v1',
+              ),
+              textInputAction: TextInputAction.done,
+              onSubmitted: (value) => onSaveBaseUrl(value),
+            ),
+            SizedBox(height: tokens.compactSpacing),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                onPressed: busy ? null : () => onSaveBaseUrl(baseUrlController.text),
+                icon: const Icon(Icons.save_outlined),
+                label: const Text('保存地址'),
+              ),
+            ),
+            SizedBox(height: tokens.sectionSpacing),
+            StitchListItem(
+              title: '当前模型',
+              subtitle: modelValue,
+              leading: const Icon(Icons.auto_awesome_outlined),
+              trailing: modelsLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : null,
+            ),
+              if (availableModels.isNotEmpty) ...[
+                SizedBox(height: tokens.compactSpacing),
+                DropdownButtonFormField<String>(
+                key: ValueKey<String>(selectedModel ?? ''),
+                initialValue: availableModels.contains(selectedModel)
+                    ? selectedModel
+                    : null,
+                decoration: const InputDecoration(labelText: '选择模型'),
+                items: [
+                  for (final model in availableModels)
+                    DropdownMenuItem<String>(
+                      value: model,
+                      child: Text(model),
+                    ),
+                ],
+                onChanged: busy
+                    ? null
+                    : (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return;
+                        }
+                        onSelectModel(value.trim());
+                      },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PreferenceSection extends StatelessWidget {
   const _PreferenceSection({
     required this.settings,
