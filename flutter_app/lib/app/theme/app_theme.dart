@@ -77,7 +77,7 @@ extension AppThemeTokensBuildContext on BuildContext {
 
 ThemeData buildAppTheme() {
   final colorScheme = ColorScheme.fromSeed(
-    seedColor: const Color(0xFF2563EB),
+    seedColor: const Color(0xFFEC5B13),
     brightness: Brightness.light,
   );
   final surfaceTint = colorScheme.surfaceContainerHighest.withValues(alpha: 0.55);
@@ -85,7 +85,7 @@ ThemeData buildAppTheme() {
   return ThemeData(
     colorScheme: colorScheme,
     useMaterial3: true,
-    scaffoldBackgroundColor: colorScheme.surface,
+    scaffoldBackgroundColor: const Color(0xFFF8F6F6),
     extensions: const <ThemeExtension<dynamic>>[
       AppThemeTokens.fallback,
     ],
