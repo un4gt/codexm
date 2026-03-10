@@ -13,10 +13,12 @@ class _McpMetricsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const StitchSectionHeader(title: '数据摘要'),
+        SizedBox(height: context.appTokens.compactSpacing),
+        Row(
           children: [
             Expanded(
               child: _MetricTile(
@@ -25,6 +27,7 @@ class _McpMetricsCard extends StatelessWidget {
                 value: '$urlCount',
               ),
             ),
+            const SizedBox(width: 12),
             Expanded(
               child: _MetricTile(
                 icon: Icons.terminal_outlined,
@@ -32,6 +35,11 @@ class _McpMetricsCard extends StatelessWidget {
                 value: '$localCount',
               ),
             ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
             Expanded(
               child: _MetricTile(
                 icon: Icons.toggle_on_outlined,
@@ -39,9 +47,10 @@ class _McpMetricsCard extends StatelessWidget {
                 value: '$enabledCount',
               ),
             ),
+            const Spacer(),
           ],
         ),
-      ),
+      ],
     );
   }
 }
@@ -76,131 +85,35 @@ class _ServerListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('服务列表', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 12),
-            if (servers.isEmpty) const Text('还没有扩展服务，添加后会自动写入本地配置。'),
-            for (final server in servers) ...[
-              if (servers.first != server) const Divider(height: 24),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(server.name, style: theme.textTheme.titleMedium),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            FilterChip(
-                              label: Text(
-                                enabledGlobalServerIds.contains(server.id)
-                                    ? '全局已启用'
-                                    : '全局未启用',
-                              ),
-                              selected: enabledGlobalServerIds.contains(
-                                server.id,
-                              ),
-                              onSelected: busy
-                                  ? null
-                                  : (value) =>
-                                        onSetServerEnabled(server, value),
-                            ),
-                            Chip(
-                              label: Text(
-                                runnableById[server.id] == true ? '可运行' : '待确认',
-                              ),
-                              side: BorderSide.none,
-                              backgroundColor: runnableById[server.id] == true
-                                  ? theme.colorScheme.primaryContainer
-                                  : theme.colorScheme.surfaceContainerHighest,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '接入方式：${server.transport == 'url' ? 'Streamable HTTP/HTTP' : 'Rust stdio（aarch64 可执行文件）'}',
-                        ),
-                        Text('标识：${server.configKey}'),
-                        if (server.url?.trim().isNotEmpty == true)
-                          Text('服务地址：${server.url}'),
-                        if (server.command?.trim().isNotEmpty == true)
-                          Text(
-                            '启动程序：${server.command} ${(server.args ?? const <String>[]).join(' ')}',
-                          ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '托管安装：${installedById[server.id] == true ? '已安装' : '未安装'}',
-                        ),
-                        Text(
-                          '执行路径：${managedExecPathById[server.id] ?? '尚未生成'}',
-                        ),
-                        if (server.transport == 'stdio') ...[
-                          const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              OutlinedButton.icon(
-                                onPressed: busy
-                                    ? null
-                                    : () => onInstallManagedServer(server),
-                                icon: const Icon(Icons.download_outlined),
-                                label: Text(
-                                  installedById[server.id] == true
-                                      ? '重新安装'
-                                      : '下载并安装',
-                                ),
-                              ),
-                              TextButton.icon(
-                                onPressed:
-                                    busy || installedById[server.id] != true
-                                    ? null
-                                    : () => onUninstallManagedServer(server),
-                                icon: const Icon(Icons.delete_outline),
-                                label: const Text('卸载本地文件'),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  PopupMenuButton<_ServerAction>(
-                    onSelected: (action) {
-                      switch (action) {
-                        case _ServerAction.edit:
-                          onEditServer(server);
-                        case _ServerAction.delete:
-                          onDeleteServer(server);
-                      }
-                    },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(
-                        value: _ServerAction.edit,
-                        child: Text('编辑'),
-                      ),
-                      PopupMenuItem(
-                        value: _ServerAction.delete,
-                        child: Text('删除'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
+    final tokens = context.appTokens;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const StitchSectionHeader(title: '服务列表'),
+        SizedBox(height: tokens.compactSpacing),
+        if (servers.isEmpty)
+          const StitchListItem(
+            title: '还没有扩展服务',
+            subtitle: '点击顶部「+」添加 Streamable HTTP 或 Rust stdio 服务。',
+            leading: Icon(Icons.extension_outlined),
+          ),
+        for (final server in servers) ...[
+          if (servers.first != server) const SizedBox(height: 12),
+          _ServerStitchCard(
+            server: server,
+            busy: busy,
+            enabled: enabledGlobalServerIds.contains(server.id),
+            runnable: runnableById[server.id] == true,
+            installed: installedById[server.id] == true,
+            execPath: managedExecPathById[server.id],
+            onSetEnabled: (value) => onSetServerEnabled(server, value),
+            onEdit: () => onEditServer(server),
+            onDelete: () => onDeleteServer(server),
+            onInstall: () => onInstallManagedServer(server),
+            onUninstall: () => onUninstallManagedServer(server),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -221,10 +134,213 @@ class _MetricTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(value, style: theme.textTheme.titleLarge),
-      subtitle: Text(label),
+    final colorScheme = theme.colorScheme;
+    final tokens = context.appTokens;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(tokens.cardRadius),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.8),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Row(
+          children: [
+            Icon(icon, color: colorScheme.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      letterSpacing: 1.1,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    value,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ServerStitchCard extends StatelessWidget {
+  const _ServerStitchCard({
+    required this.server,
+    required this.busy,
+    required this.enabled,
+    required this.runnable,
+    required this.installed,
+    required this.execPath,
+    required this.onSetEnabled,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onInstall,
+    required this.onUninstall,
+  });
+
+  final McpServer server;
+  final bool busy;
+  final bool enabled;
+  final bool runnable;
+  final bool installed;
+  final String? execPath;
+  final ValueChanged<bool> onSetEnabled;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onInstall;
+  final VoidCallback onUninstall;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final tokens = context.appTokens;
+
+    final transportLabel =
+        server.transport == 'url' ? 'Streamable HTTP' : 'Rust stdio';
+    final endpoint = server.transport == 'url'
+        ? (server.url?.trim().isNotEmpty == true ? server.url!.trim() : '未填写服务地址')
+        : (server.command?.trim().isNotEmpty == true
+              ? server.command!.trim()
+              : '未填写可执行文件');
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(tokens.cardRadius),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.8),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    server.transport == 'url'
+                        ? Icons.link_outlined
+                        : Icons.terminal_outlined,
+                    color: colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        server.name,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$transportLabel · ${server.configKey}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuButton<_ServerAction>(
+                  onSelected: busy
+                      ? null
+                      : (action) {
+                          switch (action) {
+                            case _ServerAction.edit:
+                              onEdit();
+                            case _ServerAction.delete:
+                              onDelete();
+                          }
+                        },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: _ServerAction.edit,
+                      child: Text('编辑'),
+                    ),
+                    PopupMenuItem(
+                      value: _ServerAction.delete,
+                      child: Text('删除'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            SizedBox(height: tokens.compactSpacing),
+            StitchListItem(
+              title: enabled ? '已全局启用' : '未全局启用',
+              subtitle: runnable ? '可运行' : '可运行性待确认',
+              leading: const Icon(Icons.toggle_on_outlined),
+              trailing: Switch.adaptive(
+                value: enabled,
+                onChanged: busy ? null : onSetEnabled,
+              ),
+            ),
+            SizedBox(height: tokens.compactSpacing),
+            StitchListItem(
+              title: '接入信息',
+              subtitle: endpoint,
+              leading: const Icon(Icons.info_outline),
+            ),
+            if (server.transport == 'stdio') ...[
+              SizedBox(height: tokens.compactSpacing),
+              StitchListItem(
+                title: installed ? '托管安装：已安装' : '托管安装：未安装',
+                subtitle: execPath?.trim().isNotEmpty == true
+                    ? '执行路径：${execPath!.trim()}'
+                    : '执行路径：尚未生成',
+                leading: const Icon(Icons.inventory_2_outlined),
+              ),
+              SizedBox(height: tokens.compactSpacing),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: busy ? null : onInstall,
+                    icon: const Icon(Icons.download_outlined),
+                    label: Text(installed ? '重新安装' : '下载并安装'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: busy || !installed ? null : onUninstall,
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('卸载本地文件'),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

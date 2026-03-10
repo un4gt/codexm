@@ -1,7 +1,8 @@
 import 'package:uuid/uuid.dart';
 import 'package:flutter/material.dart';
 
-import '../../../../shared/widgets/feature_scaffold.dart';
+import '../../../../app/theme/app_theme.dart';
+import '../../../../shared/widgets/stitch_ui.dart';
 import '../../application/managed_mcp_installer.dart';
 import '../../application/mcp_models.dart';
 import '../../application/mcp_runnable.dart';
@@ -145,57 +146,37 @@ class _McpPageState extends State<McpPage> {
         .length;
     final enabledCount = _enabledGlobalServerIds.length;
 
-    return FeatureScaffold(
-      title: '扩展服务',
-      description:
-          '管理全局 MCP 服务；当前仅支持 Streamable HTTP/HTTP 与 Rust stdio（aarch64）两类接入。',
+    return StitchPageScaffold(
+      pageTitle: 'MCP & Skills',
+      brandIcon: Icons.memory_outlined,
+      kickerText: '全局作用域',
+      topActions: [
+        IconButton.filledTonal(
+          onPressed: _busy ? null : _addServer,
+          tooltip: '添加服务',
+          icon: const Icon(Icons.add),
+        ),
+        IconButton.filledTonal(
+          onPressed: _busy ? null : () => _refresh(),
+          tooltip: '刷新状态',
+          icon: const Icon(Icons.refresh_outlined),
+        ),
+      ],
       children: [
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.extension_outlined),
-            title: const Text('当前状态'),
-            subtitle: Text(_status),
-          ),
+        StitchInfoBanner(
+          icon: Icons.info_outline,
+          title: '当前状态',
+          subtitle: _status,
         ),
-        const Card(
-          child: ListTile(
-            leading: Icon(Icons.tune_outlined),
-            title: Text('选择作用域'),
-            subtitle: Text('MCP 启用状态为全局配置，不再按工作区或会话单独选择。'),
-          ),
-        ),
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.inventory_2_outlined),
-            title: const Text('托管安装目录'),
-            subtitle: Text(_installsRootPath ?? '尚未准备'),
-          ),
+        StitchInfoBanner(
+          icon: Icons.inventory_2_outlined,
+          title: '托管安装目录',
+          subtitle: _installsRootPath ?? '尚未准备',
         ),
         _McpMetricsCard(
           urlCount: urlCount,
           localCount: localCount,
           enabledCount: enabledCount,
-        ),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                FilledButton.icon(
-                  onPressed: _busy ? null : _addServer,
-                  icon: const Icon(Icons.add_link_outlined),
-                  label: const Text('添加服务'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _busy ? null : () => _refresh(),
-                  icon: const Icon(Icons.refresh_outlined),
-                  label: const Text('刷新状态'),
-                ),
-              ],
-            ),
-          ),
         ),
         _ServerListCard(
           servers: _servers,
@@ -211,16 +192,10 @@ class _McpPageState extends State<McpPage> {
           onUninstallManagedServer: _uninstallManagedServer,
         ),
         if (_busy)
-          const Card(
-            child: ListTile(
-              leading: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              title: Text('正在同步扩展服务'),
-              subtitle: Text('完成后会自动刷新可运行性与安装摘要。'),
-            ),
+          const StitchInfoBanner(
+            icon: Icons.sync,
+            title: '正在同步扩展服务',
+            subtitle: '完成后会自动刷新可运行性与安装摘要。',
           ),
       ],
     );
