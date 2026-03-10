@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CodexM Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#ec5b13",
+                        "background-light": "#f8f6f6",
+                        "background-dark": "#221610",
+                    },
+                    fontFamily: {
+                        "display": ["Public Sans"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Public Sans', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+<!-- Header -->
+<header class="sticky top-0 z-10 flex items-center justify-between bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md p-4 border-b border-slate-200 dark:border-primary/20">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary">arrow_back</span>
+<h1 class="text-xl font-bold tracking-tight">Settings</h1>
+</div>
+<button class="bg-primary text-white px-4 py-2 rounded-lg font-medium text-sm">Save Changes</button>
+</header>
+<main class="max-w-2xl mx-auto pb-32">
+<!-- API Section -->
+<section class="p-4 space-y-4">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-primary text-xl">api</span>
+<h2 class="text-lg font-semibold">API Configuration</h2>
+</div>
+<div class="space-y-4">
+<div class="flex flex-col gap-2">
+<label class="text-sm font-medium text-slate-600 dark:text-slate-400">API Key</label>
+<div class="relative flex items-center">
+<input class="w-full bg-slate-100 dark:bg-primary/10 border border-slate-200 dark:border-primary/20 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all" type="password" value="sk-••••••••••••••••••••••••"/>
+<button class="absolute right-3 text-slate-400 hover:text-primary">
+<span class="material-symbols-outlined">visibility</span>
+</button>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-sm font-medium text-slate-600 dark:text-slate-400">Base URL</label>
+<input class="w-full bg-slate-100 dark:bg-primary/10 border border-slate-200 dark:border-primary/20 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all" placeholder="https://api.openai.com/v1" type="text"/>
+</div>
+</div>
+</section>
+<!-- Model Section -->
+<section class="p-4 space-y-4">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-primary text-xl">model_training</span>
+<h2 class="text-lg font-semibold">Model Settings</h2>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-sm font-medium text-slate-600 dark:text-slate-400">Default Model</label>
+<div class="relative">
+<select class="w-full appearance-none bg-slate-100 dark:bg-primary/10 border border-slate-200 dark:border-primary/20 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none cursor-pointer">
+<option>GPT-4o (Omni)</option>
+<option>GPT-4 Turbo</option>
+<option>Claude 3.5 Sonnet</option>
+<option>Llama 3 70B</option>
+</select>
+<span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">expand_more</span>
+</div>
+</div>
+</section>
+<!-- Interaction Section -->
+<section class="p-4 space-y-4">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-primary text-xl">forum</span>
+<h2 class="text-lg font-semibold">Interaction</h2>
+</div>
+<div class="space-y-1">
+<div class="flex items-center justify-between p-4 bg-slate-100 dark:bg-primary/5 rounded-xl border border-slate-200 dark:border-primary/10">
+<div>
+<p class="font-medium">Show Thinking</p>
+<p class="text-xs text-slate-500">Display the chain of thought process</p>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="p-4 space-y-3">
+<p class="text-sm font-medium text-slate-600 dark:text-slate-400">Permissions</p>
+<div class="flex flex-wrap gap-2">
+<span class="px-3 py-1 rounded-full bg-primary/20 text-primary text-xs font-semibold flex items-center gap-1">File Access <span class="material-symbols-outlined text-xs">close</span></span>
+<span class="px-3 py-1 rounded-full bg-primary/20 text-primary text-xs font-semibold flex items-center gap-1">Web Search <span class="material-symbols-outlined text-xs">close</span></span>
+<span class="px-3 py-1 rounded-full bg-primary/10 text-slate-400 text-xs font-semibold flex items-center gap-1 border border-slate-200 dark:border-primary/10">Code Exec <span class="material-symbols-outlined text-xs">add</span></span>
+</div>
+</div>
+<div class="p-4 space-y-3">
+<p class="text-sm font-medium text-slate-600 dark:text-slate-400">Chat Style</p>
+<div class="grid grid-cols-3 gap-2">
+<button class="p-2 text-xs rounded-lg border-2 border-primary bg-primary/10 text-primary font-bold">Concise</button>
+<button class="p-2 text-xs rounded-lg border-2 border-transparent bg-slate-100 dark:bg-primary/5 text-slate-500">Balanced</button>
+<button class="p-2 text-xs rounded-lg border-2 border-transparent bg-slate-100 dark:bg-primary/5 text-slate-500">Creative</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Advanced Section -->
+<section class="p-4 space-y-4">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-primary text-xl">settings_suggest</span>
+<h2 class="text-lg font-semibold">Advanced</h2>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-sm font-medium text-slate-600 dark:text-slate-400">Log Retention</label>
+<div class="relative">
+<select class="w-full appearance-none bg-slate-100 dark:bg-primary/10 border border-slate-200 dark:border-primary/20 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary outline-none cursor-pointer">
+<option>Keep for 7 days</option>
+<option>Keep for 30 days</option>
+<option>Keep for 90 days</option>
+<option>Indefinite</option>
+</select>
+<span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">expand_more</span>
+</div>
+</div>
+</section>
+<div class="p-4 mt-4">
+<button class="w-full py-4 text-red-500 font-semibold border border-red-500/20 bg-red-500/5 rounded-xl hover:bg-red-500/10 transition-colors">
+                Reset All Settings
+            </button>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200 dark:border-primary/20 bg-background-light dark:bg-background-dark/95 backdrop-blur-md px-4 pb-6 pt-3 dark:bg-[#15100d]">
+<div class="flex max-w-2xl mx-auto gap-2"><a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">terminal</span>
+</div>
+<p class="mono-text text-[10px] font-medium leading-normal tracking-[0.05em] uppercase">Workspace</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">chat_bubble</span>
+</div>
+<p class="mono-text text-[10px] font-medium leading-normal tracking-[0.05em] uppercase">Session</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">memory</span>
+</div>
+<p class="mono-text text-[10px] font-medium leading-normal tracking-[0.05em] uppercase">MCP &amp; Skills</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">settings</span>
+</div>
+<p class="mono-text text-[10px] font-bold leading-normal tracking-[0.05em] uppercase">Settings</p>
+</a></div>
+</nav>
+</body></html>

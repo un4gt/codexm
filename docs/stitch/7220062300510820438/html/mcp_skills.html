@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CodexM - MCP &amp; Skills</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#ec5b13",
+                        "background-light": "#f8f6f6",
+                        "background-dark": "#1a0f0a",
+                        "surface-dark": "#2a1811",
+                        "accent-dark": "#3d2419"
+                    },
+                    fontFamily: {
+                        "display": ["Public Sans", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Public Sans', sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #3d2419;
+            border-radius: 10px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col font-display">
+<header class="sticky top-0 z-50 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-primary/10">
+<div class="flex items-center p-4 justify-between">
+<div class="flex items-center gap-3">
+<div class="text-primary flex size-10 items-center justify-center bg-primary/10 rounded-lg">
+<span class="material-symbols-outlined">memory</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-xl font-bold tracking-tight">CodexM</h2>
+</div>
+<div class="flex items-center gap-2">
+<button class="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
+<span class="material-symbols-outlined">terminal</span>
+</button>
+<button class="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+</div>
+<div class="px-4">
+<div class="flex gap-6 border-b border-primary/10">
+<a class="relative flex flex-col items-center justify-center py-3 group" href="#">
+<p class="text-primary text-sm font-bold tracking-wider">MCP &amp; SKILLS</p>
+<div class="absolute bottom-0 w-full h-0.5 bg-primary rounded-t-full"></div>
+</a>
+<a class="relative flex flex-col items-center justify-center py-3 group opacity-50 hover:opacity-100 transition-opacity" href="#">
+<p class="text-slate-900 dark:text-slate-100 text-sm font-bold tracking-wider">SKILLS</p>
+<div class="absolute bottom-0 w-full h-0.5 bg-transparent group-hover:bg-primary/30 rounded-t-full"></div>
+</a>
+</div>
+</div>
+</header>
+<main class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
+<section>
+<div class="flex items-center justify-between mb-4">
+<h4 class="text-primary/70 text-xs font-bold uppercase tracking-[0.2em]">Active Protocols</h4>
+<span class="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded font-mono">4 ONLINE</span>
+</div>
+<div class="space-y-3">
+<!-- Protocol Item 1 -->
+<div class="flex items-center gap-4 bg-surface-dark/40 border border-primary/5 p-4 rounded-xl hover:border-primary/20 transition-colors">
+<div class="text-primary flex items-center justify-center rounded-lg bg-primary/10 shrink-0 size-12">
+<span class="material-symbols-outlined">hub</span>
+</div>
+<div class="flex flex-col flex-1">
+<p class="text-slate-100 text-sm font-semibold tracking-wide">Neural_Link_v4</p>
+<p class="text-slate-400 text-xs font-mono">Latency: 0.4ms • Secure</p>
+</div>
+<div class="shrink-0">
+<label class="relative flex h-6 w-11 cursor-pointer items-center rounded-full bg-primary/20 p-1 transition-colors has-[:checked]:bg-primary">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="h-4 w-4 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5"></div>
+</label>
+</div>
+</div>
+<!-- Protocol Item 2 -->
+<div class="flex items-center gap-4 bg-surface-dark/40 border border-primary/5 p-4 rounded-xl hover:border-primary/20 transition-colors">
+<div class="text-primary flex items-center justify-center rounded-lg bg-primary/10 shrink-0 size-12">
+<span class="material-symbols-outlined">security</span>
+</div>
+<div class="flex flex-col flex-1">
+<p class="text-slate-100 text-sm font-semibold tracking-wide">Encrypted_Bridge</p>
+<p class="text-slate-400 text-xs font-mono">AES-256 Enabled</p>
+</div>
+<div class="shrink-0">
+<label class="relative flex h-6 w-11 cursor-pointer items-center rounded-full bg-primary/20 p-1 transition-colors has-[:checked]:bg-primary">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="h-4 w-4 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5"></div>
+</label>
+</div>
+</div>
+<!-- Protocol Item 3 -->
+<div class="flex items-center gap-4 bg-surface-dark/40 border border-primary/5 p-4 rounded-xl hover:border-primary/20 transition-colors opacity-60">
+<div class="text-slate-400 flex items-center justify-center rounded-lg bg-slate-800 shrink-0 size-12">
+<span class="material-symbols-outlined">cloud_off</span>
+</div>
+<div class="flex flex-col flex-1">
+<p class="text-slate-100 text-sm font-semibold tracking-wide">Remote_Sync_Beta</p>
+<p class="text-slate-400 text-xs font-mono">Status: Idle</p>
+</div>
+<div class="shrink-0">
+<label class="relative flex h-6 w-11 cursor-pointer items-center rounded-full bg-slate-700 p-1 transition-colors has-[:checked]:bg-primary">
+<input class="sr-only peer" type="checkbox"/>
+<div class="h-4 w-4 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5"></div>
+</label>
+</div>
+</div>
+</div>
+</section>
+<section>
+<div class="flex items-center justify-between mb-4">
+<h4 class="text-primary/70 text-xs font-bold uppercase tracking-[0.2em]">Data streams</h4>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<div class="bg-surface-dark/40 p-4 rounded-xl border border-primary/5">
+<p class="text-slate-400 text-[10px] uppercase font-bold mb-1">CPU Load</p>
+<p class="text-xl font-mono text-primary">24.8%</p>
+<div class="mt-2 w-full bg-primary/10 h-1 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[24%]"></div>
+</div>
+</div>
+<div class="bg-surface-dark/40 p-4 rounded-xl border border-primary/5">
+<p class="text-slate-400 text-[10px] uppercase font-bold mb-1">Node count</p>
+<p class="text-xl font-mono text-primary">12/16</p>
+<div class="mt-2 w-full bg-primary/10 h-1 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[75%]"></div>
+</div>
+</div>
+</div>
+</section>
+<section class="pb-20">
+<div class="flex items-center justify-between mb-4">
+<h4 class="text-primary/70 text-xs font-bold uppercase tracking-[0.2em]">System logs</h4>
+<button class="text-primary text-[10px] font-bold">CLEAR</button>
+</div>
+<div class="bg-black/40 rounded-xl p-4 border border-primary/5 font-mono text-[11px] space-y-2 text-slate-400">
+<p><span class="text-primary">[14:22:01]</span> Connection established via Neural_Link_v4</p>
+<p><span class="text-primary">[14:22:05]</span> Protocol handshake completed (0.1ms)</p>
+<p><span class="text-emerald-500">[14:22:10]</span> Synchronizing encrypted_bridge nodes...</p>
+<p><span class="text-slate-500">[14:23:45]</span> Heartbeat pulse received from core_alpha</p>
+</div>
+</section>
+</main>
+<!-- Floating Action Button -->
+<button class="fixed bottom-24 right-6 bg-primary text-white shadow-xl shadow-primary/20 px-6 py-3 rounded-full flex items-center gap-2 hover:scale-105 active:scale-95 transition-transform z-50">
+<span class="material-symbols-outlined">add</span>
+<span class="mono-text font-bold text-sm">Create Workspace</span>
+</button><nav class="fixed bottom-0 left-0 right-0 z-50">
+<div class="flex gap-2 border-t border-slate-200 dark:border-primary/10 bg-background-light dark:bg-[#15100d] px-4 pb-6 pt-3">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">terminal</span>
+</div>
+<p class="mono-text text-[10px] font-medium leading-normal tracking-[0.05em] uppercase">Workspace</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">chat_bubble</span>
+</div>
+<p class="mono-text text-[10px] font-medium leading-normal tracking-[0.05em] uppercase">Session</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">memory</span>
+</div>
+<p class="mono-text text-[10px] font-bold leading-normal tracking-[0.05em] uppercase">MCP &amp; Skills</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">settings</span>
+</div>
+<p class="mono-text text-[10px] font-medium leading-normal tracking-[0.05em] uppercase">Settings</p>
+</a>
+</div>
+</nav>
+</body></html>

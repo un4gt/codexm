@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CodexM Workspace</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#ec5b13",
+                        "background-light": "#f8f6f6",
+                        "background-dark": "#0d0a08",
+                    },
+                    fontFamily: {
+                        "display": ["Public Sans", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Public Sans', sans-serif;
+        }
+        .mono-text {
+            font-family: 'JetBrains Mono', monospace;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<!-- Header -->
+<header class="flex items-center bg-background-light dark:bg-background-dark p-4 pb-2 justify-between border-b border-primary/10">
+<div class="text-primary flex size-10 shrink-0 items-center justify-center">
+<span class="material-symbols-outlined text-3xl">terminal</span>
+</div>
+<h2 class="mono-text text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-[-0.015em] flex-1 ml-2">CodexM</h2>
+<div class="flex gap-4">
+<span class="material-symbols-outlined text-slate-500 hover:text-primary cursor-pointer">search</span>
+<span class="material-symbols-outlined text-slate-500 hover:text-primary cursor-pointer">notifications</span>
+</div>
+</header>
+<main class="flex-1 overflow-y-auto pb-24">
+<!-- Title -->
+<div class="px-4 pt-8 pb-6">
+<h1 class="mono-text text-slate-900 dark:text-slate-100 tracking-tight text-4xl font-bold leading-tight">Workspace</h1>
+<p class="mono-text text-slate-500 text-sm mt-1 uppercase tracking-widest">v2.4.0-stable</p>
+</div>
+<!-- Today Section -->
+<section class="mt-4">
+<h3 class="mono-text text-primary text-xs font-bold leading-tight tracking-widest px-4 pb-3 pt-4 uppercase border-b border-primary/5">Today</h3>
+<div class="group flex items-center gap-4 bg-background-light dark:bg-background-dark px-4 min-h-[64px] justify-between border-b border-primary/5 hover:bg-primary/5 transition-colors cursor-pointer">
+<div class="flex flex-col">
+<p class="mono-text text-slate-900 dark:text-slate-100 text-base font-medium flex-1 truncate">Neural Nexus - Kernel Init</p>
+<span class="mono-text text-[10px] text-slate-500">MODIFIED: 14:22 UTC</span>
+</div>
+<div class="shrink-0 flex items-center">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">arrow_forward</span>
+</div>
+</div>
+<div class="group flex items-center gap-4 bg-background-light dark:bg-background-dark px-4 min-h-[64px] justify-between border-b border-primary/5 hover:bg-primary/5 transition-colors cursor-pointer">
+<div class="flex flex-col">
+<p class="mono-text text-slate-900 dark:text-slate-100 text-base font-medium flex-1 truncate">Vector DB Optimization</p>
+<span class="mono-text text-[10px] text-slate-500">MODIFIED: 09:45 UTC</span>
+</div>
+<div class="shrink-0 flex items-center">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">arrow_forward</span>
+</div>
+</div>
+</section>
+<!-- Yesterday Section -->
+<section class="mt-6">
+<h3 class="mono-text text-slate-500 text-xs font-bold leading-tight tracking-widest px-4 pb-3 pt-4 uppercase border-b border-primary/5">Yesterday</h3>
+<div class="group flex items-center gap-4 bg-background-light dark:bg-background-dark px-4 min-h-[64px] justify-between border-b border-primary/5 hover:bg-primary/5 transition-colors cursor-pointer">
+<div class="flex flex-col">
+<p class="mono-text text-slate-900 dark:text-slate-100 text-base font-medium flex-1 truncate">Project: Cyber-Shredder</p>
+<span class="mono-text text-[10px] text-slate-500">MODIFIED: 2023-10-24</span>
+</div>
+<div class="shrink-0 flex items-center">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">arrow_forward</span>
+</div>
+</div>
+<div class="group flex items-center gap-4 bg-background-light dark:bg-background-dark px-4 min-h-[64px] justify-between border-b border-primary/5 hover:bg-primary/5 transition-colors cursor-pointer">
+<div class="flex flex-col">
+<p class="mono-text text-slate-900 dark:text-slate-100 text-base font-medium flex-1 truncate">Legacy API Wrapper</p>
+<span class="mono-text text-[10px] text-slate-500">MODIFIED: 2023-10-24</span>
+</div>
+<div class="shrink-0 flex items-center">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">arrow_forward</span>
+</div>
+</div>
+</section>
+<!-- Earlier Section -->
+<section class="mt-6">
+<h3 class="mono-text text-slate-500 text-xs font-bold leading-tight tracking-widest px-4 pb-3 pt-4 uppercase border-b border-primary/5">Earlier</h3>
+<div class="group flex items-center gap-4 bg-background-light dark:bg-background-dark px-4 min-h-[64px] justify-between border-b border-primary/5 hover:bg-primary/5 transition-colors cursor-pointer">
+<div class="flex flex-col">
+<p class="mono-text text-slate-900 dark:text-slate-100 text-base font-medium flex-1 truncate">Auth Flow Refactor</p>
+<span class="mono-text text-[10px] text-slate-500">MODIFIED: 2023-10-20</span>
+</div>
+<div class="shrink-0 flex items-center">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">arrow_forward</span>
+</div>
+</div>
+</section>
+</main>
+<!-- Floating Action Button -->
+<button class="fixed bottom-24 right-6 bg-primary text-white shadow-xl shadow-primary/20 px-6 py-3 rounded-full flex items-center gap-2 hover:scale-105 active:scale-95 transition-transform z-50">
+<span class="material-symbols-outlined">add</span>
+<span class="mono-text font-bold text-sm">Create Workspace</span>
+</button>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 right-0 z-50">
+<div class="flex gap-2 border-t border-slate-200 dark:border-primary/10 bg-background-light dark:bg-[#15100d] px-4 pb-6 pt-3">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">terminal</span>
+</div>
+<p class="mono-text text-[10px] font-bold leading-normal tracking-[0.05em] uppercase">Workspace</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">chat_bubble</span>
+</div>
+<p class="mono-text text-[10px] font-medium leading-normal tracking-[0.05em] uppercase">Session</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">memory</span>
+</div>
+<p class="mono-text text-[10px] font-medium leading-normal tracking-[0.05em] uppercase">MCP &amp; Skills</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">settings</span>
+</div>
+<p class="mono-text text-[10px] font-medium leading-normal tracking-[0.05em] uppercase">Settings</p>
+</a>
+</div>
+</nav>
+</body></html>
