@@ -91,6 +91,7 @@ class _ChatPanel extends StatelessWidget {
     required this.onCreateSession,
     required this.canSend,
     required this.canEditComposer,
+    this.preferSidebarSwitcher = false,
   });
 
   final Workspace workspace;
@@ -118,6 +119,7 @@ class _ChatPanel extends StatelessWidget {
   final VoidCallback onCreateSession;
   final bool canSend;
   final bool canEditComposer;
+  final bool preferSidebarSwitcher;
 
   @override
   Widget build(BuildContext context) {
@@ -132,23 +134,24 @@ class _ChatPanel extends StatelessWidget {
 
     return Align(
       alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: contentMaxWidth),
-        child: Column(
-          children: [
-            _ChatHeader(
-              workspace: workspace,
-              selectedSession: selectedSession,
-              sessionCount: sessions.length,
-              status: status,
-              settingsReady: settingsEnabled && hasApiKey,
-              onOpenSessionSwitcher: onOpenSessionSwitcher,
-              onCreateSession: onCreateSession,
-            ),
-            SizedBox(height: tokens.compactSpacing),
-            Expanded(
-              child: Card(
-                clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: contentMaxWidth),
+            child: Column(
+              children: [
+                _ChatHeader(
+                  workspace: workspace,
+                  selectedSession: selectedSession,
+                  sessionCount: sessions.length,
+                  status: status,
+                  settingsReady: settingsEnabled && hasApiKey,
+                  onOpenSessionSwitcher: onOpenSessionSwitcher,
+                  onCreateSession: onCreateSession,
+                  showSessionSwitcher: !preferSidebarSwitcher,
+                ),
+                SizedBox(height: tokens.compactSpacing),
+                Expanded(
+                  child: Card(
+                    clipBehavior: Clip.antiAlias,
                 child: Column(
                   children: [
                     Expanded(
@@ -221,6 +224,7 @@ class _ChatHeader extends StatelessWidget {
     required this.settingsReady,
     required this.onOpenSessionSwitcher,
     required this.onCreateSession,
+    this.showSessionSwitcher = true,
   });
 
   final Workspace workspace;
@@ -230,6 +234,7 @@ class _ChatHeader extends StatelessWidget {
   final bool settingsReady;
   final VoidCallback onOpenSessionSwitcher;
   final VoidCallback onCreateSession;
+  final bool showSessionSwitcher;
 
   @override
   Widget build(BuildContext context) {
@@ -246,10 +251,10 @@ class _ChatHeader extends StatelessWidget {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(tokens.cardRadius),
         border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
         ),
       ),
       child: Padding(
@@ -257,65 +262,54 @@ class _ChatHeader extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            compact
-                ? Column(
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    Icons.chat_bubble_outline,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         selectedSession?.title ?? '主会话',
-                        style: theme.textTheme.titleLarge,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Text(
                         workspace.name,
-                        style: theme.textTheme.bodyMedium?.copyWith(
+                        style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                      SizedBox(height: sectionGap),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.tonalIcon(
-                          onPressed: onOpenSessionSwitcher,
-                          icon: const Icon(Icons.swap_horiz_outlined),
-                          label: Text('会话 $sessionCount'),
-                        ),
-                      ),
-                    ],
-                  )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              selectedSession?.title ?? '主会话',
-                              style: theme.textTheme.titleLarge,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              workspace.name,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      FilledButton.tonalIcon(
-                        onPressed: onOpenSessionSwitcher,
-                        icon: const Icon(Icons.swap_horiz_outlined),
-                        label: Text('会话 $sessionCount'),
-                      ),
                     ],
                   ),
+                ),
+                if (showSessionSwitcher)
+                  IconButton.filledTonal(
+                    onPressed: onOpenSessionSwitcher,
+                    tooltip: '会话 $sessionCount',
+                    icon: const Icon(Icons.swap_horiz_outlined),
+                  ),
+              ],
+            ),
             SizedBox(height: sectionGap),
             Wrap(
-              spacing: 12,
-              runSpacing: 12,
+              spacing: 10,
+              runSpacing: 10,
               children: [
                 _HeaderBadge(
                   icon: settingsReady
@@ -331,45 +325,21 @@ class _ChatHeader extends StatelessWidget {
               ],
             ),
             SizedBox(height: sectionGap),
-            compact
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        status,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: onCreateSession,
-                          icon: const Icon(Icons.add_comment_outlined),
-                          label: const Text('新建会话'),
-                        ),
-                      ),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          status,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      OutlinedButton.icon(
-                        onPressed: onCreateSession,
-                        icon: const Icon(Icons.add_comment_outlined),
-                        label: const Text('新建会话'),
-                      ),
-                    ],
-                  ),
+            Text(
+              status,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            SizedBox(height: sectionGap),
+            Align(
+              alignment: compact ? Alignment.centerRight : Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: onCreateSession,
+                icon: const Icon(Icons.add_comment_outlined),
+                label: const Text('新建会话'),
+              ),
+            ),
           ],
         ),
       ),
@@ -391,20 +361,24 @@ class _HeaderBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return DecoratedBox(
       decoration: BoxDecoration(
         color: emphasized
-            ? theme.colorScheme.primaryContainer
-            : theme.colorScheme.surface,
+            ? colorScheme.primary.withValues(alpha: 0.16)
+            : colorScheme.surface,
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 18),
+            Icon(icon, size: 18, color: colorScheme.primary),
             const SizedBox(width: 8),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 260),
