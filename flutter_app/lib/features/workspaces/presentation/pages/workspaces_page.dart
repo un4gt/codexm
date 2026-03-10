@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:codexm_native/codexm_native.dart';
 
-import '../../../../shared/widgets/feature_scaffold.dart';
-import '../../../../shared/widgets/adaptive_breakpoints.dart';
+import '../../../../app/theme/app_theme.dart';
+import '../../../../shared/widgets/stitch_ui.dart';
 import '../../../settings/application/auth_store.dart';
 import '../../../settings/application/auth_types.dart' hide AuthRef;
 import '../../application/workspace_git_error_mapper.dart';
@@ -704,39 +704,59 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
 
   @override
   Widget build(BuildContext context) {
-    return FeatureScaffold(
-      title: '工作区',
-      description: '在这里创建或克隆工作区，并在准备完成后快速进入会话。',
-      children: [
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.folder_outlined),
-            title: const Text('当前状态'),
-            subtitle: Text(_status),
+    return StitchPageScaffold(
+      pageTitle: '工作区',
+      brandIcon: Icons.terminal_outlined,
+      kickerText: 'Flutter Android',
+      topActions: [
+        IconButton.filledTonal(
+          onPressed: _busy ? null : _cloneWorkspace,
+          tooltip: '克隆仓库',
+          icon: const Icon(Icons.download_for_offline_outlined),
+        ),
+        IconButton.filledTonal(
+          onPressed: _busy ? null : () => _refresh(),
+          tooltip: '刷新列表',
+          icon: const Icon(Icons.refresh_outlined),
+        ),
+        if (_activeWorkspaceId != null)
+          IconButton.filledTonal(
+            onPressed: _busy ? null : widget.onOpenSessionsRequested,
+            tooltip: '进入会话',
+            icon: const Icon(Icons.chat_bubble_outline),
           ),
+      ],
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _busy ? null : _createWorkspace,
+        icon: const Icon(Icons.add),
+        label: const Text('新建工作区'),
+      ),
+      children: [
+        StitchInfoBanner(
+          icon: Icons.info_outline,
+          title: '当前状态',
+          subtitle: _status,
         ),
-        _WorkspacePrimaryActionsRow(
-          busy: _busy,
-          hasActiveWorkspace: _activeWorkspaceId != null,
-          onCreateWorkspace: _createWorkspace,
-          onCloneWorkspace: _cloneWorkspace,
-          onRefresh: _refresh,
-          onOpenSessionsRequested: widget.onOpenSessionsRequested,
-        ),
-        _WorkspaceListCard(
+        _WorkspaceStitchListSection(
           workspaces: _workspaces,
           selectedWorkspaceId: _selectedWorkspaceId,
           activeWorkspaceId: _activeWorkspaceId,
+          selectedPaths: _selectedPaths,
+          busy: _busy,
           onSelectWorkspace: _selectWorkspace,
           onActivateWorkspace: _activateWorkspace,
           onRenameWorkspace: _renameWorkspace,
           onDeleteWorkspace: _deleteWorkspace,
-          onOpenSessionsRequested: widget.onOpenSessionsRequested,
           onSyncGit: _syncWorkspaceGit,
+          onOpenSessionsRequested: widget.onOpenSessionsRequested,
           repoReadyResolver: _isRepoReady,
-          selectedPaths: _selectedPaths,
         ),
-        if (_busy) const _WorkspaceBusyCard(),
+        if (_busy)
+          const StitchInfoBanner(
+            icon: Icons.sync,
+            title: '正在处理工作区',
+            subtitle: '完成后会自动刷新列表。',
+          ),
       ],
     );
   }

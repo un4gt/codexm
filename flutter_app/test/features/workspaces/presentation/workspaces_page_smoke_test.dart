@@ -72,8 +72,6 @@ void main() {
 
     expect(find.text('还没有工作区'), findsOneWidget);
     expect(find.text('新建工作区'), findsOneWidget);
-    expect(find.text('克隆仓库'), findsOneWidget);
     expect(find.text('工作区'), findsAtLeastNWidgets(1));
-    expect(find.text('只保留最小必要入口：选择工作区、进入会话、拉取或继续克隆。'), findsOneWidget);
   });
 }
