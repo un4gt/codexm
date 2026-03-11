@@ -341,7 +341,7 @@ class _SessionListRow extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Text(
                       session.codexThreadId?.trim().isNotEmpty == true
                           ? '继续已有对话'
@@ -352,7 +352,7 @@ class _SessionListRow extends StatelessWidget {
                         color: subtitleColor,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Row(
                       children: [
                         Container(

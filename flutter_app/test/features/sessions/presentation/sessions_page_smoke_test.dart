@@ -80,24 +80,27 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.reset());
 
-    final workspacesDir = Directory('${documentsDir.path}/workspaces');
-    final indexDir = Directory('${workspacesDir.path}/.index');
-    await indexDir.create(recursive: true);
-    await File('${indexDir.path}/workspaces.json').writeAsString(
-      const JsonEncoder.withIndent('  ').convert({
-        'version': 1,
-        'workspaces': [
-          {
-            'id': 'test',
-            'name': '测试工作区',
-            'createdAt': 1,
-            'localPath': '${workspacesDir.path}/test/',
-            'git': null,
-            'webdav': null,
-          },
-        ],
-      }),
-    );
+    final workspacesDirPath = '${documentsDir.path}/workspaces';
+    final workspaceLocalPath = '$workspacesDirPath/test/';
+    await tester.runAsync(() async {
+      final indexDir = Directory('$workspacesDirPath/.index');
+      await indexDir.create(recursive: true);
+      await File('${indexDir.path}/workspaces.json').writeAsString(
+        const JsonEncoder.withIndent('  ').convert({
+          'version': 1,
+          'workspaces': [
+            {
+              'id': 'test',
+              'name': '测试工作区',
+              'createdAt': 1,
+              'localPath': workspaceLocalPath,
+              'git': null,
+              'webdav': null,
+            },
+          ],
+        }),
+      );
+    });
 
     await tester.pumpWidget(
       MaterialApp(
@@ -105,8 +108,17 @@ void main() {
         home: const SessionsPage(activeWorkspaceId: 'test'),
       ),
     );
-    await tester.pumpAndSettle(const Duration(seconds: 3));
+    final sidebarTitle = find.text('会话');
+    for (var i = 0; i < 200; i += 1) {
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      });
+      await tester.pump();
+      if (sidebarTitle.evaluate().isNotEmpty) {
+        break;
+      }
+    }
 
-    expect(find.text('会话'), findsAtLeastNWidgets(1));
+    expect(sidebarTitle, findsAtLeastNWidgets(1));
   });
 }
