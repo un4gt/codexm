@@ -23,6 +23,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -691,6 +692,22 @@ def _runtime_input_dir(abi: str) -> Path:
   )
 
 
+_SEMVERISH_RE = re.compile(r'^[0-9]+\.[0-9]+\.[0-9]+([-.+].*)?$')
+
+
+def _normalize_codex_termux_tag(tag: str) -> str:
+  tag = tag.strip()
+  if not tag:
+    return tag
+  if tag == 'latest':
+    return tag
+  if tag.startswith('v'):
+    return tag
+  if _SEMVERISH_RE.match(tag):
+    return f'v{tag}'
+  return tag
+
+
 def main(argv: list[str]) -> int:
   parser = argparse.ArgumentParser()
   parser.add_argument(
@@ -707,8 +724,12 @@ def main(argv: list[str]) -> int:
   )
   parser.add_argument(
     '--codex-termux-tag',
-    default=(os.environ.get('CODEX_TERMUX_TAG') or 'latest'),
-    help='GitHub release tag（默认：latest）',
+    default=(
+      os.environ.get('CODEX_TERMUX_TAG')
+      or os.environ.get('CODEX_TERMUX_VERSION')
+      or 'latest'
+    ),
+    help='GitHub release tag（默认：CODEX_TERMUX_TAG / CODEX_TERMUX_VERSION / latest；支持 0.112.0-termux 或 v0.112.0-termux）',
   )
 
   parser.add_argument(
@@ -729,6 +750,7 @@ def main(argv: list[str]) -> int:
   )
 
   args = parser.parse_args(argv)
+  args.codex_termux_tag = _normalize_codex_termux_tag(args.codex_termux_tag)
   abis = args.abi or ['arm64-v8a']
 
   # ripgrep-prebuilt 资产命名依赖版本号（去掉 v 前缀）

@@ -30,6 +30,7 @@ jobs:
       KEYSTORE_PASSWORD: ${{ secrets.FLUTTER_ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.FLUTTER_ANDROID_KEY_ALIAS }}
       KEY_PASSWORD: ${{ secrets.FLUTTER_ANDROID_KEY_PASSWORD }}
+      CODEX_TERMUX_TAG: ${{ vars.CODEX_TERMUX_TAG }}
 
     steps:
       - name: Checkout
