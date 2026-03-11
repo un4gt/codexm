@@ -127,8 +127,6 @@ val generateCodexJniLibsTask = tasks.register("generateCodexJniLibs") {
                     "codex",
                     "codex-exec",
                     "rg",
-                    "libcodex_z.so",
-                    "libcodex_lzma.so",
                 )
 
                 val missing = requiredSources.filter { srcName ->
