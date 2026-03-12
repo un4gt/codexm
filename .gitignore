@@ -39,6 +39,7 @@ flutter_app/packages/codexm_native/build/
 .env*.local
 
 # 通用本地噪音
+__pycache__/
 .DS_Store
 .kotlin/
 *.orig.*
