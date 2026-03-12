@@ -137,6 +137,50 @@ def _github_release_json(repo: str, *, tag: str) -> dict:
   return json.loads(_http_get_bytes(url, headers=headers).decode('utf-8'))
 
 
+def _github_releases_json(repo: str, *, page: int, per_page: int = 30) -> list[dict]:
+  token = _github_token()
+  headers = {
+    'User-Agent': USER_AGENT,
+    'Accept': 'application/vnd.github+json',
+  }
+  if token:
+    headers['Authorization'] = f'Bearer {token}'
+
+  url = f'{GITHUB_API_BASE}/repos/{repo}/releases?per_page={per_page}&page={page}'
+  data = json.loads(_http_get_bytes(url, headers=headers).decode('utf-8'))
+  return data if isinstance(data, list) else []
+
+
+def _pick_github_release_asset_tgz(rel: dict) -> Optional[ReleaseAsset]:
+  assets = rel.get('assets') or []
+  tgz_assets = [
+    a
+    for a in assets
+    if str(a.get('name') or '').endswith('.tgz') or str(a.get('name') or '').endswith('.tar.gz')
+  ]
+  tgz_assets.sort(key=lambda a: 0 if str(a.get('name') or '').endswith('.tgz') else 1)
+  if not tgz_assets:
+    return None
+
+  a = tgz_assets[0]
+  return ReleaseAsset(
+    name=a['name'],
+    url=a['browser_download_url'],
+    sha256=_parse_sha256_digest(a.get('digest')),
+  )
+
+
+def _github_find_release_with_tgz_asset(repo: str, *, max_pages: int = 5, per_page: int = 20) -> Optional[dict]:
+  for page in range(1, max_pages + 1):
+    releases = _github_releases_json(repo, page=page, per_page=per_page)
+    for rel in releases:
+      if rel.get('draft'):
+        continue
+      if _pick_github_release_asset_tgz(rel):
+        return rel
+  return None
+
+
 def _raw_file_url(repo: str, *, ref: str, path: str) -> str:
   owner, name = repo.split('/', 1)
   p = path.lstrip('/')
@@ -791,45 +835,46 @@ def main(argv: list[str]) -> int:
     if abi in supported_codex_abis:
       # codex-termux
       rel = _github_release_json(args.codex_termux_repo, tag=args.codex_termux_tag)
-      assets = rel.get('assets') or []
-      tgz_assets = [
-        a
-        for a in assets
-        if str(a.get('name') or '').endswith('.tgz') or str(a.get('name') or '').endswith('.tar.gz')
-      ]
-      tgz_assets.sort(key=lambda a: 0 if str(a.get('name') or '').endswith('.tgz') else 1)
-      picked_tag = str(rel.get('tag_name') or (args.codex_termux_tag if args.codex_termux_tag != 'latest' else 'main'))
-
-      if tgz_assets:
-        a = tgz_assets[0]
-        codex_asset = ReleaseAsset(
-          name=a['name'],
-          url=a['browser_download_url'],
-          sha256=_parse_sha256_digest(a.get('digest')),
-        )
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-          tmp = Path(tmpdir)
-          codex_tgz = tmp / codex_asset.name
-          print(f'下载 codex-termux: {codex_asset.url}')
-          got_sha = _http_download(codex_asset.url, codex_tgz, headers=download_headers)
-          if codex_asset.sha256 and got_sha.lower() != codex_asset.sha256.lower():
-            raise RuntimeError(f'codex-termux sha256 校验失败：got {got_sha} expected {codex_asset.sha256}')
-
-          _extract_codex_termux_binaries(codex_tgz, out_dir)
-      else:
-        # 兼容：latest release 可能暂时没有 .tgz/.tar.gz 资产；此时改为从 tag 源码包中提取二进制。
+      codex_asset = _pick_github_release_asset_tgz(rel)
+      if not codex_asset:
+        assets = rel.get('assets') or []
         available = ', '.join([str(a.get('name')) for a in assets]) or '<none>'
+        if args.codex_termux_tag != 'latest':
+          fallback_rel = _github_find_release_with_tgz_asset(args.codex_termux_repo)
+          fallback_tag = str(fallback_rel.get('tag_name')) if fallback_rel else ''
+          hint = f'（可用示例：{fallback_tag}）' if fallback_tag else ''
+          raise RuntimeError(
+            f'找不到 codex-termux 的 .tgz/.tar.gz Release 资产：{args.codex_termux_repo}@{args.codex_termux_tag}'
+            f'（当前 assets: {available}）。请设置 CODEX_TERMUX_TAG 指向包含 .tgz 资产的版本{hint}。'
+          )
+
+        fallback_rel = _github_find_release_with_tgz_asset(args.codex_termux_repo)
+        if not fallback_rel:
+          raise RuntimeError(
+            f'{args.codex_termux_repo}@latest 未提供 .tgz/.tar.gz Release 资产，且未找到任何带 .tgz 资产的历史 Release；'
+            '请设置 CODEX_TERMUX_TAG（例如 v0.112.0-termux）。'
+          )
+
+        fallback_asset = _pick_github_release_asset_tgz(fallback_rel)
+        if not fallback_asset:
+          raise RuntimeError('内部错误：已选中带 tgz 的 release，但未能解析资产。')
+
         print(
-          f'提示：{args.codex_termux_repo}@{args.codex_termux_tag} 未提供 .tgz/.tar.gz 资产（当前 assets: {available}），'
-          '改为从 tag 源码包中提取二进制。'
+          f'提示：{args.codex_termux_repo}@latest 未提供 .tgz/.tar.gz 资产（当前 assets: {available}），'
+          f'自动回退到 {fallback_rel.get("tag_name")}。若需固定版本，请设置 CODEX_TERMUX_TAG。'
         )
-        _download_codex_termux_binaries_from_repo_tag(
-          args.codex_termux_repo,
-          tag=picked_tag,
-          out_dir=out_dir,
-          download_headers=download_headers,
-        )
+        rel = fallback_rel
+        codex_asset = fallback_asset
+
+      with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        codex_tgz = tmp / codex_asset.name
+        print(f'下载 codex-termux: {codex_asset.url}')
+        got_sha = _http_download(codex_asset.url, codex_tgz, headers=download_headers)
+        if codex_asset.sha256 and got_sha.lower() != codex_asset.sha256.lower():
+          raise RuntimeError(f'codex-termux sha256 校验失败：got {got_sha} expected {codex_asset.sha256}')
+
+        _extract_codex_termux_binaries(codex_tgz, out_dir)
 
       # Termux shared library dependencies (e.g. liblzma.so.5, libz.so.1)
       # Fetch base libs into assets as unversioned names (lib*.so). Android runtime will create
