@@ -16,7 +16,9 @@ bool isMissingThreadState(Object error) {
 
 String formatRpcErrorForLog(Object error) {
   if (error is JsonRpcError) {
-    final base = error.message.trim().isEmpty ? 'JSON-RPC error' : error.message;
+    final base = error.message.trim().isEmpty
+        ? 'JSON-RPC error'
+        : error.message;
     if (error.data is Map) {
       final details = (error.data as Map)['details']?.toString().trim() ?? '';
       if (details.isNotEmpty &&
@@ -37,12 +39,35 @@ String formatRpcErrorForUser(Object error) {
     return '连接超时：请检查网络与「设置」中的服务器地址/密钥是否正确。';
   }
 
-  if (lower.contains('e_codex_runtime_start') ||
-      lower.contains('e_codex_runtime_send') ||
-      lower.contains('nativelibrarydir') ||
-      lower.contains('libcodex.so') ||
-      lower.contains('codexruntime')) {
-    return 'Codex 运行时未就绪：请安装发布构建后重试。';
+  final runtimeBridgeError =
+      lower.contains('e_codex_runtime_start') ||
+      lower.contains('e_codex_runtime_send');
+  final missingRuntimeBinaries =
+      lower.contains('未能从 nativelibrarydir 解析 codex 运行时可执行文件') ||
+      lower.contains('missing: libcodex.so') ||
+      lower.contains('missing: libcodex_exec.so') ||
+      lower.contains('missing: librg.so') ||
+      lower.contains('codexruntime 缺少依赖库');
+  final runtimePermissionError =
+      lower.contains('permission denied') || lower.contains('无法执行可执行文件');
+  final runtimeStartupExit =
+      lower.contains('codexruntime 启动后立即退出') ||
+      lower.contains('runtime not running');
+
+  if (runtimeBridgeError ||
+      missingRuntimeBinaries ||
+      runtimePermissionError ||
+      runtimeStartupExit) {
+    if (missingRuntimeBinaries) {
+      return '当前安装包缺少 Codex 运行组件，请安装包含运行时的最新安装包后重试。';
+    }
+    if (runtimePermissionError) {
+      return 'Codex 运行组件权限异常，请重装应用后重试。';
+    }
+    if (runtimeStartupExit) {
+      return 'Codex 启动失败：请检查「设置 > 连接设置」中的 API Key / Base URL 后重试。';
+    }
+    return 'Codex 启动失败，请稍后重试。';
   }
 
   if (message.contains('CollaborationMode') ||

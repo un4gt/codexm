@@ -125,7 +125,8 @@ class _ChatPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = context.appTokens;
     final mentionToken = extractMentionToken(composerController.text);
-    final showSuggestions = slashSuggestions.isNotEmpty ||
+    final showSuggestions =
+        slashSuggestions.isNotEmpty ||
         mentionLoading ||
         mentionSuggestions.isNotEmpty ||
         mentionToken != null;
@@ -134,28 +135,30 @@ class _ChatPanel extends StatelessWidget {
 
     return Align(
       alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: contentMaxWidth),
-            child: Column(
-              children: [
-                _ChatHeader(
-                  workspace: workspace,
-                  selectedSession: selectedSession,
-                  sessionCount: sessions.length,
-                  status: status,
-                  settingsReady: settingsEnabled && hasApiKey,
-                  onOpenSessionSwitcher: onOpenSessionSwitcher,
-                  onCreateSession: onCreateSession,
-                  showSessionSwitcher: !preferSidebarSwitcher,
-                ),
-                SizedBox(height: tokens.compactSpacing),
-                Expanded(
-                  child: Card(
-                    clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: contentMaxWidth),
+        child: Column(
+          children: [
+            _ChatHeader(
+              workspace: workspace,
+              selectedSession: selectedSession,
+              sessionCount: sessions.length,
+              status: status,
+              settingsReady: settingsEnabled && hasApiKey,
+              onOpenSessionSwitcher: onOpenSessionSwitcher,
+              onCreateSession: onCreateSession,
+              showSessionSwitcher: !preferSidebarSwitcher,
+            ),
+            SizedBox(height: tokens.compactSpacing),
+            Expanded(
+              child: Card(
+                clipBehavior: Clip.antiAlias,
                 child: Column(
                   children: [
                     Expanded(
-                      child: messages.isEmpty && pendingAssistantText.trim().isEmpty
+                      child:
+                          messages.isEmpty &&
+                              pendingAssistantText.trim().isEmpty
                           ? _ChatEmptyState(
                               workspaceName: workspace.name,
                               canDirectChat: settingsEnabled && hasApiKey,
@@ -242,8 +245,16 @@ class _ChatHeader extends StatelessWidget {
     final tokens = context.appTokens;
     final widthClass = context.adaptiveWidthClass;
     final compact = widthClass.isCompact;
+    final trimmedStatus = status.trim();
+    final shouldShowStatus =
+        !compact &&
+        trimmedStatus.isNotEmpty &&
+        (trimmedStatus.contains('失败') ||
+            trimmedStatus.contains('正在') ||
+            trimmedStatus.contains('请先') ||
+            trimmedStatus.contains('未'));
     final panelPadding = switch (widthClass) {
-      AdaptiveWidthClass.compact => const EdgeInsets.all(16),
+      AdaptiveWidthClass.compact => const EdgeInsets.all(14),
       AdaptiveWidthClass.medium => const EdgeInsets.all(20),
       AdaptiveWidthClass.expanded => const EdgeInsets.all(24),
     };
@@ -266,11 +277,11 @@ class _ChatHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  width: 40,
-                  height: 40,
+                  width: compact ? 34 : 40,
+                  height: compact ? 34 : 40,
                   decoration: BoxDecoration(
                     color: theme.colorScheme.primary.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(compact ? 12 : 14),
                   ),
                   child: Icon(
                     Icons.chat_bubble_outline,
@@ -288,22 +299,34 @@ class _ChatHeader extends StatelessWidget {
                           fontWeight: FontWeight.w900,
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        workspace.name,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                      if (!compact) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          workspace.name,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),
-                if (showSessionSwitcher)
-                  IconButton.filledTonal(
-                    onPressed: onOpenSessionSwitcher,
-                    tooltip: '会话 $sessionCount',
-                    icon: const Icon(Icons.swap_horiz_outlined),
-                  ),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    if (showSessionSwitcher)
+                      IconButton.filledTonal(
+                        onPressed: onOpenSessionSwitcher,
+                        tooltip: '会话 $sessionCount',
+                        icon: const Icon(Icons.swap_horiz_outlined),
+                      ),
+                    IconButton(
+                      onPressed: onCreateSession,
+                      tooltip: '新建会话',
+                      icon: const Icon(Icons.add_comment_outlined),
+                    ),
+                  ],
+                ),
               ],
             ),
             SizedBox(height: sectionGap),
@@ -315,31 +338,20 @@ class _ChatHeader extends StatelessWidget {
                   icon: settingsReady
                       ? Icons.check_circle_outline
                       : Icons.vpn_key_outlined,
-                  label: settingsReady ? '可直接发送消息' : '发送前需完成连接设置',
+                  label: settingsReady ? '已连接，可直接发送' : '未连接，请先完成设置',
                   emphasized: settingsReady,
-                ),
-                _HeaderBadge(
-                  icon: Icons.folder_open_outlined,
-                  label: workspace.localPath,
                 ),
               ],
             ),
-            SizedBox(height: sectionGap),
-            Text(
-              status,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+            if (shouldShowStatus) ...[
+              SizedBox(height: sectionGap),
+              Text(
+                trimmedStatus,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
-            ),
-            SizedBox(height: sectionGap),
-            Align(
-              alignment: compact ? Alignment.centerRight : Alignment.centerLeft,
-              child: OutlinedButton.icon(
-                onPressed: onCreateSession,
-                icon: const Icon(Icons.add_comment_outlined),
-                label: const Text('新建会话'),
-              ),
-            ),
+            ],
           ],
         ),
       ),
@@ -465,18 +477,15 @@ class _ComposerPanel extends StatelessWidget {
               _InlineNotice(
                 icon: Icons.vpn_key_outlined,
                 text: settingsEnabled
-                    ? '还未完成连接设置，本地命令仍可使用；直接对话前请先补齐访问令牌。'
-                    : '当前已暂停运行能力，暂时只能使用本地命令。',
+                    ? '请先到「设置 > 连接设置」填写 API Key 和 Base URL。'
+                    : '当前对话能力已关闭，请先在设置中启用。',
               ),
             if (!settingsEnabled || !hasApiKey)
               SizedBox(height: tokens.compactSpacing),
-            Text(
-              '直接输入消息',
-              style: theme.textTheme.titleSmall,
-            ),
+            Text('输入消息', style: theme.textTheme.titleSmall),
             const SizedBox(height: 4),
             Text(
-              running ? '正在回复中，请稍候。' : '消息输入区固定在底部，支持 `/` 命令与 `@` 文件/提交标记。',
+              running ? '正在回复中，请稍候。' : '在下方输入内容后发送。',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -513,21 +522,14 @@ class _ComposerPanel extends StatelessWidget {
                         maxLines: 6,
                         textInputAction: TextInputAction.newline,
                         decoration: const InputDecoration(
-                          hintText: '输入消息，或输入 /review、@文件名 ...',
+                          hintText: '在这里输入消息...',
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: FilledButton(
-                          onPressed: canSend ? onSendMessage : null,
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size(56, 56),
-                            shape: const CircleBorder(),
-                            padding: EdgeInsets.zero,
-                          ),
-                          child: const Icon(Icons.arrow_upward_rounded),
-                        ),
+                      FilledButton.icon(
+                        onPressed: canSend ? onSendMessage : null,
+                        icon: const Icon(Icons.arrow_upward_rounded),
+                        label: const Text('发送'),
                       ),
                     ],
                   )
@@ -542,19 +544,15 @@ class _ComposerPanel extends StatelessWidget {
                           maxLines: 6,
                           textInputAction: TextInputAction.newline,
                           decoration: const InputDecoration(
-                            hintText: '输入消息，或输入 /review、@文件名 ...',
+                            hintText: '在这里输入消息...',
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
-                      FilledButton(
+                      FilledButton.icon(
                         onPressed: canSend ? onSendMessage : null,
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size(56, 56),
-                          shape: const CircleBorder(),
-                          padding: EdgeInsets.zero,
-                        ),
-                        child: const Icon(Icons.arrow_upward_rounded),
+                        icon: const Icon(Icons.arrow_upward_rounded),
+                        label: const Text('发送'),
                       ),
                     ],
                   ),
@@ -576,10 +574,7 @@ class _ComposerPanel extends StatelessWidget {
 }
 
 class _InlineNotice extends StatelessWidget {
-  const _InlineNotice({
-    required this.icon,
-    required this.text,
-  });
+  const _InlineNotice({required this.icon, required this.text});
 
   final IconData icon;
   final String text;
@@ -636,7 +631,9 @@ class _ComposerSuggestionsPanel extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.45,
+        ),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
@@ -736,9 +733,7 @@ class _ChatEmptyState extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                canDirectChat
-                    ? '页面底部就是输入区。输入你的第一条消息后，发送按钮会立即可用。'
-                    : '页面底部就是输入区。补齐连接设置后，即可直接发送消息。',
+                canDirectChat ? '下方输入框可直接开始对话。' : '请先完成连接设置，然后在下方输入框发送消息。',
                 style: theme.textTheme.bodyLarge?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),

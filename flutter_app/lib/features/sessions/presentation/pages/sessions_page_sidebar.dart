@@ -66,13 +66,12 @@ class _SessionsExpandedLayout extends StatelessWidget {
     return Row(
       children: [
         SizedBox(
-          width: 360,
+          width: 320,
           child: _SessionsSidebar(
             workspaceName: workspace.name,
             sessions: sessions,
             selectedSession: selectedSession,
             settingsReady: settingsEnabled && hasApiKey,
-            status: status,
             onCreateSession: onCreateSession,
             onSelectSession: onSelectSession,
             onRenameSession: onRenameSession,
@@ -121,7 +120,6 @@ class _SessionsSidebar extends StatelessWidget {
     required this.sessions,
     required this.selectedSession,
     required this.settingsReady,
-    required this.status,
     required this.onCreateSession,
     required this.onSelectSession,
     required this.onRenameSession,
@@ -132,7 +130,6 @@ class _SessionsSidebar extends StatelessWidget {
   final List<Session> sessions;
   final Session? selectedSession;
   final bool settingsReady;
-  final String status;
   final VoidCallback onCreateSession;
   final ValueChanged<Session> onSelectSession;
   final ValueChanged<Session> onRenameSession;
@@ -211,7 +208,7 @@ class _SessionsSidebar extends StatelessWidget {
                   icon: settingsReady
                       ? Icons.check_circle_outline
                       : Icons.vpn_key_outlined,
-                  label: settingsReady ? '可直接发送消息' : '发送前需完成连接设置',
+                  label: settingsReady ? '已连接，可直接发送' : '未连接，请先完成设置',
                   emphasized: settingsReady,
                 ),
                 StitchPill(
@@ -226,11 +223,6 @@ class _SessionsSidebar extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
               children: [
-                StitchInfoBanner(
-                  icon: Icons.info_outline,
-                  title: status,
-                ),
-                const SizedBox(height: 16),
                 StitchSectionHeader(title: '最近会话'),
                 const SizedBox(height: 10),
                 ...sessionRows,
@@ -419,8 +411,9 @@ class _SessionAvatar extends StatelessWidget {
         ? colorScheme.primary.withValues(alpha: 0.12)
         : colorScheme.surfaceContainerHigh.withValues(alpha: 0.6);
 
-    final iconColor =
-        connected ? colorScheme.primary : colorScheme.onSurfaceVariant;
+    final iconColor = connected
+        ? colorScheme.primary
+        : colorScheme.onSurfaceVariant;
 
     return Container(
       width: 48,

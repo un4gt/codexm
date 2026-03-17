@@ -146,9 +146,8 @@ class _SessionsPageState extends State<SessionsPage> {
         widget.selectedSessionId ??
         (workspace.id == previousWorkspaceId ? _selectedSessionId : null) ??
         primary.id;
-    final selectedSessionId = sessions.any(
-      (session) => session.id == preferredSessionId,
-    )
+    final selectedSessionId =
+        sessions.any((session) => session.id == preferredSessionId)
         ? preferredSessionId
         : primary.id;
     final messages = await _sessionStore.listMessages(
@@ -180,7 +179,8 @@ class _SessionsPageState extends State<SessionsPage> {
         _commitDetails = const <String, String>{};
         _activeMentionQuery = null;
       }
-      _status = status ??
+      _status =
+          status ??
           (legacySessionCount > 0
               ? '检测到 $legacySessionCount 个历史会话，已自动继续最近主会话。'
               : '已恢复当前工作区的主会话。');
@@ -309,8 +309,10 @@ class _SessionsPageState extends State<SessionsPage> {
         return const <String>[];
       }
       final out = <String>[];
-      await for (final entity
-          in paths.repoDir.list(recursive: true, followLinks: false)) {
+      await for (final entity in paths.repoDir.list(
+        recursive: true,
+        followLinks: false,
+      )) {
         if (entity is! File) {
           continue;
         }
@@ -367,15 +369,18 @@ class _SessionsPageState extends State<SessionsPage> {
   Widget build(BuildContext context) {
     final selectedSession = _selectedSession;
     final canEditComposer = !_busy && !_running && _activeWorkspace != null;
-    final canSend = canEditComposer && _composerController.text.trim().isNotEmpty;
+    final canSend =
+        canEditComposer && _composerController.text.trim().isNotEmpty;
     final pagePadding = context.adaptivePagePadding;
     final widthClass = context.adaptiveWidthClass;
+    final shouldUseExpandedLayout =
+        widthClass.isExpanded && MediaQuery.sizeOf(context).width >= 1120;
 
     final content = _activeWorkspace == null
         ? _WorkspaceEmptyState(
             onOpenWorkspacesRequested: widget.onOpenWorkspacesRequested,
           )
-        : widthClass.isExpanded
+        : shouldUseExpandedLayout
         ? _SessionsExpandedLayout(
             workspace: _activeWorkspace!,
             sessions: _sessions,

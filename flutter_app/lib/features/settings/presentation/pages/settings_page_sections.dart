@@ -35,9 +35,12 @@ class _ConnectionSection extends StatelessWidget {
     final apiKeyMasked = (apiKeyValue ?? '').trim().isNotEmpty
         ? 'sk-••••••••••••••••••••••'
         : '未设置';
-    final apiKeyDisplay =
-        apiKeyVisible ? ((apiKeyValue ?? '').trim().isEmpty ? '' : apiKeyValue!.trim()) : apiKeyMasked;
-    final modelValue = (selectedModel ?? '').trim().isEmpty ? '默认' : selectedModel!.trim();
+    final apiKeyDisplay = apiKeyVisible
+        ? ((apiKeyValue ?? '').trim().isEmpty ? '' : apiKeyValue!.trim())
+        : apiKeyMasked;
+    final modelValue = (selectedModel ?? '').trim().isEmpty
+        ? '默认'
+        : selectedModel!.trim();
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -68,7 +71,9 @@ class _ConnectionSection extends StatelessWidget {
               trailing: IconButton(
                 onPressed: busy ? null : onToggleApiKeyVisible,
                 tooltip: apiKeyVisible ? '隐藏' : '显示',
-                icon: Icon(apiKeyVisible ? Icons.visibility_off : Icons.visibility),
+                icon: Icon(
+                  apiKeyVisible ? Icons.visibility_off : Icons.visibility,
+                ),
               ),
             ),
             SizedBox(height: tokens.compactSpacing),
@@ -76,7 +81,9 @@ class _ConnectionSection extends StatelessWidget {
               onPressed: busy
                   ? null
                   : () async {
-                      final controller = TextEditingController(text: apiKeyValue ?? '');
+                      final controller = TextEditingController(
+                        text: apiKeyValue ?? '',
+                      );
                       final result = await showDialog<String>(
                         context: context,
                         builder: (dialogContext) {
@@ -96,11 +103,14 @@ class _ConnectionSection extends StatelessWidget {
                             ),
                             actions: [
                               TextButton(
-                                onPressed: () => Navigator.of(dialogContext).pop(),
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(),
                                 child: const Text('取消'),
                               ),
                               FilledButton(
-                                onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
+                                onPressed: () => Navigator.of(
+                                  dialogContext,
+                                ).pop(controller.text.trim()),
                                 child: const Text('保存'),
                               ),
                             ],
@@ -131,7 +141,9 @@ class _ConnectionSection extends StatelessWidget {
             Align(
               alignment: Alignment.centerRight,
               child: OutlinedButton.icon(
-                onPressed: busy ? null : () => onSaveBaseUrl(baseUrlController.text),
+                onPressed: busy
+                    ? null
+                    : () => onSaveBaseUrl(baseUrlController.text),
                 icon: const Icon(Icons.save_outlined),
                 label: const Text('保存地址'),
               ),
@@ -149,20 +161,17 @@ class _ConnectionSection extends StatelessWidget {
                     )
                   : null,
             ),
-              if (availableModels.isNotEmpty) ...[
-                SizedBox(height: tokens.compactSpacing),
-                DropdownButtonFormField<String>(
+            if (availableModels.isNotEmpty) ...[
+              SizedBox(height: tokens.compactSpacing),
+              DropdownButtonFormField<String>(
                 key: ValueKey<String>(selectedModel ?? ''),
-                initialValue: availableModels.contains(selectedModel)
+                value: availableModels.contains(selectedModel)
                     ? selectedModel
                     : null,
                 decoration: const InputDecoration(labelText: '选择模型'),
                 items: [
                   for (final model in availableModels)
-                    DropdownMenuItem<String>(
-                      value: model,
-                      child: Text(model),
-                    ),
+                    DropdownMenuItem<String>(value: model, child: Text(model)),
                 ],
                 onChanged: busy
                     ? null
@@ -347,7 +356,10 @@ class _SkillsSection extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            Text('已安装 ${installedSkills.length} 项', style: theme.textTheme.titleSmall),
+            Text(
+              '已安装 ${installedSkills.length} 项',
+              style: theme.textTheme.titleSmall,
+            ),
             const SizedBox(height: 12),
             if (installedSkills.isEmpty)
               const _SettingsHint(
@@ -363,14 +375,20 @@ class _SkillsSection extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    for (var index = 0; index < installedSkills.length; index++) ...[
+                    for (
+                      var index = 0;
+                      index < installedSkills.length;
+                      index++
+                    ) ...[
                       ListTile(
                         leading: const Icon(Icons.extension_outlined),
                         title: Text('\$${installedSkills[index]}'),
                         subtitle: const Text('点击载入到编辑区'),
                         trailing: const Icon(Icons.chevron_right),
                         enabled: !busy,
-                        onTap: busy ? null : () => onLoadSkill(installedSkills[index]),
+                        onTap: busy
+                            ? null
+                            : () => onLoadSkill(installedSkills[index]),
                       ),
                       if (index < installedSkills.length - 1)
                         Divider(
@@ -425,7 +443,8 @@ class _SkillsSection extends StatelessWidget {
                         children: [
                           for (final action in actions) ...[
                             SizedBox(width: double.infinity, child: action),
-                            if (action != actions.last) const SizedBox(height: 12),
+                            if (action != actions.last)
+                              const SizedBox(height: 12),
                           ],
                         ],
                       )
@@ -433,7 +452,8 @@ class _SkillsSection extends StatelessWidget {
                         children: [
                           for (final action in actions) ...[
                             Expanded(child: action),
-                            if (action != actions.last) const SizedBox(width: 12),
+                            if (action != actions.last)
+                              const SizedBox(width: 12),
                           ],
                         ],
                       );

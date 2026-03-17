@@ -28,6 +28,32 @@ From `flutter_app/`:
 - Keep user-facing UI copy free of internal/debug details (CLI flags, internal filenames like `config.toml`, or slash commands); put troubleshooting in `docs/` or logs.
 - When touching native/plugin code, keep changes small and validate on Android `arm64-v8a`.
 
+## Runtime Error Handling Guardrails
+- Never map all runtime failures to one generic message (for example, do not always show “install release build and retry”).
+- Classify Codex runtime failures into actionable buckets:
+  - Missing packaged runtime binaries (`libcodex.so`, `libcodex_exec.so`, `librg.so`) → ask user to install a package that includes runtime components.
+  - Permission/exec failures (`Permission denied`) → ask user to reinstall app/build.
+  - Runtime starts then exits early (`runtime not running` / startup exit) → guide user to check `设置 > 连接设置` (`API Key` / `Base URL`) first.
+  - Timeout/network/auth → guide user to check connectivity and credentials.
+- Keep detailed diagnostics (raw stderr, linker/preflight details, native paths) in logs, not in user-facing copy.
+- Before release builds, verify runtime packaging prerequisites:
+  - Run `python3 scripts/fetch_android_codex_deps.py --abi arm64-v8a`.
+  - Confirm APK/AAB includes runtime libs for target ABI.
+  - Validate on real Android `arm64-v8a` device.
+
+## Session UI/UX Guardrails
+- Session page should stay simple and task-first, aligned with `happy-app` style principles: clear hierarchy, minimal chrome, obvious message entry.
+- Input area must remain easy to find and use:
+  - Keep composer in bottom area with a clear “发送” action.
+  - Use direct copy such as “在这里输入消息...”; avoid developer-oriented hints in primary UI.
+- Avoid repeated status/info blocks across header/sidebar/body; show one concise status at most when actionable.
+- Prevent layout crowding/overlap on narrower devices:
+  - Use conservative breakpoints for expanded/two-column layout.
+  - Keep sidebar width bounded so chat area remains readable.
+- Keep user-facing text product-oriented and concise:
+  - No desktop-only guidance in core mobile flows.
+  - No internal implementation terms unless user explicitly enters a debug flow.
+
 ## Testing Guidelines
 - Add tests under `flutter_app/test/**` and name files `*_test.dart`.
 - Prefer pure logic tests for `application/` code; use `testWidgets(...)` for UI flows.

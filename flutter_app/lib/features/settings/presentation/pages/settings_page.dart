@@ -4,6 +4,7 @@ import '../../../../app/theme/app_theme.dart';
 import '../../../../shared/widgets/adaptive_breakpoints.dart';
 import '../../../../shared/widgets/stitch_ui.dart';
 import '../../../codex/application/codex_skills_store.dart';
+import '../../../mcp/application/mcp_store.dart';
 import '../../application/codex_settings_store.dart';
 part 'settings_page_sections.dart';
 
@@ -17,6 +18,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   final _settingsStore = CodexSettingsStore();
   final _skillsStore = CodexSkillsStore();
+  final _mcpStore = McpStore();
 
   late final TextEditingController _skillNameController;
   late final TextEditingController _skillContentController;
@@ -82,14 +84,16 @@ class _SettingsPageState extends State<SettingsPage> {
     if (trimmed.isEmpty) {
       await _runAction('正在清除密钥...', () async {
         await _settingsStore.clearCodexApiKey();
+        await _syncRuntimeConfigFiles();
         return '已清除密钥。';
-      });
+      }, refreshModelsAfterSuccess: true);
       return;
     }
     await _runAction('正在保存密钥...', () async {
       await _settingsStore.saveCodexApiKey(trimmed);
+      await _syncRuntimeConfigFiles();
       return '已保存密钥。';
-    });
+    }, refreshModelsAfterSuccess: true);
   }
 
   Future<void> _saveBaseUrlDraft(String value) async {
@@ -99,11 +103,21 @@ class _SettingsPageState extends State<SettingsPage> {
         (current) =>
             current.copyWith(openaiBaseUrl: trimmed.isEmpty ? null : trimmed),
       );
+      await _syncRuntimeConfigFiles();
       return trimmed.isEmpty ? '已清除服务地址。' : '已保存服务地址。';
-    });
+    }, refreshModelsAfterSuccess: true);
   }
 
-  Future<void> _refreshModels() async {
+  Future<void> _syncRuntimeConfigFiles() async {
+    final mcpServers = await _mcpStore.listServers();
+    await _settingsStore.materializeCodexConfigFiles(mcpServers: mcpServers);
+  }
+
+  Future<void> _refreshModels({
+    String? statusOnEmpty,
+    String? statusOnSuccess,
+    String? statusOnErrorPrefix,
+  }) async {
     if (_modelsLoading) {
       return;
     }
@@ -119,14 +133,16 @@ class _SettingsPageState extends State<SettingsPage> {
       }
       setState(() {
         _availableModels = models;
-        _status = models.isEmpty ? '未返回可用模型列表。' : '已刷新模型列表。';
+        _status = models.isEmpty
+            ? (statusOnEmpty ?? '未返回可用模型列表。')
+            : (statusOnSuccess ?? '已刷新模型列表。');
       });
     } catch (error) {
       if (!mounted) {
         return;
       }
       setState(() {
-        _status = '获取模型列表失败：$error';
+        _status = '${statusOnErrorPrefix ?? '获取模型列表失败：'}$error';
       });
     } finally {
       if (mounted) {
@@ -137,13 +153,36 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _refreshModelsAfterConnectionSaved(String successStatus) async {
+    final hasApiKey = (_apiKeyValue ?? '').trim().isNotEmpty;
+    if (!hasApiKey) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _availableModels = const <String>[];
+        _status = successStatus;
+      });
+      return;
+    }
+    await _refreshModels(
+      statusOnEmpty: '$successStatus 未返回可用模型列表。',
+      statusOnSuccess: '$successStatus 已刷新模型列表。',
+      statusOnErrorPrefix: '$successStatus 获取模型列表失败：',
+    );
+  }
+
   Future<void> _updatePreference(
     CodexSettings Function(CodexSettings current) update, {
-      required String status,
+    required String status,
+    bool syncRuntimeConfig = false,
   }) {
     return _runAction('正在保存偏好...', () async {
       final next = update(_settings);
       final saved = await _settingsStore.saveSettings(next);
+      if (syncRuntimeConfig) {
+        await _syncRuntimeConfigFiles();
+      }
       if (mounted) {
         setState(() {
           _settings = saved;
@@ -155,8 +194,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _runAction(
     String pendingStatus,
-    Future<String> Function() action,
-  ) async {
+    Future<String> Function() action, {
+    bool refreshModelsAfterSuccess = false,
+  }) async {
     if (_busy) {
       return;
     }
@@ -169,6 +209,9 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       final successStatus = await action();
       await _loadSnapshot(status: successStatus);
+      if (refreshModelsAfterSuccess) {
+        await _refreshModelsAfterConnectionSaved(successStatus);
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -225,7 +268,9 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _saveSkillDraft() {
-    final normalized = _skillsStore.normalizeSkillName(_skillNameController.text);
+    final normalized = _skillsStore.normalizeSkillName(
+      _skillNameController.text,
+    );
     final content = _skillContentController.text.trim();
     if (normalized.isEmpty) {
       setState(() {
@@ -256,7 +301,9 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _confirmDeleteSkill() async {
-    final normalized = _skillsStore.normalizeSkillName(_skillNameController.text);
+    final normalized = _skillsStore.normalizeSkillName(
+      _skillNameController.text,
+    );
     if (normalized.isEmpty) {
       setState(() {
         _status = '删除失败：请先选择或填写技能名称。';
@@ -348,6 +395,7 @@ class _SettingsPageState extends State<SettingsPage> {
             _updatePreference(
               (current) => current.copyWith(model: value),
               status: '已更新模型为：$value',
+              syncRuntimeConfig: true,
             );
           },
         ),
