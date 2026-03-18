@@ -165,7 +165,7 @@ class _ConnectionSection extends StatelessWidget {
               SizedBox(height: tokens.compactSpacing),
               DropdownButtonFormField<String>(
                 key: ValueKey<String>(selectedModel ?? ''),
-                value: availableModels.contains(selectedModel)
+                initialValue: availableModels.contains(selectedModel)
                     ? selectedModel
                     : null,
                 decoration: const InputDecoration(labelText: '选择模型'),
