@@ -57,13 +57,16 @@ class CodexSettings {
     bool? useRawConfigToml,
     String? rawConfigToml,
     bool clearAuthRef = false,
+    bool clearOpenaiBaseUrl = false,
   }) {
     return CodexSettings(
       version: 1,
       enabled: enabled ?? this.enabled,
       authRef: clearAuthRef ? null : (authRef ?? this.authRef),
       model: model ?? this.model,
-      openaiBaseUrl: openaiBaseUrl ?? this.openaiBaseUrl,
+      openaiBaseUrl: clearOpenaiBaseUrl
+          ? null
+          : (openaiBaseUrl ?? this.openaiBaseUrl),
       approvalPolicy: approvalPolicy ?? this.approvalPolicy,
       personality: personality ?? this.personality,
       featuresMultiAgent: featuresMultiAgent ?? this.featuresMultiAgent,
@@ -281,8 +284,7 @@ class CodexSettingsStore {
     String? draftApiKey,
     HttpClient? httpClient,
   }) async {
-    final apiKey =
-        (draftApiKey ?? '').trim().isNotEmpty
+    final apiKey = (draftApiKey ?? '').trim().isNotEmpty
         ? draftApiKey!.trim()
         : await getCodexApiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -300,9 +302,7 @@ class CodexSettingsStore {
       final response = await request.close();
       final body = await response.transform(const Utf8Decoder()).join();
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw StateError(
-          '无法获取模型列表：请检查服务器地址与密钥（HTTP ${response.statusCode}）。',
-        );
+        throw StateError('无法获取模型列表：请检查服务器地址与密钥（HTTP ${response.statusCode}）。');
       }
 
       final parsed = jsonDecode(body);
@@ -322,7 +322,8 @@ class CodexSettingsStore {
           }
         }
       }
-      final out = ids.toList(growable: false)..sort((left, right) => left.compareTo(right));
+      final out = ids.toList(growable: false)
+        ..sort((left, right) => left.compareTo(right));
       return out;
     } on SocketException {
       throw StateError('无法连接到服务地址，请检查地址、网络连接或 DNS 配置。');
@@ -369,11 +370,7 @@ class CodexSettingsStore {
     return '${const JsonEncoder.withIndent('  ').convert({'auth_mode': 'apikey', 'OPENAI_API_KEY': apiKey})}\n';
   }
 
-  ({
-    String configToml,
-    List<String>? warnings,
-    String? validationError,
-  })
+  ({String configToml, List<String>? warnings, String? validationError})
   previewCodexConfigToml({
     required CodexSettings settings,
     List<McpServer>? mcpServers,

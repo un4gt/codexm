@@ -22,6 +22,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
   late final TextEditingController _skillNameController;
   late final TextEditingController _skillContentController;
+  late final TextEditingController _apiKeyController;
+  late final TextEditingController _baseUrlController;
+  late final TextEditingController _configTomlController;
 
   String _status = '正在加载设置...';
   CodexSettings _settings = const CodexSettings();
@@ -30,16 +33,19 @@ class _SettingsPageState extends State<SettingsPage> {
   List<String> _installedSkills = const <String>[];
   String? _apiKeyValue;
   bool _apiKeyVisible = false;
-  late final TextEditingController _baseUrlController;
   List<String> _availableModels = const <String>[];
   bool _modelsLoading = false;
+  List<String> _configWarnings = const <String>[];
+  String? _configValidationError;
 
   @override
   void initState() {
     super.initState();
     _skillNameController = TextEditingController();
     _skillContentController = TextEditingController();
+    _apiKeyController = TextEditingController();
     _baseUrlController = TextEditingController();
+    _configTomlController = TextEditingController();
     _loadSnapshot();
   }
 
@@ -47,7 +53,9 @@ class _SettingsPageState extends State<SettingsPage> {
   void dispose() {
     _skillNameController.dispose();
     _skillContentController.dispose();
+    _apiKeyController.dispose();
     _baseUrlController.dispose();
+    _configTomlController.dispose();
     super.dispose();
   }
 
@@ -57,16 +65,26 @@ class _SettingsPageState extends State<SettingsPage> {
       final apiKey = await _settingsStore.getCodexApiKey();
       final skills = await _skillsStore.listInstalledSkills();
       final skillsDir = await _skillsStore.skillsDir();
+      final mcpServers = await _mcpStore.listServers();
+      final preview = _settingsStore.previewCodexConfigToml(
+        settings: settings,
+        mcpServers: mcpServers,
+        enabledMcpServerIds: settings.enabledGlobalMcpServerIds,
+      );
       if (!mounted) {
         return;
       }
 
+      _apiKeyController.text = apiKey?.trim() ?? '';
       _baseUrlController.text = settings.openaiBaseUrl ?? '';
+      _configTomlController.text = preview.configToml;
       setState(() {
         _settings = settings;
         _installedSkills = skills;
         _skillsDirPath = skillsDir.path;
         _apiKeyValue = apiKey;
+        _configWarnings = preview.warnings ?? const <String>[];
+        _configValidationError = preview.validationError;
         _status = status ?? '已加载当前设置。';
       });
     } catch (error) {
@@ -79,38 +97,83 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _saveApiKeyDraft(String value) async {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) {
-      await _runAction('正在清除密钥...', () async {
+  Future<void> _saveConnectionDrafts() async {
+    final apiKey = _apiKeyController.text.trim();
+    final baseUrl = _baseUrlController.text.trim();
+    await _runAction('正在保存连接设置...', () async {
+      if (apiKey.isEmpty) {
         await _settingsStore.clearCodexApiKey();
-        await _syncRuntimeConfigFiles();
-        return '已清除密钥。';
-      }, refreshModelsAfterSuccess: true);
-      return;
-    }
-    await _runAction('正在保存密钥...', () async {
-      await _settingsStore.saveCodexApiKey(trimmed);
-      await _syncRuntimeConfigFiles();
-      return '已保存密钥。';
-    }, refreshModelsAfterSuccess: true);
-  }
-
-  Future<void> _saveBaseUrlDraft(String value) async {
-    final trimmed = value.trim();
-    await _runAction('正在保存服务地址...', () async {
+      } else {
+        await _settingsStore.saveCodexApiKey(apiKey);
+      }
       await _settingsStore.updateSettings(
-        (current) =>
-            current.copyWith(openaiBaseUrl: trimmed.isEmpty ? null : trimmed),
+        (current) => current.copyWith(
+          openaiBaseUrl: baseUrl.isEmpty ? null : baseUrl,
+          clearOpenaiBaseUrl: baseUrl.isEmpty,
+        ),
       );
       await _syncRuntimeConfigFiles();
-      return trimmed.isEmpty ? '已清除服务地址。' : '已保存服务地址。';
+      if (apiKey.isEmpty && baseUrl.isEmpty) {
+        return '已清除密钥和服务地址。';
+      }
+      if (apiKey.isEmpty) {
+        return '已保存服务地址，并清除密钥。';
+      }
+      if (baseUrl.isEmpty) {
+        return '已保存密钥，并清除服务地址。';
+      }
+      return '已保存密钥和服务地址。';
     }, refreshModelsAfterSuccess: true);
   }
 
   Future<void> _syncRuntimeConfigFiles() async {
     final mcpServers = await _mcpStore.listServers();
     await _settingsStore.materializeCodexConfigFiles(mcpServers: mcpServers);
+  }
+
+  Future<void> _saveGlobalConfigTomlDraft() async {
+    final normalized = _configTomlController.text
+        .replaceAll(RegExp(r'\r\n?'), '\n')
+        .trim();
+    if (normalized.isEmpty) {
+      setState(() {
+        _status = '保存失败：config.toml 不能为空。';
+      });
+      return;
+    }
+    final validationError = _settingsStore.validateCodexConfigToml(
+      normalized,
+      label: 'config.toml',
+    );
+    if (validationError != null) {
+      setState(() {
+        _configValidationError = validationError;
+        _status = '保存失败：$validationError';
+      });
+      return;
+    }
+
+    await _runAction('正在保存全局 config.toml...', () async {
+      await _settingsStore.updateSettings(
+        (current) => current.copyWith(
+          useRawConfigToml: true,
+          rawConfigToml: '$normalized\n',
+        ),
+      );
+      await _syncRuntimeConfigFiles();
+      return '已保存全局 config.toml。';
+    });
+  }
+
+  Future<void> _restoreGeneratedConfigToml() async {
+    await _runAction('正在恢复自动生成 config.toml...', () async {
+      await _settingsStore.updateSettings(
+        (current) =>
+            current.copyWith(useRawConfigToml: false, rawConfigToml: ''),
+      );
+      await _syncRuntimeConfigFiles();
+      return '已恢复自动生成 config.toml。';
+    });
   }
 
   Future<void> _refreshModels({
@@ -371,7 +434,7 @@ class _SettingsPageState extends State<SettingsPage> {
           subtitle: _status,
         ),
         _ConnectionSection(
-          apiKeyValue: _apiKeyValue,
+          apiKeyController: _apiKeyController,
           apiKeyVisible: _apiKeyVisible,
           baseUrlController: _baseUrlController,
           busy: _busy,
@@ -386,8 +449,7 @@ class _SettingsPageState extends State<SettingsPage> {
               _apiKeyVisible = !_apiKeyVisible;
             });
           },
-          onSaveApiKey: _saveApiKeyDraft,
-          onSaveBaseUrl: _saveBaseUrlDraft,
+          onSaveConnection: _saveConnectionDrafts,
           onSelectModel: (value) {
             if (_busy) {
               return;
@@ -398,6 +460,15 @@ class _SettingsPageState extends State<SettingsPage> {
               syncRuntimeConfig: true,
             );
           },
+        ),
+        _ConfigTomlSection(
+          busy: _busy,
+          useRawConfigToml: _settings.useRawConfigToml,
+          configTomlController: _configTomlController,
+          warnings: _configWarnings,
+          validationError: _configValidationError,
+          onSaveConfigToml: _saveGlobalConfigTomlDraft,
+          onRestoreGeneratedConfigToml: _restoreGeneratedConfigToml,
         ),
         _PreferenceSection(
           settings: _settings,

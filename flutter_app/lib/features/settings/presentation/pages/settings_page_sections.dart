@@ -2,7 +2,7 @@ part of 'settings_page.dart';
 
 class _ConnectionSection extends StatelessWidget {
   const _ConnectionSection({
-    required this.apiKeyValue,
+    required this.apiKeyController,
     required this.apiKeyVisible,
     required this.baseUrlController,
     required this.busy,
@@ -10,12 +10,11 @@ class _ConnectionSection extends StatelessWidget {
     required this.availableModels,
     required this.selectedModel,
     required this.onToggleApiKeyVisible,
-    required this.onSaveApiKey,
-    required this.onSaveBaseUrl,
+    required this.onSaveConnection,
     required this.onSelectModel,
   });
 
-  final String? apiKeyValue;
+  final TextEditingController apiKeyController;
   final bool apiKeyVisible;
   final TextEditingController baseUrlController;
   final bool busy;
@@ -23,8 +22,7 @@ class _ConnectionSection extends StatelessWidget {
   final List<String> availableModels;
   final String? selectedModel;
   final VoidCallback onToggleApiKeyVisible;
-  final ValueChanged<String> onSaveApiKey;
-  final ValueChanged<String> onSaveBaseUrl;
+  final Future<void> Function() onSaveConnection;
   final ValueChanged<String> onSelectModel;
 
   @override
@@ -32,11 +30,11 @@ class _ConnectionSection extends StatelessWidget {
     final theme = Theme.of(context);
     final tokens = context.appTokens;
 
-    final apiKeyMasked = (apiKeyValue ?? '').trim().isNotEmpty
+    final apiKeyMasked = apiKeyController.text.trim().isNotEmpty
         ? 'sk-••••••••••••••••••••••'
         : '未设置';
     final apiKeyDisplay = apiKeyVisible
-        ? ((apiKeyValue ?? '').trim().isEmpty ? '' : apiKeyValue!.trim())
+        ? apiKeyController.text.trim()
         : apiKeyMasked;
     final modelValue = (selectedModel ?? '').trim().isEmpty
         ? '默认'
@@ -58,7 +56,7 @@ class _ConnectionSection extends StatelessWidget {
             const StitchSectionHeader(title: '连接设置'),
             SizedBox(height: tokens.compactSpacing),
             Text(
-              '密钥与服务地址会用于生成运行时配置；修改后会立即写入本地。',
+              '填写密钥与服务地址后点击保存，再自动拉取模型列表。',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -76,55 +74,15 @@ class _ConnectionSection extends StatelessWidget {
                 ),
               ),
             ),
-            SizedBox(height: tokens.compactSpacing),
-            OutlinedButton.icon(
-              onPressed: busy
-                  ? null
-                  : () async {
-                      final controller = TextEditingController(
-                        text: apiKeyValue ?? '',
-                      );
-                      final result = await showDialog<String>(
-                        context: context,
-                        builder: (dialogContext) {
-                          return AlertDialog(
-                            title: const Text('设置 API Key'),
-                            content: TextField(
-                              controller: controller,
-                              autofocus: true,
-                              obscureText: true,
-                              decoration: const InputDecoration(
-                                labelText: 'API Key',
-                                hintText: 'sk-...',
-                              ),
-                              onSubmitted: (value) {
-                                Navigator.of(dialogContext).pop(value.trim());
-                              },
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () =>
-                                    Navigator.of(dialogContext).pop(),
-                                child: const Text('取消'),
-                              ),
-                              FilledButton(
-                                onPressed: () => Navigator.of(
-                                  dialogContext,
-                                ).pop(controller.text.trim()),
-                                child: const Text('保存'),
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                      controller.dispose();
-                      if (result == null) {
-                        return;
-                      }
-                      onSaveApiKey(result);
-                    },
-              icon: const Icon(Icons.edit_outlined),
-              label: Text((apiKeyValue ?? '').trim().isEmpty ? '设置密钥' : '更新密钥'),
+            SizedBox(height: tokens.sectionSpacing),
+            TextField(
+              controller: apiKeyController,
+              enabled: !busy,
+              obscureText: !apiKeyVisible,
+              decoration: const InputDecoration(
+                labelText: 'API Key',
+                hintText: 'sk-...',
+              ),
             ),
             SizedBox(height: tokens.sectionSpacing),
             TextField(
@@ -135,17 +93,15 @@ class _ConnectionSection extends StatelessWidget {
                 hintText: 'https://api.openai.com/v1',
               ),
               textInputAction: TextInputAction.done,
-              onSubmitted: (value) => onSaveBaseUrl(value),
+              onSubmitted: (_) => onSaveConnection(),
             ),
             SizedBox(height: tokens.compactSpacing),
             Align(
               alignment: Alignment.centerRight,
               child: OutlinedButton.icon(
-                onPressed: busy
-                    ? null
-                    : () => onSaveBaseUrl(baseUrlController.text),
+                onPressed: busy ? null : onSaveConnection,
                 icon: const Icon(Icons.save_outlined),
-                label: const Text('保存地址'),
+                label: const Text('保存'),
               ),
             ),
             SizedBox(height: tokens.sectionSpacing),
@@ -183,6 +139,105 @@ class _ConnectionSection extends StatelessWidget {
                       },
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ConfigTomlSection extends StatelessWidget {
+  const _ConfigTomlSection({
+    required this.busy,
+    required this.useRawConfigToml,
+    required this.configTomlController,
+    required this.warnings,
+    required this.validationError,
+    required this.onSaveConfigToml,
+    required this.onRestoreGeneratedConfigToml,
+  });
+
+  final bool busy;
+  final bool useRawConfigToml;
+  final TextEditingController configTomlController;
+  final List<String> warnings;
+  final String? validationError;
+  final Future<void> Function() onSaveConfigToml;
+  final Future<void> Function() onRestoreGeneratedConfigToml;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('全局 config.toml', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(
+              '用于预览或修改全局运行配置。保存前会进行格式校验。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (useRawConfigToml) ...[
+              const SizedBox(height: 8),
+              Text(
+                '当前模式：手动编辑（会覆盖自动生成内容）',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ],
+            for (final warning in warnings) ...[
+              const SizedBox(height: 8),
+              Text(
+                warning,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.tertiary,
+                ),
+              ),
+            ],
+            if (validationError?.trim().isNotEmpty == true) ...[
+              const SizedBox(height: 8),
+              Text(
+                validationError!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: configTomlController,
+              enabled: !busy,
+              minLines: 10,
+              maxLines: 18,
+              decoration: const InputDecoration(
+                labelText: 'config.toml',
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                FilledButton.icon(
+                  onPressed: busy ? null : onSaveConfigToml,
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('保存 config.toml'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: busy ? null : onRestoreGeneratedConfigToml,
+                  icon: const Icon(Icons.restore_outlined),
+                  label: const Text('恢复自动生成'),
+                ),
+              ],
+            ),
           ],
         ),
       ),
