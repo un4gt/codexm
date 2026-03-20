@@ -11,8 +11,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   const pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
-  const secureStorageChannel =
-      MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+  const secureStorageChannel = MethodChannel(
+    'plugins.it_nomads.com/flutter_secure_storage',
+  );
 
   late Directory documentsDir;
   late Directory temporaryDir;
@@ -60,12 +61,11 @@ void main() {
     }
   });
 
-  testWidgets('shows workspace empty state guidance', (WidgetTester tester) async {
+  testWidgets('shows workspace empty state guidance', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        theme: buildAppTheme(),
-        home: const SessionsPage(),
-      ),
+      MaterialApp(theme: buildAppTheme(), home: const SessionsPage()),
     );
     await tester.pumpAndSettle();
 
@@ -73,7 +73,7 @@ void main() {
     expect(find.text('前往工作区'), findsOneWidget);
   });
 
-  testWidgets('shows session list sidebar on expanded width', (
+  testWidgets('keeps single-column chat layout on expanded width', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(1200, 900);
@@ -108,17 +108,21 @@ void main() {
         home: const SessionsPage(activeWorkspaceId: 'test'),
       ),
     );
-    final sidebarTitle = find.text('会话');
+    final switchSessionButton = find.byTooltip('切换会话（1）');
+    final composerHint = find.text('在这里输入消息...');
     for (var i = 0; i < 200; i += 1) {
       await tester.runAsync(() async {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       });
       await tester.pump();
-      if (sidebarTitle.evaluate().isNotEmpty) {
+      if (composerHint.evaluate().isNotEmpty) {
         break;
       }
     }
 
-    expect(sidebarTitle, findsAtLeastNWidgets(1));
+    expect(switchSessionButton, findsOneWidget);
+    expect(composerHint, findsOneWidget);
+    expect(find.text('回到会话'), findsNothing);
+    expect(find.text('最近会话'), findsNothing);
   });
 }

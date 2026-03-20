@@ -35,41 +35,44 @@ class MessageBubble extends StatelessWidget {
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxBubbleWidth),
         child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+          margin: const EdgeInsets.symmetric(vertical: 5),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
           decoration: BoxDecoration(
             color: spec.backgroundColor,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: spec.borderColor),
+            borderRadius: BorderRadius.circular(spec.borderRadius),
+            border: spec.borderColor == null
+                ? null
+                : Border.all(color: spec.borderColor!),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Icon(spec.icon, size: 18),
+                  Icon(spec.icon, size: 16, color: spec.iconColor),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       spec.label,
-                      style: theme.textTheme.labelLarge,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: spec.labelColor,
+                      ),
                     ),
                   ),
                   Text(
                     _formatTime(createdAt),
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                      color:
+                          spec.timeColor ?? theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              SimpleMarkdownView(
-                content: content,
-                showThinking: showThinking,
-              ),
+              const SizedBox(height: 8),
+              SimpleMarkdownView(content: content, showThinking: showThinking),
               if (isStreaming) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     SizedBox(
@@ -81,10 +84,7 @@ class MessageBubble extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      '正在生成回复',
-                      style: theme.textTheme.labelMedium,
-                    ),
+                    Text('正在生成回复', style: theme.textTheme.labelMedium),
                   ],
                 ),
               ],
@@ -106,13 +106,17 @@ class MessageBubble extends StatelessWidget {
   }
 
   _MessageSpec _messageStyle(ThemeData theme, String role) {
+    final scheme = theme.colorScheme;
     if (role == 'user') {
       return _MessageSpec(
         label: '你',
         icon: Icons.person_outline,
         alignment: Alignment.centerRight,
-        backgroundColor: theme.colorScheme.primaryContainer.withValues(alpha: 0.92),
-        borderColor: theme.colorScheme.primary.withValues(alpha: 0.25),
+        backgroundColor: scheme.primaryContainer.withValues(alpha: 0.92),
+        borderRadius: 16,
+        iconColor: scheme.primary,
+        labelColor: scheme.onPrimaryContainer,
+        timeColor: scheme.onPrimaryContainer.withValues(alpha: 0.72),
       );
     }
     if (role == 'system' || role == 'error') {
@@ -120,17 +124,23 @@ class MessageBubble extends StatelessWidget {
         label: '系统',
         icon: Icons.info_outline,
         alignment: Alignment.centerLeft,
-        backgroundColor: theme.colorScheme.errorContainer.withValues(alpha: 0.72),
-        borderColor: theme.colorScheme.error.withValues(alpha: 0.18),
+        backgroundColor: scheme.errorContainer.withValues(alpha: 0.72),
+        borderRadius: 14,
+        borderColor: scheme.error.withValues(alpha: 0.24),
+        iconColor: scheme.error,
+        labelColor: scheme.onErrorContainer,
+        timeColor: scheme.onErrorContainer.withValues(alpha: 0.72),
       );
     }
     return _MessageSpec(
       label: 'Codex',
       icon: Icons.auto_awesome_outlined,
       alignment: Alignment.centerLeft,
-      backgroundColor:
-          theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
-      borderColor: theme.colorScheme.outlineVariant,
+      backgroundColor: scheme.surfaceContainerLow,
+      borderRadius: 14,
+      iconColor: scheme.onSurfaceVariant,
+      labelColor: scheme.onSurface,
+      timeColor: scheme.onSurfaceVariant,
     );
   }
 }
@@ -141,12 +151,20 @@ class _MessageSpec {
     required this.icon,
     required this.alignment,
     required this.backgroundColor,
-    required this.borderColor,
+    required this.borderRadius,
+    required this.iconColor,
+    required this.labelColor,
+    this.timeColor,
+    this.borderColor,
   });
 
   final String label;
   final IconData icon;
   final Alignment alignment;
   final Color backgroundColor;
-  final Color borderColor;
+  final double borderRadius;
+  final Color iconColor;
+  final Color labelColor;
+  final Color? timeColor;
+  final Color? borderColor;
 }

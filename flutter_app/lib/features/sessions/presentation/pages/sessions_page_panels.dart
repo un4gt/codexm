@@ -2,6 +2,18 @@ part of 'sessions_page.dart';
 
 enum _SessionAction { rename, delete }
 
+enum _HeaderMenuAction { newSession, renameSession, deleteSession }
+
+class _SessionUiSpecs {
+  const _SessionUiSpecs._();
+
+  static const double maxContentWidth = 920;
+  static const double compactHorizontalPadding = 14;
+  static const double mediumHorizontalPadding = 18;
+  static const double expandedHorizontalPadding = 20;
+  static const double minTapTarget = 48;
+}
+
 class _WorkspaceEmptyState extends StatelessWidget {
   const _WorkspaceEmptyState({this.onOpenWorkspacesRequested});
 
@@ -10,53 +22,41 @@ class _WorkspaceEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tokens = context.appTokens;
 
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(18),
-                    child: Icon(
-                      Icons.chat_bubble_outline,
-                      size: 36,
-                      color: theme.colorScheme.onPrimaryContainer,
-                    ),
-                  ),
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.chat_bubble_outline,
+                size: 36,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(height: 14),
+              Text(
+                '先准备一个工作区',
+                style: theme.textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '会话围绕当前工作区展开。准备好后，这里会显示连续消息流和底部输入栏。',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-                SizedBox(height: tokens.compactSpacing),
-                Text(
-                  '先准备一个工作区',
-                  style: theme.textTheme.titleLarge,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '会话会围绕当前工作区展开。准备好工作区后，这里会直接显示消息列表和底部输入区。',
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: tokens.sectionSpacing),
-                FilledButton.icon(
-                  onPressed: onOpenWorkspacesRequested,
-                  icon: const Icon(Icons.folder_open_outlined),
-                  label: const Text('前往工作区'),
-                ),
-              ],
-            ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: onOpenWorkspacesRequested,
+                icon: const Icon(Icons.folder_open_outlined),
+                label: const Text('前往工作区'),
+              ),
+            ],
           ),
         ),
       ),
@@ -89,9 +89,10 @@ class _ChatPanel extends StatelessWidget {
     required this.onSendMessage,
     required this.onOpenSessionSwitcher,
     required this.onCreateSession,
+    required this.onRenameSession,
+    required this.onDeleteSession,
     required this.canSend,
     required this.canEditComposer,
-    this.preferSidebarSwitcher = false,
   });
 
   final Workspace workspace;
@@ -117,99 +118,84 @@ class _ChatPanel extends StatelessWidget {
   final VoidCallback onSendMessage;
   final VoidCallback onOpenSessionSwitcher;
   final VoidCallback onCreateSession;
+  final ValueChanged<Session> onRenameSession;
+  final ValueChanged<Session> onDeleteSession;
   final bool canSend;
   final bool canEditComposer;
-  final bool preferSidebarSwitcher;
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.appTokens;
     final mentionToken = extractMentionToken(composerController.text);
     final showSuggestions =
         slashSuggestions.isNotEmpty ||
         mentionLoading ||
         mentionSuggestions.isNotEmpty ||
         mentionToken != null;
-    final widthClass = context.adaptiveWidthClass;
-    final contentMaxWidth = widthClass.isExpanded ? 980.0 : double.infinity;
 
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: contentMaxWidth),
+        constraints: const BoxConstraints(
+          maxWidth: _SessionUiSpecs.maxContentWidth,
+        ),
         child: Column(
           children: [
-            _ChatHeader(
+            _SessionHeader(
               workspace: workspace,
               selectedSession: selectedSession,
               sessionCount: sessions.length,
               status: status,
               settingsReady: settingsEnabled && hasApiKey,
+              running: running,
               onOpenSessionSwitcher: onOpenSessionSwitcher,
-              onCreateSession: onCreateSession,
-              showSessionSwitcher: !preferSidebarSwitcher,
+              onMenuAction: (action) {
+                switch (action) {
+                  case _HeaderMenuAction.newSession:
+                    onCreateSession();
+                    break;
+                  case _HeaderMenuAction.renameSession:
+                    final session = selectedSession;
+                    if (session != null) {
+                      onRenameSession(session);
+                    }
+                    break;
+                  case _HeaderMenuAction.deleteSession:
+                    final session = selectedSession;
+                    if (session != null) {
+                      onDeleteSession(session);
+                    }
+                    break;
+                }
+              },
             ),
-            SizedBox(height: tokens.compactSpacing),
             Expanded(
-              child: Card(
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  children: [
-                    Expanded(
-                      child:
-                          messages.isEmpty &&
-                              pendingAssistantText.trim().isEmpty
-                          ? _ChatEmptyState(
-                              workspaceName: workspace.name,
-                              canDirectChat: settingsEnabled && hasApiKey,
-                            )
-                          : ListView(
-                              controller: scrollController,
-                              padding: EdgeInsets.fromLTRB(
-                                widthClass.isExpanded ? 24 : 16,
-                                16,
-                                widthClass.isExpanded ? 24 : 16,
-                                24,
-                              ),
-                              children: [
-                                for (final message in messages)
-                                  MessageBubble(
-                                    role: message.role,
-                                    content: message.content,
-                                    createdAt: message.createdAt,
-                                    showThinking: showThinking,
-                                  ),
-                                if (pendingAssistantText.trim().isNotEmpty)
-                                  MessageBubble(
-                                    role: 'assistant',
-                                    content: pendingAssistantText,
-                                    createdAt: pendingStartedAt,
-                                    showThinking: showThinking,
-                                    isStreaming: true,
-                                  ),
-                              ],
-                            ),
-                    ),
-                    _ComposerPanel(
-                      settingsEnabled: settingsEnabled,
-                      hasApiKey: hasApiKey,
-                      running: running,
-                      composerController: composerController,
-                      pendingMentions: pendingMentions,
-                      slashSuggestions: slashSuggestions,
-                      mentionSuggestions: mentionSuggestions,
-                      mentionLoading: mentionLoading,
-                      onSelectSlashSuggestion: onSelectSlashSuggestion,
-                      onSelectMentionSuggestion: onSelectMentionSuggestion,
-                      onRemovePendingMention: onRemovePendingMention,
-                      onSendMessage: onSendMessage,
-                      canSend: canSend,
-                      canEditComposer: canEditComposer,
-                      showSuggestions: showSuggestions,
-                    ),
-                  ],
-                ),
+              child: _MessageList(
+                messages: messages,
+                showThinking: showThinking,
+                pendingAssistantText: pendingAssistantText,
+                pendingStartedAt: pendingStartedAt,
+                scrollController: scrollController,
+                workspaceName: workspace.name,
+                canDirectChat: settingsEnabled && hasApiKey,
               ),
+            ),
+            _SessionInputBar(
+              settingsEnabled: settingsEnabled,
+              hasApiKey: hasApiKey,
+              running: running,
+              status: status,
+              composerController: composerController,
+              pendingMentions: pendingMentions,
+              slashSuggestions: slashSuggestions,
+              mentionSuggestions: mentionSuggestions,
+              mentionLoading: mentionLoading,
+              onSelectSlashSuggestion: onSelectSlashSuggestion,
+              onSelectMentionSuggestion: onSelectMentionSuggestion,
+              onRemovePendingMention: onRemovePendingMention,
+              onSendMessage: onSendMessage,
+              canSend: canSend,
+              canEditComposer: canEditComposer,
+              showSuggestions: showSuggestions,
             ),
           ],
         ),
@@ -218,16 +204,16 @@ class _ChatPanel extends StatelessWidget {
   }
 }
 
-class _ChatHeader extends StatelessWidget {
-  const _ChatHeader({
+class _SessionHeader extends StatelessWidget {
+  const _SessionHeader({
     required this.workspace,
     required this.selectedSession,
     required this.sessionCount,
     required this.status,
     required this.settingsReady,
+    required this.running,
     required this.onOpenSessionSwitcher,
-    required this.onCreateSession,
-    this.showSessionSwitcher = true,
+    required this.onMenuAction,
   });
 
   final Workspace workspace;
@@ -235,118 +221,124 @@ class _ChatHeader extends StatelessWidget {
   final int sessionCount;
   final String status;
   final bool settingsReady;
+  final bool running;
   final VoidCallback onOpenSessionSwitcher;
-  final VoidCallback onCreateSession;
-  final bool showSessionSwitcher;
+  final ValueChanged<_HeaderMenuAction> onMenuAction;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tokens = context.appTokens;
     final widthClass = context.adaptiveWidthClass;
-    final compact = widthClass.isCompact;
+    final horizontalPadding = switch (widthClass) {
+      AdaptiveWidthClass.compact => _SessionUiSpecs.compactHorizontalPadding,
+      AdaptiveWidthClass.medium => _SessionUiSpecs.mediumHorizontalPadding,
+      AdaptiveWidthClass.expanded => _SessionUiSpecs.expandedHorizontalPadding,
+    };
     final trimmedStatus = status.trim();
     final shouldShowStatus =
-        !compact &&
         trimmedStatus.isNotEmpty &&
-        (trimmedStatus.contains('失败') ||
-            trimmedStatus.contains('正在') ||
+        (running ||
+            trimmedStatus.contains('失败') ||
             trimmedStatus.contains('请先') ||
-            trimmedStatus.contains('未'));
-    final panelPadding = switch (widthClass) {
-      AdaptiveWidthClass.compact => const EdgeInsets.all(14),
-      AdaptiveWidthClass.medium => const EdgeInsets.all(20),
-      AdaptiveWidthClass.expanded => const EdgeInsets.all(24),
-    };
-    final sectionGap = widthClass.isExpanded ? 16.0 : 12.0;
+            trimmedStatus.contains('未连接') ||
+            trimmedStatus.contains('正在'));
 
     return DecoratedBox(
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(tokens.cardRadius),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
+        border: Border(
+          bottom: BorderSide(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
+          ),
         ),
       ),
       child: Padding(
-        padding: panelPadding,
+        padding: EdgeInsets.fromLTRB(
+          horizontalPadding,
+          10,
+          horizontalPadding,
+          10,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: compact ? 34 : 40,
-                  height: compact ? 34 : 40,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(compact ? 12 : 14),
-                  ),
-                  child: Icon(
-                    Icons.chat_bubble_outline,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         selectedSession?.title ?? '主会话',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                      if (!compact) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          workspace.name,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          _ConnectionStatusChip(connected: settingsReady),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              workspace.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ],
                   ),
                 ),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    if (showSessionSwitcher)
-                      IconButton.filledTonal(
-                        onPressed: onOpenSessionSwitcher,
-                        tooltip: '会话 $sessionCount',
-                        icon: const Icon(Icons.swap_horiz_outlined),
-                      ),
-                    IconButton(
-                      onPressed: onCreateSession,
-                      tooltip: '新建会话',
-                      icon: const Icon(Icons.add_comment_outlined),
-                    ),
-                  ],
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: _SessionUiSpecs.minTapTarget,
+                  height: _SessionUiSpecs.minTapTarget,
+                  child: IconButton(
+                    tooltip: '切换会话（$sessionCount）',
+                    onPressed: onOpenSessionSwitcher,
+                    icon: const Icon(Icons.swap_horiz_outlined),
+                  ),
                 ),
-              ],
-            ),
-            SizedBox(height: sectionGap),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                _HeaderBadge(
-                  icon: settingsReady
-                      ? Icons.check_circle_outline
-                      : Icons.vpn_key_outlined,
-                  label: settingsReady ? '已连接，可直接发送' : '未连接，请先完成设置',
-                  emphasized: settingsReady,
+                SizedBox(
+                  width: _SessionUiSpecs.minTapTarget,
+                  height: _SessionUiSpecs.minTapTarget,
+                  child: PopupMenuButton<_HeaderMenuAction>(
+                    tooltip: '更多会话操作',
+                    icon: const Icon(Icons.more_horiz),
+                    onSelected: onMenuAction,
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: _HeaderMenuAction.newSession,
+                        child: Text('新建会话'),
+                      ),
+                      PopupMenuItem(
+                        value: _HeaderMenuAction.renameSession,
+                        enabled: selectedSession != null,
+                        child: const Text('重命名当前会话'),
+                      ),
+                      PopupMenuItem(
+                        value: _HeaderMenuAction.deleteSession,
+                        enabled: selectedSession != null,
+                        child: const Text('删除当前会话'),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
             if (shouldShowStatus) ...[
-              SizedBox(height: sectionGap),
+              const SizedBox(height: 8),
               Text(
                 trimmedStatus,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -359,45 +351,50 @@ class _ChatHeader extends StatelessWidget {
   }
 }
 
-class _HeaderBadge extends StatelessWidget {
-  const _HeaderBadge({
-    required this.icon,
-    required this.label,
-    this.emphasized = false,
-  });
+class _ConnectionStatusChip extends StatelessWidget {
+  const _ConnectionStatusChip({required this.connected});
 
-  final IconData icon;
-  final String label;
-  final bool emphasized;
+  final bool connected;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final icon = connected
+        ? Icons.check_circle_outline
+        : Icons.vpn_key_outlined;
+    final label = connected ? '已连接，可直接发送' : '未连接，请先完成设置';
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: emphasized
-            ? colorScheme.primary.withValues(alpha: 0.16)
-            : colorScheme.surface,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.7),
+    return MergeSemantics(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: connected
+              ? colorScheme.primary.withValues(alpha: 0.14)
+              : colorScheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: connected
+                ? colorScheme.primary.withValues(alpha: 0.24)
+                : colorScheme.outlineVariant,
+          ),
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 18, color: colorScheme.primary),
-            const SizedBox(width: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 260),
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelLarge,
+            Icon(
+              icon,
+              size: 16,
+              color: connected
+                  ? colorScheme.primary
+                  : colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: colorScheme.onSurface,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -407,11 +404,85 @@ class _HeaderBadge extends StatelessWidget {
   }
 }
 
-class _ComposerPanel extends StatelessWidget {
-  const _ComposerPanel({
+class _MessageList extends StatelessWidget {
+  const _MessageList({
+    required this.messages,
+    required this.showThinking,
+    required this.pendingAssistantText,
+    required this.pendingStartedAt,
+    required this.scrollController,
+    required this.workspaceName,
+    required this.canDirectChat,
+  });
+
+  final List<ChatMessage> messages;
+  final bool showThinking;
+  final String pendingAssistantText;
+  final int pendingStartedAt;
+  final ScrollController scrollController;
+  final String workspaceName;
+  final bool canDirectChat;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasStreaming = pendingAssistantText.trim().isNotEmpty;
+    final widthClass = context.adaptiveWidthClass;
+    final horizontalPadding = switch (widthClass) {
+      AdaptiveWidthClass.compact => _SessionUiSpecs.compactHorizontalPadding,
+      AdaptiveWidthClass.medium => _SessionUiSpecs.mediumHorizontalPadding,
+      AdaptiveWidthClass.expanded => _SessionUiSpecs.expandedHorizontalPadding,
+    };
+
+    if (messages.isEmpty && !hasStreaming) {
+      return _ChatEmptyState(
+        workspaceName: workspaceName,
+        canDirectChat: canDirectChat,
+      );
+    }
+
+    final totalCount = messages.length + (hasStreaming ? 1 : 0);
+
+    return Scrollbar(
+      controller: scrollController,
+      child: ListView.builder(
+        controller: scrollController,
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: EdgeInsets.fromLTRB(
+          horizontalPadding,
+          12,
+          horizontalPadding,
+          12,
+        ),
+        itemCount: totalCount,
+        itemBuilder: (context, index) {
+          if (index < messages.length) {
+            final message = messages[index];
+            return MessageBubble(
+              role: message.role,
+              content: message.content,
+              createdAt: message.createdAt,
+              showThinking: showThinking,
+            );
+          }
+          return MessageBubble(
+            role: 'assistant',
+            content: pendingAssistantText,
+            createdAt: pendingStartedAt,
+            showThinking: showThinking,
+            isStreaming: true,
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SessionInputBar extends StatelessWidget {
+  const _SessionInputBar({
     required this.settingsEnabled,
     required this.hasApiKey,
     required this.running,
+    required this.status,
     required this.composerController,
     required this.pendingMentions,
     required this.slashSuggestions,
@@ -429,6 +500,7 @@ class _ComposerPanel extends StatelessWidget {
   final bool settingsEnabled;
   final bool hasApiKey;
   final bool running;
+  final String status;
   final TextEditingController composerController;
   final List<ComposerPendingMention> pendingMentions;
   final List<CodexSlashCommand> slashSuggestions;
@@ -445,53 +517,62 @@ class _ComposerPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tokens = context.appTokens;
     final widthClass = context.adaptiveWidthClass;
-    final compact = widthClass.isCompact;
+    final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final bottomPadding = keyboardVisible
+        ? 8.0
+        : 8.0 + MediaQuery.paddingOf(context).bottom;
     final horizontalPadding = switch (widthClass) {
-      AdaptiveWidthClass.compact => 16.0,
-      AdaptiveWidthClass.medium => 20.0,
-      AdaptiveWidthClass.expanded => 24.0,
+      AdaptiveWidthClass.compact => _SessionUiSpecs.compactHorizontalPadding,
+      AdaptiveWidthClass.medium => _SessionUiSpecs.mediumHorizontalPadding,
+      AdaptiveWidthClass.expanded => _SessionUiSpecs.expandedHorizontalPadding,
     };
+
+    String? helperText;
+    if (!settingsEnabled) {
+      helperText = '当前对话能力已关闭，请先在设置中启用。';
+    } else if (!hasApiKey) {
+      helperText = '请先到「设置 > 连接设置」完成 API Key 与 Base URL。';
+    } else if (running) {
+      helperText = '正在回复中，请稍候。';
+    } else {
+      final trimmedStatus = status.trim();
+      if (trimmedStatus.contains('失败') || trimmedStatus.contains('请先')) {
+        helperText = trimmedStatus;
+      }
+    }
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
+        color: theme.colorScheme.surface,
         border: Border(
           top: BorderSide(
             color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
           ),
         ),
       ),
-      child: Padding(
+      child: AnimatedPadding(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
         padding: EdgeInsets.fromLTRB(
           horizontalPadding,
-          14,
+          10,
           horizontalPadding,
-          14 + MediaQuery.paddingOf(context).bottom,
+          bottomPadding,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (!settingsEnabled || !hasApiKey)
+            if (helperText != null) ...[
               _InlineNotice(
-                icon: Icons.vpn_key_outlined,
-                text: settingsEnabled
-                    ? '请先到「设置 > 连接设置」填写 API Key 和 Base URL。'
-                    : '当前对话能力已关闭，请先在设置中启用。',
+                icon: helperText.contains('失败')
+                    ? Icons.error_outline
+                    : Icons.info_outline,
+                text: helperText,
               ),
-            if (!settingsEnabled || !hasApiKey)
-              SizedBox(height: tokens.compactSpacing),
-            Text('输入消息', style: theme.textTheme.titleSmall),
-            const SizedBox(height: 4),
-            Text(
-              running ? '正在回复中，请稍候。' : '在下方输入内容后发送。',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
+              const SizedBox(height: 10),
+            ],
             if (pendingMentions.isNotEmpty) ...[
-              SizedBox(height: tokens.compactSpacing),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -509,55 +590,46 @@ class _ComposerPanel extends StatelessWidget {
                     ),
                 ],
               ),
+              const SizedBox(height: 10),
             ],
-            SizedBox(height: tokens.compactSpacing),
-            compact
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      TextField(
-                        controller: composerController,
-                        enabled: canEditComposer,
-                        minLines: 3,
-                        maxLines: 6,
-                        textInputAction: TextInputAction.newline,
-                        decoration: const InputDecoration(
-                          hintText: '在这里输入消息...',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      FilledButton.icon(
-                        onPressed: canSend ? onSendMessage : null,
-                        icon: const Icon(Icons.arrow_upward_rounded),
-                        label: const Text('发送'),
-                      ),
-                    ],
-                  )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: composerController,
-                          enabled: canEditComposer,
-                          minLines: 3,
-                          maxLines: 6,
-                          textInputAction: TextInputAction.newline,
-                          decoration: const InputDecoration(
-                            hintText: '在这里输入消息...',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      FilledButton.icon(
-                        onPressed: canSend ? onSendMessage : null,
-                        icon: const Icon(Icons.arrow_upward_rounded),
-                        label: const Text('发送'),
-                      ),
-                    ],
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Semantics(
+                    textField: true,
+                    label: '消息输入框',
+                    child: TextField(
+                      controller: composerController,
+                      enabled: canEditComposer,
+                      minLines: 1,
+                      maxLines: 6,
+                      textInputAction: TextInputAction.newline,
+                      decoration: const InputDecoration(hintText: '在这里输入消息...'),
+                    ),
                   ),
+                ),
+                const SizedBox(width: 8),
+                Semantics(
+                  button: true,
+                  enabled: canSend,
+                  label: canSend ? '发送消息' : '发送消息（不可用）',
+                  child: IconButton.filled(
+                    tooltip: canSend ? '发送消息' : '请输入内容后发送',
+                    onPressed: canSend ? onSendMessage : null,
+                    icon: const Icon(Icons.arrow_upward_rounded),
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(
+                        _SessionUiSpecs.minTapTarget,
+                        _SessionUiSpecs.minTapTarget,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
             if (showSuggestions) ...[
-              SizedBox(height: tokens.compactSpacing),
+              const SizedBox(height: 10),
               _ComposerSuggestionsPanel(
                 slashSuggestions: slashSuggestions,
                 mentionLoading: mentionLoading,
@@ -585,21 +657,24 @@ class _InlineNotice extends StatelessWidget {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.colorScheme.errorContainer.withValues(alpha: 0.78),
-        borderRadius: BorderRadius.circular(18),
+        color: theme.colorScheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
+        ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: theme.colorScheme.onErrorContainer),
-            const SizedBox(width: 10),
+            Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 text,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onErrorContainer,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
             ),
@@ -629,12 +704,10 @@ class _ComposerSuggestionsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.45,
-        ),
-        borderRadius: BorderRadius.circular(18),
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
         ),
@@ -644,6 +717,7 @@ class _ComposerSuggestionsPanel extends StatelessWidget {
               children: [
                 for (final suggestion in slashSuggestions.take(8))
                   ListTile(
+                    dense: true,
                     leading: const Icon(Icons.code_outlined),
                     title: Text(suggestion.command),
                     subtitle: Text(suggestion.purpose),
@@ -653,28 +727,29 @@ class _ComposerSuggestionsPanel extends StatelessWidget {
             )
           : mentionLoading
           ? const Padding(
-              padding: EdgeInsets.all(16),
+              padding: EdgeInsets.all(12),
               child: Row(
                 children: [
                   SizedBox(
-                    width: 18,
-                    height: 18,
+                    width: 16,
+                    height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
-                  SizedBox(width: 12),
+                  SizedBox(width: 10),
                   Text('正在查找文件与提交...'),
                 ],
               ),
             )
           : mentionSuggestions.isEmpty
           ? const Padding(
-              padding: EdgeInsets.all(16),
+              padding: EdgeInsets.all(12),
               child: Text('没有匹配的文件或提交。'),
             )
           : Column(
               children: [
                 for (final suggestion in mentionSuggestions)
                   ListTile(
+                    dense: true,
                     leading: Icon(
                       suggestion.kind == ComposerMentionKind.file
                           ? Icons.insert_drive_file_outlined
@@ -705,36 +780,29 @@ class _ChatEmptyState extends StatelessWidget {
 
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
+        constraints: const BoxConstraints(maxWidth: 440),
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Icon(
-                    Icons.forum_outlined,
-                    size: 36,
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
-                ),
+              Icon(
+                Icons.forum_outlined,
+                size: 34,
+                color: theme.colorScheme.primary,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Text(
                 '开始和 $workspaceName 对话',
-                style: theme.textTheme.titleLarge,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
               Text(
-                canDirectChat ? '下方输入框可直接开始对话。' : '请先完成连接设置，然后在下方输入框发送消息。',
-                style: theme.textTheme.bodyLarge?.copyWith(
+                canDirectChat ? '在下方输入内容后发送。' : '请先完成连接设置，再开始发送消息。',
+                style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
                 textAlign: TextAlign.center,

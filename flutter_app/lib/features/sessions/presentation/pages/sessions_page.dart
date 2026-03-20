@@ -3,9 +3,7 @@ import 'dart:io';
 import 'package:codexm_native/codexm_native.dart';
 import 'package:flutter/material.dart';
 
-import '../../../../app/theme/app_theme.dart';
 import '../../../../shared/widgets/adaptive_breakpoints.dart';
-import '../../../../shared/widgets/stitch_ui.dart';
 import '../../../codex/application/codex_models.dart';
 import '../../../codex/application/codex_session_runner.dart';
 import '../../../codex/application/codex_skills_store.dart';
@@ -22,7 +20,6 @@ import '../widgets/message_bubble.dart';
 
 part 'sessions_page_actions.dart';
 part 'sessions_page_panels.dart';
-part 'sessions_page_sidebar.dart';
 
 class SessionsPage extends StatefulWidget {
   const SessionsPage({
@@ -372,44 +369,10 @@ class _SessionsPageState extends State<SessionsPage> {
     final canSend =
         canEditComposer && _composerController.text.trim().isNotEmpty;
     final pagePadding = context.adaptivePagePadding;
-    final widthClass = context.adaptiveWidthClass;
-    final shouldUseExpandedLayout =
-        widthClass.isExpanded && MediaQuery.sizeOf(context).width >= 1120;
 
     final content = _activeWorkspace == null
         ? _WorkspaceEmptyState(
             onOpenWorkspacesRequested: widget.onOpenWorkspacesRequested,
-          )
-        : shouldUseExpandedLayout
-        ? _SessionsExpandedLayout(
-            workspace: _activeWorkspace!,
-            sessions: _sessions,
-            selectedSession: selectedSession,
-            messages: _messages,
-            showThinking: _settings.uiShowThinking,
-            settingsEnabled: _settings.enabled,
-            hasApiKey: _hasApiKey,
-            running: _running,
-            status: _status,
-            pendingAssistantText: _pendingAssistantText,
-            pendingStartedAt: _pendingStartedAt,
-            scrollController: _messagesScrollController,
-            composerController: _composerController,
-            pendingMentions: _pendingMentions,
-            slashSuggestions: _slashSuggestions,
-            mentionSuggestions: _mentionSuggestions,
-            mentionLoading: _mentionLoading,
-            onSelectSlashSuggestion: _applySlashSuggestion,
-            onSelectMentionSuggestion: _applyMentionSuggestion,
-            onRemovePendingMention: _removePendingMention,
-            onSendMessage: _sendMessage,
-            onOpenSessionSwitcher: _openSessionSwitcher,
-            onCreateSession: _createSession,
-            onSelectSession: _selectSession,
-            onRenameSession: _renameSession,
-            onDeleteSession: _deleteSession,
-            canSend: canSend,
-            canEditComposer: canEditComposer,
           )
         : _ChatPanel(
             workspace: _activeWorkspace!,
@@ -435,6 +398,8 @@ class _SessionsPageState extends State<SessionsPage> {
             onSendMessage: _sendMessage,
             onOpenSessionSwitcher: _openSessionSwitcher,
             onCreateSession: _createSession,
+            onRenameSession: _renameSession,
+            onDeleteSession: _deleteSession,
             canSend: canSend,
             canEditComposer: canEditComposer,
           );

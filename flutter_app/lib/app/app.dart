@@ -36,7 +36,6 @@ class _AppShellState extends State<_AppShell> {
   int _selectedIndex = 0;
   Workspace? _activeWorkspace;
   Session? _selectedSession;
-  bool _loadingContext = true;
 
   static const _destinations = <NavigationDestination>[
     NavigationDestination(
@@ -74,7 +73,6 @@ class _AppShellState extends State<_AppShell> {
     }
     setState(() {
       _activeWorkspace = workspace;
-      _loadingContext = false;
     });
   }
 
@@ -84,7 +82,6 @@ class _AppShellState extends State<_AppShell> {
         _selectedSession = null;
       }
       _activeWorkspace = workspace;
-      _loadingContext = false;
     });
   }
 
@@ -121,61 +118,6 @@ class _AppShellState extends State<_AppShell> {
     ];
   }
 
-  Widget _buildContextBar(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = context.appTokens;
-
-    if (_loadingContext) {
-      return LinearProgressIndicator(
-        minHeight: 2,
-        color: theme.colorScheme.primary,
-      );
-    }
-    if (_activeWorkspace == null) {
-      return const SizedBox.shrink();
-    }
-
-    final subtitle = _selectedSession == null
-        ? _activeWorkspace!.localPath
-        : '${_activeWorkspace!.name} · ${_selectedSession!.title}';
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        tokens.pagePadding.left,
-        8,
-        tokens.pagePadding.right,
-        10,
-      ),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(tokens.cardRadius),
-          border: Border.all(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
-          ),
-        ),
-        child: ListTile(
-          dense: true,
-          leading: const Icon(Icons.folder_special_outlined),
-          title: Text(_activeWorkspace!.name),
-          subtitle: Text(
-            subtitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          trailing: TextButton(
-            onPressed: () {
-              setState(() {
-                _selectedIndex = _selectedSession == null ? 0 : 1;
-              });
-            },
-            child: Text(_selectedSession == null ? '查看工作区' : '回到会话'),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -202,7 +144,6 @@ class _AppShellState extends State<_AppShell> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildContextBar(context),
               NavigationBar(
                 selectedIndex: _selectedIndex,
                 destinations: _destinations,
