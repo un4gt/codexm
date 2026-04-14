@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:codexm_flutter/features/settings/application/codex_settings_store.dart';
 import 'package:codexm_flutter/features/update/application/app_update_models.dart';
 import 'package:codexm_flutter/features/update/application/app_update_service.dart';
@@ -117,17 +115,12 @@ class _MemoryCodexSettingsStore extends CodexSettingsStore {
 }
 
 class _FakeAppUpdateService extends AppUpdateService {
-  _FakeAppUpdateService({
-    this.currentApp = const AppUpdateAppInfo(
-      packageName: 'com.example.codexm',
-      versionName: '1.0.0',
-      versionCode: 1,
-    ),
-    this.state = const AppUpdateState(),
-  });
-
-  final AppUpdateAppInfo currentApp;
-  final AppUpdateState state;
+  final AppUpdateAppInfo currentApp = const AppUpdateAppInfo(
+    packageName: 'com.example.codexm',
+    versionName: '1.0.0',
+    versionCode: 1,
+  );
+  final AppUpdateState state = const AppUpdateState();
 
   @override
   Future<AppUpdateAppInfo> getCurrentAppInfo() async {

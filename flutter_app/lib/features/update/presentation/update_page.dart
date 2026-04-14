@@ -1,9 +1,9 @@
 import 'package:codexm_native/codexm_native.dart';
 import 'package:flutter/material.dart';
+import 'package:codexm_flutter/features/sessions/presentation/widgets/simple_markdown_view.dart';
 
 import '../../../../shared/widgets/feature_scaffold.dart';
 import '../../../../shared/widgets/stitch_ui.dart';
-import '../../../sessions/presentation/widgets/simple_markdown_view.dart';
 import '../../settings/application/codex_settings_store.dart';
 import '../application/app_update_models.dart';
 import '../application/app_update_service.dart';
