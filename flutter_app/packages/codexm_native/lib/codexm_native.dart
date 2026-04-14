@@ -1,8 +1,10 @@
 import 'codexm_native_platform_interface.dart';
+import 'src/models/app_update_app_info.dart';
 import 'src/models/git_commit_summary.dart';
 import 'src/models/git_status.dart';
 import 'src/models/runtime_line_event.dart';
 
+export 'src/models/app_update_app_info.dart';
 export 'src/models/git_commit_summary.dart';
 export 'src/models/git_status.dart';
 export 'src/models/runtime_line_event.dart';
@@ -12,6 +14,10 @@ class CodexmNative {
 
   Future<String?> getPlatformVersion() {
     return CodexmNativePlatform.instance.getPlatformVersion();
+  }
+
+  Future<AppUpdateAppInfo> getAppUpdateAppInfo() {
+    return CodexmNativePlatform.instance.getAppUpdateAppInfo();
   }
 
   Future<void> startRuntime({
@@ -62,6 +68,22 @@ class CodexmNative {
 
   Stream<RuntimeLineEvent> runtimeLineEvents() {
     return CodexmNativePlatform.instance.runtimeLineEvents();
+  }
+
+  Future<bool> canRequestInstallPackages() {
+    return CodexmNativePlatform.instance.canRequestInstallPackages();
+  }
+
+  Future<void> openUnknownSourcesSettings() {
+    return CodexmNativePlatform.instance.openUnknownSourcesSettings();
+  }
+
+  Future<void> installApk({required String apkPath}) {
+    return CodexmNativePlatform.instance.installApk(apkPath: apkPath);
+  }
+
+  Future<void> openUrl({required String url}) {
+    return CodexmNativePlatform.instance.openUrl(url: url);
   }
 
   Future<void> gitClone({

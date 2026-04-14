@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'codexm_native_platform_interface.dart';
+import 'src/models/app_update_app_info.dart';
 import 'src/models/git_commit_summary.dart';
 import 'src/models/git_status.dart';
 import 'src/models/runtime_line_event.dart';
@@ -16,6 +17,14 @@ class MethodChannelCodexmNative extends CodexmNativePlatform {
   @override
   Future<String?> getPlatformVersion() async {
     return await methodChannel.invokeMethod<String>('getPlatformVersion');
+  }
+
+  @override
+  Future<AppUpdateAppInfo> getAppUpdateAppInfo() async {
+    final result = await methodChannel.invokeMapMethod<Object?, Object?>(
+      'update.getAppInfo',
+    );
+    return AppUpdateAppInfo.fromMap(result ?? const <Object?, Object?>{});
   }
 
   @override
@@ -77,6 +86,33 @@ class MethodChannelCodexmNative extends CodexmNativePlatform {
   Stream<RuntimeLineEvent> runtimeLineEvents() {
     return runtimeLineChannel.receiveBroadcastStream().map((event) {
       return RuntimeLineEvent.fromMap(Map<Object?, Object?>.from(event as Map));
+    });
+  }
+
+  @override
+  Future<bool> canRequestInstallPackages() async {
+    final result = await methodChannel.invokeMethod<bool>(
+      'update.canRequestInstallPackages',
+    );
+    return result ?? false;
+  }
+
+  @override
+  Future<void> openUnknownSourcesSettings() async {
+    await methodChannel.invokeMethod<void>('update.openUnknownSourcesSettings');
+  }
+
+  @override
+  Future<void> installApk({required String apkPath}) async {
+    await methodChannel.invokeMethod<void>('update.installApk', {
+      'apkPath': apkPath,
+    });
+  }
+
+  @override
+  Future<void> openUrl({required String url}) async {
+    await methodChannel.invokeMethod<void>('update.openUrl', {
+      'url': url,
     });
   }
 

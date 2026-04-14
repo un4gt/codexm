@@ -1,5 +1,47 @@
 part of 'settings_page.dart';
 
+class _UpdateEntrySection extends StatelessWidget {
+  const _UpdateEntrySection({
+    required this.busy,
+    required this.onOpenUpdatePage,
+  });
+
+  final bool busy;
+  final Future<void> Function() onOpenUpdatePage;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('更新', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(
+              '检查新版本、管理启动时自动检查，并在应用内下载安装最新发布包。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            StitchListItem(
+              title: '应用更新',
+              subtitle: '查看当前版本、检查更新并安装新版本。',
+              leading: const Icon(Icons.system_update_alt_outlined),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: busy ? null : () => onOpenUpdatePage(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ConnectionSection extends StatelessWidget {
   const _ConnectionSection({
     required this.apiKeyController,

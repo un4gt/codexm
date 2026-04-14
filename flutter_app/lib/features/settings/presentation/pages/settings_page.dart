@@ -5,6 +5,7 @@ import '../../../../shared/widgets/adaptive_breakpoints.dart';
 import '../../../../shared/widgets/stitch_ui.dart';
 import '../../../codex/application/codex_skills_store.dart';
 import '../../../mcp/application/mcp_store.dart';
+import '../../../update/presentation/update_page.dart';
 import '../../application/codex_settings_store.dart';
 part 'settings_page_sections.dart';
 
@@ -408,6 +409,12 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
+  Future<void> _openUpdatePage() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const UpdatePage()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return StitchPageScaffold(
@@ -432,6 +439,10 @@ class _SettingsPageState extends State<SettingsPage> {
           icon: Icons.info_outline,
           title: '设置状态',
           subtitle: _status,
+        ),
+        _UpdateEntrySection(
+          busy: _busy,
+          onOpenUpdatePage: _openUpdatePage,
         ),
         _ConnectionSection(
           apiKeyController: _apiKeyController,

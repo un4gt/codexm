@@ -3,6 +3,7 @@ package com.codexm.nativeplugin
 import android.os.Handler
 import android.os.Looper
 import com.codexm.nativemodules.CodexRuntimeManager
+import io.flutter.embedding.engine.plugins.FlutterPlugin.FlutterPluginBinding
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -14,10 +15,11 @@ class CodexmNativePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Event
     private lateinit var gitMethodHandler: GitMethodHandler
     private lateinit var runtimeManager: CodexRuntimeManager
     private lateinit var runtimeMethodHandler: RuntimeMethodHandler
+    private lateinit var updateMethodHandler: UpdateMethodHandler
     private val mainHandler = Handler(Looper.getMainLooper())
     private var eventSink: EventChannel.EventSink? = null
 
-    override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+    override fun onAttachedToEngine(binding: FlutterPluginBinding) {
         methodChannel = MethodChannel(binding.binaryMessenger, "codexm_native/methods")
         eventChannel = EventChannel(binding.binaryMessenger, "codexm_native/runtime_lines")
         gitMethodHandler = GitMethodHandler()
@@ -25,6 +27,7 @@ class CodexmNativePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Event
             mainHandler.post { eventSink?.success(event) }
         }
         runtimeMethodHandler = RuntimeMethodHandler(runtimeManager)
+        updateMethodHandler = UpdateMethodHandler(binding.applicationContext)
         methodChannel.setMethodCallHandler(this)
         eventChannel.setStreamHandler(this)
     }
@@ -44,6 +47,7 @@ class CodexmNativePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Event
 
             call.method.startsWith("git.") -> gitMethodHandler.onMethodCall(call, result)
             call.method.startsWith("runtime.") -> runtimeMethodHandler.onMethodCall(call, result)
+            call.method.startsWith("update.") -> updateMethodHandler.onMethodCall(call, result)
             else -> result.notImplemented()
         }
     }

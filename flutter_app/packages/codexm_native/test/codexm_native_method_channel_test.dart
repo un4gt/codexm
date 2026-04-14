@@ -11,7 +11,18 @@ void main() {
   setUp(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
-          return '42';
+          switch (methodCall.method) {
+            case 'getPlatformVersion':
+              return '42';
+            case 'update.getAppInfo':
+              return {
+                'packageName': 'com.example.app',
+                'versionName': '1.2.3',
+                'versionCode': 123,
+              };
+            default:
+              return null;
+          }
         });
   });
 
@@ -22,5 +33,13 @@ void main() {
 
   test('getPlatformVersion', () async {
     expect(await platform.getPlatformVersion(), '42');
+  });
+
+  test('getAppUpdateAppInfo', () async {
+    final info = await platform.getAppUpdateAppInfo();
+
+    expect(info.packageName, 'com.example.app');
+    expect(info.versionName, '1.2.3');
+    expect(info.versionCode, 123);
   });
 }

@@ -19,6 +19,7 @@ class CodexSettings {
     this.uiShowThinking = false,
     this.debugLogToFile = false,
     this.debugLogRetentionDays = 7,
+    this.updateCheckOnLaunch = true,
     this.enabledGlobalMcpServerIds = const <String>[],
     this.extraConfigToml,
     this.useRawConfigToml = false,
@@ -36,6 +37,7 @@ class CodexSettings {
   final bool uiShowThinking;
   final bool debugLogToFile;
   final int debugLogRetentionDays;
+  final bool updateCheckOnLaunch;
   final List<String> enabledGlobalMcpServerIds;
   final String? extraConfigToml;
   final bool useRawConfigToml;
@@ -52,6 +54,7 @@ class CodexSettings {
     bool? uiShowThinking,
     bool? debugLogToFile,
     int? debugLogRetentionDays,
+    bool? updateCheckOnLaunch,
     List<String>? enabledGlobalMcpServerIds,
     String? extraConfigToml,
     bool? useRawConfigToml,
@@ -74,6 +77,7 @@ class CodexSettings {
       debugLogToFile: debugLogToFile ?? this.debugLogToFile,
       debugLogRetentionDays:
           debugLogRetentionDays ?? this.debugLogRetentionDays,
+      updateCheckOnLaunch: updateCheckOnLaunch ?? this.updateCheckOnLaunch,
       enabledGlobalMcpServerIds:
           enabledGlobalMcpServerIds ?? this.enabledGlobalMcpServerIds,
       extraConfigToml: extraConfigToml ?? this.extraConfigToml,
@@ -95,6 +99,7 @@ class CodexSettings {
       'uiShowThinking': uiShowThinking,
       'debugLogToFile': debugLogToFile,
       'debugLogRetentionDays': debugLogRetentionDays,
+      'updateCheckOnLaunch': updateCheckOnLaunch,
       'enabledGlobalMcpServerIds': enabledGlobalMcpServerIds,
       'extraConfigToml': extraConfigToml,
       'useRawConfigToml': useRawConfigToml,
@@ -116,6 +121,7 @@ class CodexSettings {
       debugLogToFile: map['debugLogToFile'] as bool? ?? false,
       debugLogRetentionDays:
           (map['debugLogRetentionDays'] as num?)?.toInt() ?? 7,
+      updateCheckOnLaunch: map['updateCheckOnLaunch'] as bool? ?? true,
       enabledGlobalMcpServerIds: _normalizeStringList(
         map['enabledGlobalMcpServerIds'],
       ),

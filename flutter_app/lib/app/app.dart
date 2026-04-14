@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../features/mcp/presentation/pages/mcp_page.dart';
 import '../features/sessions/application/session_models.dart';
 import '../features/sessions/presentation/pages/sessions_page.dart';
 import '../features/settings/presentation/pages/settings_page.dart';
+import '../features/update/application/app_update_startup_checker.dart';
 import '../features/workspaces/application/workspace_models.dart';
 import '../features/workspaces/application/workspace_store.dart';
 import '../features/workspaces/presentation/pages/workspaces_page.dart';
@@ -32,10 +35,12 @@ class _AppShell extends StatefulWidget {
 
 class _AppShellState extends State<_AppShell> {
   final _workspaceStore = WorkspaceStore();
+  final _updateStartupChecker = AppUpdateStartupChecker();
 
   int _selectedIndex = 0;
   Workspace? _activeWorkspace;
   Session? _selectedSession;
+  bool _startupUpdateCheckTriggered = false;
 
   static const _destinations = <NavigationDestination>[
     NavigationDestination(
@@ -64,6 +69,13 @@ class _AppShellState extends State<_AppShell> {
   void initState() {
     super.initState();
     _loadContext();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_startupUpdateCheckTriggered) {
+        return;
+      }
+      _startupUpdateCheckTriggered = true;
+      unawaited(_updateStartupChecker.checkOnLaunch(context));
+    });
   }
 
   Future<void> _loadContext() async {

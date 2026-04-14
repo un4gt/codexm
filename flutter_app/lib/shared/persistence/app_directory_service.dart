@@ -26,6 +26,8 @@ class AppDirectoryService {
 
   Future<Directory> mcpDir() => ensureDocumentsSubdir('mcp');
 
+  Future<Directory> updatesDir() => ensureTemporarySubdir('updates');
+
   Future<Directory> workspacesDir() => ensureDocumentsSubdir('workspaces');
 
   Future<Directory> ensureDocumentsSubdir(String name) async {

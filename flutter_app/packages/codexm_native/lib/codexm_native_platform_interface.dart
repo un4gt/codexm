@@ -1,6 +1,7 @@
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 import 'codexm_native_method_channel.dart';
+import 'src/models/app_update_app_info.dart';
 import 'src/models/git_commit_summary.dart';
 import 'src/models/git_status.dart';
 import 'src/models/runtime_line_event.dart';
@@ -20,6 +21,8 @@ abstract class CodexmNativePlatform extends PlatformInterface {
   }
 
   Future<String?> getPlatformVersion();
+
+  Future<AppUpdateAppInfo> getAppUpdateAppInfo();
 
   Future<void> startRuntime({
     required String runtimeId,
@@ -45,6 +48,14 @@ abstract class CodexmNativePlatform extends PlatformInterface {
   });
 
   Stream<RuntimeLineEvent> runtimeLineEvents();
+
+  Future<bool> canRequestInstallPackages();
+
+  Future<void> openUnknownSourcesSettings();
+
+  Future<void> installApk({required String apkPath});
+
+  Future<void> openUrl({required String url});
 
   Future<void> gitClone({
     required String remoteUrl,

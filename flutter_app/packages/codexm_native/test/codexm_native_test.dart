@@ -11,6 +11,15 @@ class MockCodexmNativePlatform
   Future<String?> getPlatformVersion() => Future.value('42');
 
   @override
+  Future<AppUpdateAppInfo> getAppUpdateAppInfo() async {
+    return const AppUpdateAppInfo(
+      packageName: 'com.example.app',
+      versionName: '1.2.3',
+      versionCode: 123,
+    );
+  }
+
+  @override
   Future<void> chmodPath(String path) async {}
 
   @override
@@ -88,6 +97,18 @@ class MockCodexmNativePlatform
   }
 
   @override
+  Future<void> installApk({required String apkPath}) async {}
+
+  @override
+  Future<bool> canRequestInstallPackages() async => true;
+
+  @override
+  Future<void> openUnknownSourcesSettings() async {}
+
+  @override
+  Future<void> openUrl({required String url}) async {}
+
+  @override
   Stream<RuntimeLineEvent> runtimeLineEvents() {
     return const Stream<RuntimeLineEvent>.empty();
   }
@@ -125,5 +146,15 @@ void main() {
     CodexmNativePlatform.instance = fakePlatform;
 
     expect(await codexmNativePlugin.getPlatformVersion(), '42');
+  });
+
+  test('getAppUpdateAppInfo', () async {
+    const CodexmNative codexmNativePlugin = CodexmNative();
+    final MockCodexmNativePlatform fakePlatform = MockCodexmNativePlatform();
+    CodexmNativePlatform.instance = fakePlatform;
+
+    final info = await codexmNativePlugin.getAppUpdateAppInfo();
+    expect(info.versionName, '1.2.3');
+    expect(info.versionCode, 123);
   });
 }

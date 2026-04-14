@@ -162,6 +162,36 @@ void main() {
       contains('缺少“=”号'),
     );
   });
+
+  test('persists update check preference with default enabled', () async {
+    final documentsDir = await Directory.systemTemp.createTemp('codexm_docs_');
+    final temporaryDir = await Directory.systemTemp.createTemp('codexm_tmp_');
+    addTearDown(() async {
+      if (documentsDir.existsSync()) {
+        await documentsDir.delete(recursive: true);
+      }
+      if (temporaryDir.existsSync()) {
+        await temporaryDir.delete(recursive: true);
+      }
+    });
+
+    final appDirectoryService = AppDirectoryService(
+      documentsResolver: () async => documentsDir,
+      temporaryResolver: () async => temporaryDir,
+    );
+    final settingsStore = CodexSettingsStore(
+      appDirectoryService: appDirectoryService,
+      authStore: AuthStore(secureStore: _MemorySecureStore()),
+    );
+
+    expect((await settingsStore.getSettings()).updateCheckOnLaunch, isTrue);
+
+    await settingsStore.saveSettings(
+      const CodexSettings(updateCheckOnLaunch: false),
+    );
+
+    expect((await settingsStore.getSettings()).updateCheckOnLaunch, isFalse);
+  });
 }
 
 class _MemorySecureStore implements SecureKeyValueStore {

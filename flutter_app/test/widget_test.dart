@@ -18,6 +18,7 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: SettingsPage()));
     await tester.pumpAndSettle();
     
+    expect(find.text('应用更新'), findsOneWidget);
     expect(find.text('连接设置'), findsOneWidget);
 
     await tester.scrollUntilVisible(
