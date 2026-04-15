@@ -1,7 +1,128 @@
+minimum_prek_version = "0.3.9"
+default_install_hook_types = ["pre-commit", "pre-push"]
+default_stages = ["pre-commit"]
+exclude = { glob = [
+  ".codex/**",
+  "flutter_app/.dart_tool/**",
+  "flutter_app/build/**",
+  "flutter_app/coverage/**",
+  "flutter_app/.flutter-plugins",
+  "flutter_app/.flutter-plugins-dependencies",
+  "flutter_app/android/.gradle/**",
+  "flutter_app/android/.cxx/**",
+  "flutter_app/android/**/build/**",
+  "flutter_app/android/local.properties",
+  "flutter_app/packages/codexm_native/android/.cxx/**",
+  "flutter_app/packages/codexm_native/android/build/**",
+  "flutter_app/packages/codexm_native/android/runtime_inputs/**",
+  "flutter_app/packages/codexm_native/android/src/main/assets/codex/**",
+  "flutter_app/packages/codexm_native/build/**",
+  "flutter_app/packages/codexm_native/example/.dart_tool/**",
+  "flutter_app/packages/codexm_native/example/.flutter-plugins-dependencies",
+  "flutter_app/packages/codexm_native/example/android/.gradle/**",
+  "flutter_app/packages/codexm_native/example/android/**/build/**",
+  "flutter_app/packages/codexm_native/example/android/local.properties",
+  "**/*.apk",
+  "**/*.aab",
+] }
+
 [[repos]]
-repo = "https://github.com/pre-commit/pre-commit-hooks"
-rev = "v6.0.0"
-hooks = [
-  { id = "check-yaml" },
-  { id = "end-of-file-fixer" },
+repo = "meta"
+
+[[repos.hooks]]
+id = "check-hooks-apply"
+
+[[repos]]
+repo = "builtin"
+
+[[repos.hooks]]
+id = "check-merge-conflict"
+
+[[repos.hooks]]
+id = "detect-private-key"
+
+[[repos.hooks]]
+id = "check-added-large-files"
+args = ["--maxkb=2048"]
+
+[[repos.hooks]]
+id = "check-yaml"
+
+[[repos.hooks]]
+id = "check-toml"
+
+[[repos.hooks]]
+id = "check-json"
+
+[[repos.hooks]]
+id = "end-of-file-fixer"
+
+[[repos.hooks]]
+id = "trailing-whitespace"
+args = ["--markdown-linebreak-ext=md"]
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "dart-format-changed"
+name = "Dart format (changed files)"
+language = "system"
+entry = "bash -lc"
+args = [
+  """
+set -euo pipefail
+dart format --output=none --set-exit-if-changed "$@"
+""",
+  "--",
 ]
+files = { glob = ["flutter_app/**/*.dart"] }
+require_serial = true
+
+[[repos.hooks]]
+id = "flutter-ci-sanity"
+name = "Flutter CI sanity"
+language = "system"
+entry = "bash -lc"
+args = [
+  """
+set -euo pipefail
+cd flutter_app
+flutter pub get
+(
+  cd packages/codexm_native/example
+  flutter pub get
+)
+flutter analyze
+flutter test
+""",
+]
+env = { CI = "true", FLUTTER_SUPPRESS_ANALYTICS = "true" }
+files = { glob = [
+  "flutter_app/**/*.dart",
+  "flutter_app/**/analysis_options.yaml",
+  "flutter_app/**/pubspec.yaml",
+  "flutter_app/**/pubspec.lock",
+  "flutter_app/android/**/*.gradle",
+  "flutter_app/android/**/*.kts",
+  "flutter_app/android/**/*.properties",
+  "flutter_app/packages/codexm_native/android/**/*.gradle",
+  "flutter_app/packages/codexm_native/android/**/*.kts",
+  "flutter_app/packages/codexm_native/android/**/*.properties",
+  "flutter_app/packages/codexm_native/example/android/**/*.gradle",
+  "flutter_app/packages/codexm_native/example/android/**/*.kts",
+  "flutter_app/packages/codexm_native/example/android/**/*.properties",
+] }
+pass_filenames = false
+require_serial = true
+
+[[repos.hooks]]
+id = "flutter-release-regression"
+name = "Flutter release regression"
+language = "system"
+entry = "bash ./scripts/flutter_phase5_regression.sh"
+env = { CI = "true", FLUTTER_SUPPRESS_ANALYTICS = "true" }
+always_run = true
+pass_filenames = false
+require_serial = true
+stages = ["pre-push"]
