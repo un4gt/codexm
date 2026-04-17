@@ -83,20 +83,7 @@ require_serial = true
 id = "flutter-ci-sanity"
 name = "Flutter CI sanity"
 language = "system"
-entry = "bash -lc"
-args = [
-  """
-set -euo pipefail
-cd flutter_app
-flutter pub get
-(
-  cd packages/codexm_native/example
-  flutter pub get
-)
-flutter analyze
-flutter test
-""",
-]
+entry = "bash ./scripts/flutter_ci_sanity.sh"
 env = { CI = "true", FLUTTER_SUPPRESS_ANALYTICS = "true" }
 files = { glob = [
   "flutter_app/**/*.dart",
@@ -115,6 +102,27 @@ files = { glob = [
 ] }
 pass_filenames = false
 require_serial = true
+
+[[repos.hooks]]
+id = "flutter-push-sanity"
+name = "Flutter push sanity"
+language = "system"
+entry = "bash ./scripts/flutter_ci_sanity.sh"
+env = { CI = "true", FLUTTER_SUPPRESS_ANALYTICS = "true" }
+always_run = true
+pass_filenames = false
+require_serial = true
+stages = ["pre-push"]
+
+[[repos.hooks]]
+id = "release-tag-head-guard"
+name = "Release tag must match HEAD"
+language = "system"
+entry = "bash ./scripts/guard_release_tag_head.sh"
+always_run = true
+pass_filenames = false
+require_serial = true
+stages = ["pre-push"]
 
 [[repos.hooks]]
 id = "flutter-release-regression"

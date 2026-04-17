@@ -105,18 +105,9 @@ jobs:
           set -euo pipefail
           python3 scripts/fetch_android_codex_deps.py --abi arm64-v8a
 
-      - name: Flutter pub get
-        run: flutter pub get
-
-      - name: Flutter pub get (plugin example)
-        run: flutter pub get
-        working-directory: flutter_app/packages/codexm_native/example
-
-      - name: Flutter analyze
-        run: flutter analyze
-
-      - name: Flutter test
-        run: flutter test
+      - name: Flutter CI sanity
+        working-directory: .
+        run: bash ./scripts/flutter_ci_sanity.sh
 
       - name: Derive version from tag
         id: version
