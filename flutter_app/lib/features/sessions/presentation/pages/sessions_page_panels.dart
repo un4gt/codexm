@@ -279,8 +279,21 @@ class _SessionHeader extends StatelessWidget {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          _ConnectionStatusChip(connected: settingsReady),
-                          const SizedBox(width: 8),
+                          if (widthClass.isExpanded) ...[
+                            _ConnectionStatusChip(connected: settingsReady),
+                            const SizedBox(width: 8),
+                          ] else if (widthClass.isMedium) ...[
+                            Icon(
+                              settingsReady
+                                  ? Icons.check_circle_outline
+                                  : Icons.vpn_key_outlined,
+                              size: 14,
+                              color: settingsReady
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 4),
+                          ],
                           Expanded(
                             child: Text(
                               workspace.name,
@@ -605,7 +618,19 @@ class _SessionInputBar extends StatelessWidget {
                       minLines: 1,
                       maxLines: 6,
                       textInputAction: TextInputAction.newline,
-                      decoration: const InputDecoration(hintText: '在这里输入消息...'),
+                      decoration: const InputDecoration(
+                        hintText: '在这里输入消息...',
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        isDense: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(24)),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                      ),
                     ),
                   ),
                 ),
@@ -619,6 +644,7 @@ class _SessionInputBar extends StatelessWidget {
                     onPressed: canSend ? onSendMessage : null,
                     icon: const Icon(Icons.arrow_upward_rounded),
                     style: IconButton.styleFrom(
+                      padding: EdgeInsets.zero,
                       minimumSize: const Size(
                         _SessionUiSpecs.minTapTarget,
                         _SessionUiSpecs.minTapTarget,
