@@ -192,95 +192,369 @@ class _ConfigTomlSection extends StatelessWidget {
   const _ConfigTomlSection({
     required this.busy,
     required this.useRawConfigToml,
-    required this.configTomlController,
+    required this.previewConfigToml,
+    required this.rawConfigTomlController,
+    required this.extraConfigTomlController,
     required this.warnings,
-    required this.validationError,
-    required this.onSaveConfigToml,
+    required this.previewValidationError,
+    required this.extraConfigValidationError,
+    required this.rawConfigValidationError,
+    required this.onSaveExtraConfigToml,
+    required this.onClearExtraConfigToml,
+    required this.onSaveRawConfigToml,
     required this.onRestoreGeneratedConfigToml,
   });
 
   final bool busy;
   final bool useRawConfigToml;
-  final TextEditingController configTomlController;
+  final String previewConfigToml;
+  final TextEditingController rawConfigTomlController;
+  final TextEditingController extraConfigTomlController;
   final List<String> warnings;
-  final String? validationError;
-  final Future<void> Function() onSaveConfigToml;
+  final String? previewValidationError;
+  final String? extraConfigValidationError;
+  final String? rawConfigValidationError;
+  final Future<void> Function() onSaveExtraConfigToml;
+  final Future<void> Function() onClearExtraConfigToml;
+  final Future<void> Function() onSaveRawConfigToml;
   final Future<void> Function() onRestoreGeneratedConfigToml;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = context.appTokens;
+    final widthClass = context.adaptiveWidthClass;
+    final editorMaxLines = widthClass.isCompact ? 8 : 10;
+    final rawEditorMaxLines = widthClass.isCompact ? 10 : 14;
+    final previewMaxHeight = widthClass.isCompact ? 240.0 : 300.0;
 
-    return Card(
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(tokens.cardRadius),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('全局 config.toml', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
+            StitchSectionHeader(
+              title: '全局 config.toml',
+              trailing: Chip(label: Text(useRawConfigToml ? '完整覆盖' : '增量补充')),
+            ),
+            SizedBox(height: tokens.compactSpacing),
             Text(
-              '用于预览或修改全局运行配置。保存前会进行格式校验。',
+              '默认展示当前生效配置，并优先通过补充内容做增量修改。只有在高级场景下，才建议完整覆盖整个 config.toml。',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
+            SizedBox(height: tokens.sectionSpacing),
+            _ConfigPanel(
+              title: '当前生效内容',
+              description: useRawConfigToml
+                  ? '这里展示当前写入 Codex 的完整覆盖内容。该区域只读，避免误改。'
+                  : '这里展示当前写入 Codex 的配置预览。自动生成内容和补充内容会一起合并后写入。',
+              child: _ReadonlyConfigPreview(
+                content: previewConfigToml,
+                maxHeight: previewMaxHeight,
+              ),
+            ),
             if (useRawConfigToml) ...[
-              const SizedBox(height: 8),
-              Text(
-                '当前模式：手动编辑（会覆盖自动生成内容）',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.primary,
-                ),
+              SizedBox(height: tokens.compactSpacing),
+              const _ConfigNotice(
+                icon: Icons.warning_amber_rounded,
+                text: '当前已启用完整覆盖：不会自动注入 MCP 服务器配置。',
+                tone: _ConfigNoticeTone.warning,
               ),
             ],
             for (final warning in warnings) ...[
-              const SizedBox(height: 8),
-              Text(
-                warning,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.tertiary,
-                ),
+              SizedBox(height: tokens.compactSpacing),
+              _ConfigNotice(
+                icon: Icons.info_outline,
+                text: warning,
+                tone: _ConfigNoticeTone.info,
               ),
             ],
-            if (validationError?.trim().isNotEmpty == true) ...[
-              const SizedBox(height: 8),
-              Text(
-                validationError!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
+            if (previewValidationError?.trim().isNotEmpty == true) ...[
+              SizedBox(height: tokens.compactSpacing),
+              _ConfigNotice(
+                icon: Icons.error_outline,
+                text: previewValidationError!,
+                tone: _ConfigNoticeTone.error,
               ),
             ],
-            const SizedBox(height: 12),
-            TextField(
-              controller: configTomlController,
-              enabled: !busy,
-              minLines: 10,
-              maxLines: 18,
-              decoration: const InputDecoration(
-                labelText: 'config.toml',
-                alignLabelWithHint: true,
+            SizedBox(height: tokens.sectionSpacing),
+            _ConfigPanel(
+              title: '补充内容',
+              description: useRawConfigToml
+                  ? '保存这里的内容后，会退出完整覆盖模式，改回自动生成基础配置后再追加下面片段。'
+                  : '推荐在这里补充额外字段，而不是直接改完整文件。这样更不容易因为换行或遗漏而破坏基础配置。',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: extraConfigTomlController,
+                    enabled: !busy,
+                    minLines: 6,
+                    maxLines: editorMaxLines,
+                    keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.newline,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    smartDashesType: SmartDashesType.disabled,
+                    smartQuotesType: SmartQuotesType.disabled,
+                    decoration: const InputDecoration(
+                      labelText: '补充 TOML 片段',
+                      hintText: '[sandbox]\nnetwork_access = true',
+                      helperText:
+                          '请保持每一行都是完整的 TOML 语句；普通字符串里不要直接回车，如需多行请使用 """ 或 \'\'\'。',
+                    ),
+                  ),
+                  if (extraConfigValidationError?.trim().isNotEmpty ==
+                      true) ...[
+                    SizedBox(height: tokens.compactSpacing),
+                    _ConfigNotice(
+                      icon: Icons.error_outline,
+                      text: extraConfigValidationError!,
+                      tone: _ConfigNoticeTone.error,
+                    ),
+                  ],
+                  SizedBox(height: tokens.compactSpacing),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: busy ? null : onSaveExtraConfigToml,
+                        icon: const Icon(Icons.save_outlined),
+                        label: Text(useRawConfigToml ? '保存并切回增量模式' : '保存补充内容'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: busy ? null : onClearExtraConfigToml,
+                        icon: const Icon(Icons.clear_outlined),
+                        label: const Text('清空补充内容'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                FilledButton.icon(
-                  onPressed: busy ? null : onSaveConfigToml,
-                  icon: const Icon(Icons.save_outlined),
-                  label: const Text('保存 config.toml'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: busy ? null : onRestoreGeneratedConfigToml,
-                  icon: const Icon(Icons.restore_outlined),
-                  label: const Text('恢复自动生成'),
-                ),
-              ],
+            SizedBox(height: tokens.sectionSpacing),
+            _ConfigPanel(
+              title: '完整覆盖（高级）',
+              description: '仅在你确实需要完全接管 config.toml 时使用。保存后会直接写入整份文件。',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _ConfigNotice(
+                    icon: useRawConfigToml
+                        ? Icons.edit_note_outlined
+                        : Icons.info_outline,
+                    text: useRawConfigToml
+                        ? '当前正在使用完整覆盖模式。恢复自动生成后，会重新回到“自动生成 + 补充内容”的组合。'
+                        : '这里适合高级调试场景；日常修改建议优先使用上面的补充内容。',
+                    tone: useRawConfigToml
+                        ? _ConfigNoticeTone.warning
+                        : _ConfigNoticeTone.info,
+                  ),
+                  SizedBox(height: tokens.compactSpacing),
+                  TextField(
+                    controller: rawConfigTomlController,
+                    enabled: !busy,
+                    minLines: 8,
+                    maxLines: rawEditorMaxLines,
+                    keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.newline,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    smartDashesType: SmartDashesType.disabled,
+                    smartQuotesType: SmartQuotesType.disabled,
+                    decoration: const InputDecoration(
+                      labelText: '完整 config.toml',
+                      helperText: '高级模式下，请避免在普通字符串中直接换行；如需多行值，请使用 TOML 多行字符串。',
+                    ),
+                  ),
+                  if (rawConfigValidationError?.trim().isNotEmpty == true) ...[
+                    SizedBox(height: tokens.compactSpacing),
+                    _ConfigNotice(
+                      icon: Icons.error_outline,
+                      text: rawConfigValidationError!,
+                      tone: _ConfigNoticeTone.error,
+                    ),
+                  ],
+                  SizedBox(height: tokens.compactSpacing),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: busy ? null : onSaveRawConfigToml,
+                        icon: const Icon(Icons.save_outlined),
+                        label: const Text('保存完整覆盖'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: busy ? null : onRestoreGeneratedConfigToml,
+                        icon: const Icon(Icons.restore_outlined),
+                        label: Text(useRawConfigToml ? '退出完整覆盖' : '恢复自动生成'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _ConfigNoticeTone { info, warning, error }
+
+class _ConfigPanel extends StatelessWidget {
+  const _ConfigPanel({
+    required this.title,
+    required this.description,
+    required this.child,
+  });
+
+  final String title;
+  final String description;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = context.appTokens;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(tokens.inputRadius),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.75),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: theme.textTheme.titleSmall),
+            const SizedBox(height: 6),
+            Text(
+              description,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            SizedBox(height: tokens.compactSpacing),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ConfigNotice extends StatelessWidget {
+  const _ConfigNotice({
+    required this.icon,
+    required this.text,
+    required this.tone,
+  });
+
+  final IconData icon;
+  final String text;
+  final _ConfigNoticeTone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final Color accentColor;
+    final Color backgroundColor;
+
+    switch (tone) {
+      case _ConfigNoticeTone.info:
+        accentColor = colorScheme.primary;
+        backgroundColor = colorScheme.primary.withValues(alpha: 0.08);
+        break;
+      case _ConfigNoticeTone.warning:
+        accentColor = colorScheme.tertiary;
+        backgroundColor = colorScheme.tertiary.withValues(alpha: 0.12);
+        break;
+      case _ConfigNoticeTone.error:
+        accentColor = colorScheme.error;
+        backgroundColor = colorScheme.errorContainer.withValues(alpha: 0.4);
+        break;
+    }
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accentColor.withValues(alpha: 0.2)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 18, color: accentColor),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                text,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: tone == _ConfigNoticeTone.error
+                      ? colorScheme.onErrorContainer
+                      : colorScheme.onSurface,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReadonlyConfigPreview extends StatelessWidget {
+  const _ReadonlyConfigPreview({
+    required this.content,
+    required this.maxHeight,
+  });
+
+  final String content;
+  final double maxHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.75),
+        ),
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(14),
+          child: SelectionArea(
+            child: Text(
+              content.trim().isEmpty ? '# 暂无可预览内容' : content,
+              style: theme.textTheme.bodySmall?.copyWith(height: 1.5),
+            ),
+          ),
         ),
       ),
     );

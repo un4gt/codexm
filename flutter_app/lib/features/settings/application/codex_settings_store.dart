@@ -537,10 +537,30 @@ String? _validateTomlLikeText(String content, {required String label}) {
   final definedKeys = <String>{};
   final definedTables = <String>{};
   var currentTable = '';
+  _PendingTomlValue? pendingValue;
   final lines = normalized.split('\n');
 
   for (var index = 0; index < lines.length; index++) {
     final rawLine = lines[index].trim();
+    if (pendingValue != null) {
+      final continuation = _scanTomlValue(
+        rawLine,
+        initialState: pendingValue.state,
+      );
+      if (continuation.error != null) {
+        return '$label第 ${index + 1} 行有格式问题：${continuation.error}';
+      }
+      if (continuation.isComplete) {
+        pendingValue = null;
+      } else {
+        pendingValue = _PendingTomlValue(
+          startLine: pendingValue.startLine,
+          state: continuation.state,
+        );
+      }
+      continue;
+    }
+
     if (rawLine.isEmpty || rawLine.startsWith('#')) {
       continue;
     }
@@ -579,13 +599,201 @@ String? _validateTomlLikeText(String content, {required String label}) {
       return '$label第 ${index + 1} 行有格式问题：值不能为空。';
     }
 
+    final valueState = _scanTomlValue(value);
+    if (valueState.error != null) {
+      return '$label第 ${index + 1} 行有格式问题：${valueState.error}';
+    }
+
     final fullKey = currentTable.isEmpty ? key : '$currentTable.$key';
     if (!definedKeys.add(fullKey)) {
       return '$label第 ${index + 1} 行有格式问题：键重复定义。';
     }
+
+    if (!valueState.isComplete) {
+      pendingValue = _PendingTomlValue(
+        startLine: index + 1,
+        state: valueState.state,
+      );
+    }
+  }
+
+  if (pendingValue != null) {
+    return '$label第 ${pendingValue.startLine} 行有格式问题：值没有正确结束。';
   }
 
   return null;
+}
+
+class _PendingTomlValue {
+  const _PendingTomlValue({required this.startLine, required this.state});
+
+  final int startLine;
+  final _TomlValueState state;
+}
+
+class _TomlValueState {
+  const _TomlValueState({
+    this.inBasicString = false,
+    this.inLiteralString = false,
+    this.inMultilineBasicString = false,
+    this.inMultilineLiteralString = false,
+    this.arrayDepth = 0,
+    this.inlineTableDepth = 0,
+  });
+
+  final bool inBasicString;
+  final bool inLiteralString;
+  final bool inMultilineBasicString;
+  final bool inMultilineLiteralString;
+  final int arrayDepth;
+  final int inlineTableDepth;
+
+  bool get isComplete =>
+      !inBasicString &&
+      !inLiteralString &&
+      !inMultilineBasicString &&
+      !inMultilineLiteralString &&
+      arrayDepth == 0 &&
+      inlineTableDepth == 0;
+
+  _TomlValueState copyWith({
+    bool? inBasicString,
+    bool? inLiteralString,
+    bool? inMultilineBasicString,
+    bool? inMultilineLiteralString,
+    int? arrayDepth,
+    int? inlineTableDepth,
+  }) {
+    return _TomlValueState(
+      inBasicString: inBasicString ?? this.inBasicString,
+      inLiteralString: inLiteralString ?? this.inLiteralString,
+      inMultilineBasicString:
+          inMultilineBasicString ?? this.inMultilineBasicString,
+      inMultilineLiteralString:
+          inMultilineLiteralString ?? this.inMultilineLiteralString,
+      arrayDepth: arrayDepth ?? this.arrayDepth,
+      inlineTableDepth: inlineTableDepth ?? this.inlineTableDepth,
+    );
+  }
+}
+
+class _TomlValueScanResult {
+  const _TomlValueScanResult({
+    required this.state,
+    required this.isComplete,
+    this.error,
+  });
+
+  final _TomlValueState state;
+  final bool isComplete;
+  final String? error;
+}
+
+_TomlValueScanResult _scanTomlValue(
+  String value, {
+  _TomlValueState initialState = const _TomlValueState(),
+}) {
+  var state = initialState;
+
+  for (var index = 0; index < value.length; index++) {
+    if (state.inMultilineBasicString) {
+      final closingIndex = value.indexOf('"""', index);
+      if (closingIndex == -1) {
+        return _TomlValueScanResult(state: state, isComplete: false);
+      }
+      state = state.copyWith(inMultilineBasicString: false);
+      index = closingIndex + 2;
+      continue;
+    }
+    if (state.inMultilineLiteralString) {
+      final closingIndex = value.indexOf("'''", index);
+      if (closingIndex == -1) {
+        return _TomlValueScanResult(state: state, isComplete: false);
+      }
+      state = state.copyWith(inMultilineLiteralString: false);
+      index = closingIndex + 2;
+      continue;
+    }
+
+    final char = value[index];
+    if (state.inBasicString) {
+      if (char == r'\') {
+        index++;
+        continue;
+      }
+      if (char == '"') {
+        state = state.copyWith(inBasicString: false);
+      }
+      continue;
+    }
+    if (state.inLiteralString) {
+      if (char == "'") {
+        state = state.copyWith(inLiteralString: false);
+      }
+      continue;
+    }
+
+    if (char == '#') {
+      break;
+    }
+    if (value.startsWith('"""', index)) {
+      state = state.copyWith(inMultilineBasicString: true);
+      index += 2;
+      continue;
+    }
+    if (value.startsWith("'''", index)) {
+      state = state.copyWith(inMultilineLiteralString: true);
+      index += 2;
+      continue;
+    }
+    if (char == '"') {
+      state = state.copyWith(inBasicString: true);
+      continue;
+    }
+    if (char == "'") {
+      state = state.copyWith(inLiteralString: true);
+      continue;
+    }
+    if (char == '[') {
+      state = state.copyWith(arrayDepth: state.arrayDepth + 1);
+      continue;
+    }
+    if (char == ']') {
+      if (state.arrayDepth == 0) {
+        return _TomlValueScanResult(
+          state: state,
+          isComplete: false,
+          error: '数组结束位置不正确。',
+        );
+      }
+      state = state.copyWith(arrayDepth: state.arrayDepth - 1);
+      continue;
+    }
+    if (char == '{') {
+      state = state.copyWith(inlineTableDepth: state.inlineTableDepth + 1);
+      continue;
+    }
+    if (char == '}') {
+      if (state.inlineTableDepth == 0) {
+        return _TomlValueScanResult(
+          state: state,
+          isComplete: false,
+          error: '内联表结束位置不正确。',
+        );
+      }
+      state = state.copyWith(inlineTableDepth: state.inlineTableDepth - 1);
+    }
+  }
+
+  if (state.inBasicString || state.inLiteralString) {
+    return _TomlValueScanResult(
+      state: state,
+      isComplete: false,
+      error: '普通字符串不能直接换行，请改用 TOML 多行字符串。',
+    );
+  }
+
+  return _TomlValueScanResult(state: state, isComplete: state.isComplete);
 }
 
 bool _isTomlKey(String value) {

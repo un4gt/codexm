@@ -24,9 +24,7 @@ void main() {
       documentsResolver: () async => documentsDir,
       temporaryResolver: () async => temporaryDir,
     );
-    final authStore = AuthStore(
-      secureStore: _MemorySecureStore(),
-    );
+    final authStore = AuthStore(secureStore: _MemorySecureStore());
     final settingsStore = CodexSettingsStore(
       appDirectoryService: appDirectoryService,
       authStore: authStore,
@@ -61,65 +59,69 @@ void main() {
     expect(result.configToml, contains('model = "gpt-test"'));
     expect(result.configToml, contains('base_url = "https://example.com/v1"'));
     expect(result.configToml, contains('[mcp_servers.demo_mcp]'));
-    expect(await File(result.authJsonPath).readAsString(), contains('OPENAI_API_KEY'));
+    expect(
+      await File(result.authJsonPath).readAsString(),
+      contains('OPENAI_API_KEY'),
+    );
     expect(result.codexHomePath, contains('codex-home'));
   });
 
-  test('resolves models url and fetches available models from draft credentials',
-      () async {
-    final documentsDir = await Directory.systemTemp.createTemp('codexm_docs_');
-    final temporaryDir = await Directory.systemTemp.createTemp('codexm_tmp_');
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    addTearDown(() async {
-      await server.close(force: true);
-      if (documentsDir.existsSync()) {
-        await documentsDir.delete(recursive: true);
-      }
-      if (temporaryDir.existsSync()) {
-        await temporaryDir.delete(recursive: true);
-      }
-    });
-
-    server.listen((request) async {
-      expect(request.uri.path, '/v1/models');
-      expect(
-        request.headers.value(HttpHeaders.authorizationHeader),
-        'Bearer sk-local-test',
+  test(
+    'resolves models url and fetches available models from draft credentials',
+    () async {
+      final documentsDir = await Directory.systemTemp.createTemp(
+        'codexm_docs_',
       );
-      request.response.headers.contentType = ContentType.json;
-      request.response.write(
-        jsonEncode({
-          'data': [
-            {'id': 'gpt-4o-mini'},
-            {'id': 'gpt-4.1'},
-            {'id': 'gpt-4o-mini'},
-          ],
-        }),
+      final temporaryDir = await Directory.systemTemp.createTemp('codexm_tmp_');
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() async {
+        await server.close(force: true);
+        if (documentsDir.existsSync()) {
+          await documentsDir.delete(recursive: true);
+        }
+        if (temporaryDir.existsSync()) {
+          await temporaryDir.delete(recursive: true);
+        }
+      });
+
+      server.listen((request) async {
+        expect(request.uri.path, '/v1/models');
+        expect(
+          request.headers.value(HttpHeaders.authorizationHeader),
+          'Bearer sk-local-test',
+        );
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode({
+            'data': [
+              {'id': 'gpt-4o-mini'},
+              {'id': 'gpt-4.1'},
+              {'id': 'gpt-4o-mini'},
+            ],
+          }),
+        );
+        await request.response.close();
+      });
+
+      final appDirectoryService = AppDirectoryService(
+        documentsResolver: () async => documentsDir,
+        temporaryResolver: () async => temporaryDir,
       );
-      await request.response.close();
-    });
+      final settingsStore = CodexSettingsStore(
+        appDirectoryService: appDirectoryService,
+        authStore: AuthStore(secureStore: _MemorySecureStore()),
+      );
 
-    final appDirectoryService = AppDirectoryService(
-      documentsResolver: () async => documentsDir,
-      temporaryResolver: () async => temporaryDir,
-    );
-    final settingsStore = CodexSettingsStore(
-      appDirectoryService: appDirectoryService,
-      authStore: AuthStore(secureStore: _MemorySecureStore()),
-    );
+      final baseUrl = 'http://127.0.0.1:${server.port}';
+      expect(settingsStore.resolveModelsListUrl(baseUrl), '$baseUrl/v1/models');
 
-    final baseUrl = 'http://127.0.0.1:${server.port}';
-    expect(
-      settingsStore.resolveModelsListUrl(baseUrl),
-      '$baseUrl/v1/models',
-    );
-
-    final models = await settingsStore.fetchAvailableModels(
-      draftBaseUrl: baseUrl,
-      draftApiKey: 'sk-local-test',
-    );
-    expect(models, <String>['gpt-4.1', 'gpt-4o-mini']);
-  });
+      final models = await settingsStore.fetchAvailableModels(
+        draftBaseUrl: baseUrl,
+        draftApiKey: 'sk-local-test',
+      );
+      expect(models, <String>['gpt-4.1', 'gpt-4o-mini']);
+    },
+  );
 
   test('previews config and validates managed sections', () async {
     final documentsDir = await Directory.systemTemp.createTemp('codexm_docs_');
@@ -160,6 +162,22 @@ void main() {
     expect(
       settingsStore.validateCodexConfigToml('[broken]\nvalue ='),
       contains('缺少“=”号'),
+    );
+    expect(
+      settingsStore.validateCodexConfigToml(
+        'notes = """\nline one\nline two\n"""',
+      ),
+      isNull,
+    );
+    expect(
+      settingsStore.validateCodexConfigToml(
+        'models = [\n  "gpt-4.1",\n  "gpt-4o-mini",\n]',
+      ),
+      isNull,
+    );
+    expect(
+      settingsStore.validateCodexConfigToml('model = "gpt-4.1\npreview"'),
+      contains('普通字符串不能直接换行'),
     );
   });
 
@@ -208,10 +226,7 @@ class _MemorySecureStore implements SecureKeyValueStore {
   }
 
   @override
-  Future<void> write({
-    required String key,
-    required String value,
-  }) async {
+  Future<void> write({required String key, required String value}) async {
     _data[key] = value;
   }
 }
