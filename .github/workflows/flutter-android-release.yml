@@ -73,8 +73,23 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Prepare Android signing keystore (optional)
-        if: ${{ env.KEYSTORE_FILE != '' }}
+      - name: Validate Android signing config
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -n "${KEYSTORE_FILE}" ]] || missing+=("FLUTTER_ANDROID_KEYSTORE_FILE")
+          [[ -n "${KEYSTORE_PASSWORD}" ]] || missing+=("FLUTTER_ANDROID_KEYSTORE_PASSWORD")
+          [[ -n "${KEY_ALIAS}" ]] || missing+=("FLUTTER_ANDROID_KEY_ALIAS")
+          [[ -n "${KEY_PASSWORD}" ]] || missing+=("FLUTTER_ANDROID_KEY_PASSWORD")
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required Android signing secrets: %s\n' "${missing[*]}" >&2
+            printf 'GitHub release APKs must use one stable release keystore to remain upgradeable.\n' >&2
+            exit 1
+          fi
+
+      - name: Prepare Android signing keystore
         working-directory: .
         shell: bash
         run: |
@@ -162,6 +177,18 @@ jobs:
           --split-per-abi
           --build-name "${VERSION_NAME}"
           --build-number "${VERSION_CODE}"
+
+      - name: Verify release APK signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+          SIGNATURE_INFO="$(${ANDROID_SDK_ROOT}/build-tools/36.0.0/apksigner verify --print-certs "${APK}")"
+          printf '%s\n' "${SIGNATURE_INFO}"
+          if [[ "${SIGNATURE_INFO}" == *"CN=Android Debug"* ]]; then
+            echo 'Refusing to publish a debug-signed release APK.' >&2
+            exit 1
+          fi
 
       - name: Collect release files
         run: |

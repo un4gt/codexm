@@ -1,5 +1,6 @@
 # 本地参考工程（不属于本仓库）
 happy/
+_develop
 .helloagents/
 .vscode/
 

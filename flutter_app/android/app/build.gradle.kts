@@ -1,3 +1,6 @@
+import org.gradle.api.GradleException
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -5,20 +8,48 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-val releaseKeystoreFile = providers.gradleProperty("KEYSTORE_FILE").orNull
-    ?: System.getenv("KEYSTORE_FILE")
-val releaseKeystorePassword = providers.gradleProperty("KEYSTORE_PASSWORD").orNull
-    ?: System.getenv("KEYSTORE_PASSWORD")
-val releaseKeyAlias = providers.gradleProperty("KEY_ALIAS").orNull
-    ?: System.getenv("KEY_ALIAS")
-val releaseKeyPassword = providers.gradleProperty("KEY_PASSWORD").orNull
-    ?: System.getenv("KEY_PASSWORD")
+val keyProperties = Properties().apply {
+    val keyPropertiesFile = rootProject.file("key.properties")
+    if (keyPropertiesFile.exists()) {
+        keyPropertiesFile.inputStream().use(::load)
+    }
+}
+
+fun releaseSigningValue(gradleName: String, keyPropertiesName: String): String? {
+    return providers.gradleProperty(gradleName).orNull
+        ?: System.getenv(gradleName)
+        ?: keyProperties.getProperty(keyPropertiesName)
+}
+
+val releaseKeystoreFile = releaseSigningValue("KEYSTORE_FILE", "storeFile")
+val releaseKeystorePassword = releaseSigningValue("KEYSTORE_PASSWORD", "storePassword")
+val releaseKeyAlias = releaseSigningValue("KEY_ALIAS", "keyAlias")
+val releaseKeyPassword = releaseSigningValue("KEY_PASSWORD", "keyPassword")
+val releaseKeystore = releaseKeystoreFile?.takeIf { it.isNotBlank() }?.let(::file)
 val hasReleaseSigning = listOf(
-    releaseKeystoreFile,
+    releaseKeystore?.takeIf { it.exists() }?.path,
     releaseKeystorePassword,
     releaseKeyAlias,
     releaseKeyPassword,
 ).all { !it.isNullOrBlank() }
+val requiresReleaseSigning = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+
+if (requiresReleaseSigning && !hasReleaseSigning) {
+    val guidance = buildString {
+        append(
+            "Release signing is required for distributable Android APKs and in-app updates. " +
+                "Configure flutter_app/android/key.properties using Flutter's standard " +
+                "storeFile/storePassword/keyAlias/keyPassword fields, or provide the " +
+                "KEYSTORE_* Gradle properties or environment variables.",
+        )
+        if (!releaseKeystoreFile.isNullOrBlank() && releaseKeystore?.exists() != true) {
+            append(" Missing keystore file: $releaseKeystoreFile.")
+        }
+    }
+    throw GradleException(guidance)
+}
 
 android {
     namespace = "com.unsafe.codexm.flutterapp"
@@ -48,7 +79,7 @@ android {
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
-                storeFile = file(requireNotNull(releaseKeystoreFile))
+                storeFile = requireNotNull(releaseKeystore)
                 storePassword = releaseKeystorePassword
                 keyAlias = releaseKeyAlias
                 keyPassword = releaseKeyPassword
