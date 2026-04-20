@@ -545,7 +545,7 @@ class _SessionInputBar extends StatelessWidget {
     if (!settingsEnabled) {
       helperText = '当前对话能力已关闭，请先在设置中启用。';
     } else if (!hasApiKey) {
-      helperText = '请先到「设置 > 连接设置」完成 API Key 与 Base URL。';
+      helperText = '请先配置 API Key。';
     } else if (running) {
       helperText = '正在回复中，请稍候。';
     } else {

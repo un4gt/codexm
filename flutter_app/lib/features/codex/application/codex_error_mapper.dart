@@ -65,7 +65,7 @@ String formatRpcErrorForUser(Object error) {
       return 'Codex 运行组件权限异常，请重装应用后重试。';
     }
     if (runtimeStartupExit) {
-      return 'Codex 启动失败：请检查「设置 > 连接设置」中的 API Key / Base URL 后重试。';
+      return 'Codex 启动失败：请检查「设置 > 连接」中的 API Key / Base URL 后重试。';
     }
     return 'Codex 启动失败，请稍后重试。';
   }

@@ -93,8 +93,8 @@ class _ServerListCard extends StatelessWidget {
         SizedBox(height: tokens.compactSpacing),
         if (servers.isEmpty)
           const StitchListItem(
-            title: '还没有扩展服务',
-            subtitle: '点击顶部「+」添加 Streamable HTTP 或 Rust stdio 服务。',
+            title: '无配置服务',
+            subtitle: '点击顶部「+」添加。',
             leading: Icon(Icons.extension_outlined),
           ),
         for (final server in servers) ...[
@@ -212,10 +212,13 @@ class _ServerStitchCard extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final tokens = context.appTokens;
 
-    final transportLabel =
-        server.transport == 'url' ? 'Streamable HTTP' : 'Rust stdio';
+    final transportLabel = server.transport == 'url'
+        ? 'Streamable HTTP'
+        : 'Rust stdio';
     final endpoint = server.transport == 'url'
-        ? (server.url?.trim().isNotEmpty == true ? server.url!.trim() : '未填写服务地址')
+        ? (server.url?.trim().isNotEmpty == true
+              ? server.url!.trim()
+              : '未填写服务地址')
         : (server.command?.trim().isNotEmpty == true
               ? server.command!.trim()
               : '未填写可执行文件');
@@ -283,10 +286,7 @@ class _ServerStitchCard extends StatelessWidget {
                           }
                         },
                   itemBuilder: (context) => const [
-                    PopupMenuItem(
-                      value: _ServerAction.edit,
-                      child: Text('编辑'),
-                    ),
+                    PopupMenuItem(value: _ServerAction.edit, child: Text('编辑')),
                     PopupMenuItem(
                       value: _ServerAction.delete,
                       child: Text('删除'),
@@ -316,8 +316,8 @@ class _ServerStitchCard extends StatelessWidget {
               StitchListItem(
                 title: installed ? '托管安装：已安装' : '托管安装：未安装',
                 subtitle: execPath?.trim().isNotEmpty == true
-                    ? '执行路径：${execPath!.trim()}'
-                    : '执行路径：尚未生成',
+                    ? '已安装配置'
+                    : '尚未配置',
                 leading: const Icon(Icons.inventory_2_outlined),
               ),
               SizedBox(height: tokens.compactSpacing),

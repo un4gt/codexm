@@ -22,10 +22,10 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
 
   static const fallback = AppThemeTokens(
     pagePadding: EdgeInsets.fromLTRB(16, 16, 16, 20),
-    sectionSpacing: 20,
+    sectionSpacing: 16,
     compactSpacing: 12,
-    cardRadius: 24,
-    inputRadius: 18,
+    cardRadius: 12,
+    inputRadius: 12,
     composerMinHeight: 132,
     maxContentWidth: 1180,
   );
@@ -57,12 +57,17 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
       return this;
     }
     return AppThemeTokens(
-      pagePadding: EdgeInsets.lerp(pagePadding, other.pagePadding, t) ?? pagePadding,
+      pagePadding:
+          EdgeInsets.lerp(pagePadding, other.pagePadding, t) ?? pagePadding,
       sectionSpacing: lerpDouble(sectionSpacing, other.sectionSpacing, t),
       compactSpacing: lerpDouble(compactSpacing, other.compactSpacing, t),
       cardRadius: lerpDouble(cardRadius, other.cardRadius, t),
       inputRadius: lerpDouble(inputRadius, other.inputRadius, t),
-      composerMinHeight: lerpDouble(composerMinHeight, other.composerMinHeight, t),
+      composerMinHeight: lerpDouble(
+        composerMinHeight,
+        other.composerMinHeight,
+        t,
+      ),
       maxContentWidth: lerpDouble(maxContentWidth, other.maxContentWidth, t),
     );
   }
@@ -80,15 +85,15 @@ ThemeData buildAppTheme() {
     seedColor: const Color(0xFFEC5B13),
     brightness: Brightness.light,
   );
-  final surfaceTint = colorScheme.surfaceContainerHighest.withValues(alpha: 0.55);
+  final surfaceTint = colorScheme.surfaceContainerHighest.withValues(
+    alpha: 0.55,
+  );
 
   return ThemeData(
     colorScheme: colorScheme,
     useMaterial3: true,
     scaffoldBackgroundColor: const Color(0xFFF8F6F6),
-    extensions: const <ThemeExtension<dynamic>>[
-      AppThemeTokens.fallback,
-    ],
+    extensions: const <ThemeExtension<dynamic>>[AppThemeTokens.fallback],
     textTheme: const TextTheme(
       headlineMedium: TextStyle(fontWeight: FontWeight.w700),
       titleLarge: TextStyle(fontWeight: FontWeight.w700),
@@ -104,7 +109,9 @@ ThemeData buildAppTheme() {
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppThemeTokens.fallback.cardRadius),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.9)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.9),
+        ),
       ),
     ),
     appBarTheme: AppBarTheme(
@@ -142,37 +149,47 @@ ThemeData buildAppTheme() {
       alignLabelWithHint: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppThemeTokens.fallback.inputRadius),
+        borderRadius: BorderRadius.circular(
+          AppThemeTokens.fallback.inputRadius,
+        ),
         borderSide: BorderSide(color: colorScheme.outlineVariant),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppThemeTokens.fallback.inputRadius),
+        borderRadius: BorderRadius.circular(
+          AppThemeTokens.fallback.inputRadius,
+        ),
         borderSide: BorderSide(color: colorScheme.outlineVariant),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppThemeTokens.fallback.inputRadius),
+        borderRadius: BorderRadius.circular(
+          AppThemeTokens.fallback.inputRadius,
+        ),
         borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppThemeTokens.fallback.inputRadius),
+        borderRadius: BorderRadius.circular(
+          AppThemeTokens.fallback.inputRadius,
+        ),
         borderSide: BorderSide(color: colorScheme.error),
       ),
       focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(AppThemeTokens.fallback.inputRadius),
+        borderRadius: BorderRadius.circular(
+          AppThemeTokens.fallback.inputRadius,
+        ),
         borderSide: BorderSide(color: colorScheme.error, width: 1.5),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        minimumSize: const Size(0, 48),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        minimumSize: const Size(0, 40),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         textStyle: const TextStyle(fontWeight: FontWeight.w700),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 48),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        minimumSize: const Size(0, 40),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         textStyle: const TextStyle(fontWeight: FontWeight.w600),
       ),
     ),
@@ -180,7 +197,7 @@ ThemeData buildAppTheme() {
       backgroundColor: colorScheme.secondaryContainer.withValues(alpha: 0.5),
       selectedColor: colorScheme.primaryContainer,
       side: BorderSide(color: colorScheme.outlineVariant),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       labelStyle: TextStyle(color: colorScheme.onSurface),
     ),
     dividerTheme: DividerThemeData(

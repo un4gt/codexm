@@ -13,8 +13,8 @@ class AndroidSmokePage extends StatefulWidget {
     super.key,
     CodexmNative? native,
     SmokeWorkspacePathService? pathService,
-  })  : native = native ?? const CodexmNative(),
-        pathService = pathService ?? SmokeWorkspacePathService();
+  }) : native = native ?? const CodexmNative(),
+       pathService = pathService ?? SmokeWorkspacePathService();
 
   final CodexmNative native;
   final SmokeWorkspacePathService pathService;
@@ -47,8 +47,6 @@ class _AndroidSmokePageState extends State<AndroidSmokePage> {
   String _gitDiffSummary = '尚未执行';
   String _lastRuntimeError = '暂无';
   String? _threadId;
-  int _stdoutLines = 0;
-  int _stderrLines = 0;
   int? _initializeRequestId;
   int? _threadStartRequestId;
   bool _runtimeStarted = false;
@@ -158,8 +156,6 @@ class _AndroidSmokePageState extends State<AndroidSmokePage> {
         _sentInitializedNotification = false;
         _assistantOutput = '';
         _lastRuntimeError = '暂无';
-        _stdoutLines = 0;
-        _stderrLines = 0;
         _threadId = null;
         _initializeRequestId = null;
         _threadStartRequestId = null;
@@ -299,7 +295,9 @@ class _AndroidSmokePageState extends State<AndroidSmokePage> {
         return;
       }
       setState(() {
-        _gitDiffSummary = diff.isEmpty ? '当前无差异内容。' : '已获取 ${diff.length} 个字符的差异预览。';
+        _gitDiffSummary = diff.isEmpty
+            ? '当前无差异内容。'
+            : '已获取 ${diff.length} 个字符的差异预览。';
       });
       _addStatus(_gitDiffSummary);
     });
@@ -337,10 +335,7 @@ class _AndroidSmokePageState extends State<AndroidSmokePage> {
     }
 
     setState(() {
-      if (event.stream == 'stdout') {
-        _stdoutLines += 1;
-      } else {
-        _stderrLines += 1;
+      if (event.stream != 'stdout') {
         _lastRuntimeError = event.line;
       }
     });
@@ -366,8 +361,7 @@ class _AndroidSmokePageState extends State<AndroidSmokePage> {
     }
 
     final initializeRequestId = _initializeRequestId;
-    if (
-        initializeRequestId != null &&
+    if (initializeRequestId != null &&
         _rpc.isInitializeResponse(message, initializeRequestId) &&
         !_initialized) {
       if (!mounted) {
@@ -507,7 +501,7 @@ class _AndroidSmokePageState extends State<AndroidSmokePage> {
                   maxLines: 2,
                   decoration: const InputDecoration(
                     labelText: '首轮测试消息',
-                    helperText: '用于验证 runtime -> app-server -> 模型响应链路。',
+                    helperText: '测试服务响应。',
                   ),
                 ),
               ],
@@ -521,16 +515,46 @@ class _AndroidSmokePageState extends State<AndroidSmokePage> {
               spacing: 12,
               runSpacing: 12,
               children: [
-                FilledButton.tonal(onPressed: _prepareWorkspace, child: const Text('1. 准备目录')),
-                FilledButton.tonal(onPressed: _startRuntime, child: const Text('2. 启动运行时')),
-                FilledButton.tonal(onPressed: _initializeRuntime, child: const Text('3. 初始化握手')),
-                FilledButton.tonal(onPressed: _startThread, child: const Text('4. 建立线程')),
-                FilledButton(onPressed: _startTurn, child: const Text('5. 发送首轮消息')),
-                FilledButton.tonal(onPressed: _cloneRepository, child: const Text('6. 拉取仓库')),
-                FilledButton.tonal(onPressed: _createGitChange, child: const Text('7. 创建改动')),
-                FilledButton.tonal(onPressed: _readGitStatus, child: const Text('8. Git 状态')),
-                FilledButton.tonal(onPressed: _readGitDiff, child: const Text('9. Git 差异')),
-                OutlinedButton(onPressed: _stopRuntime, child: const Text('停止运行时')),
+                FilledButton.tonal(
+                  onPressed: _prepareWorkspace,
+                  child: const Text('1. 准备目录'),
+                ),
+                FilledButton.tonal(
+                  onPressed: _startRuntime,
+                  child: const Text('2. 启动运行时'),
+                ),
+                FilledButton.tonal(
+                  onPressed: _initializeRuntime,
+                  child: const Text('3. 初始化握手'),
+                ),
+                FilledButton.tonal(
+                  onPressed: _startThread,
+                  child: const Text('4. 建立线程'),
+                ),
+                FilledButton(
+                  onPressed: _startTurn,
+                  child: const Text('5. 发送首轮消息'),
+                ),
+                FilledButton.tonal(
+                  onPressed: _cloneRepository,
+                  child: const Text('6. 拉取仓库'),
+                ),
+                FilledButton.tonal(
+                  onPressed: _createGitChange,
+                  child: const Text('7. 创建改动'),
+                ),
+                FilledButton.tonal(
+                  onPressed: _readGitStatus,
+                  child: const Text('8. Git 状态'),
+                ),
+                FilledButton.tonal(
+                  onPressed: _readGitDiff,
+                  child: const Text('9. Git 差异'),
+                ),
+                OutlinedButton(
+                  onPressed: _stopRuntime,
+                  child: const Text('停止运行时'),
+                ),
               ],
             ),
           ),
@@ -554,19 +578,13 @@ class _AndroidSmokePageState extends State<AndroidSmokePage> {
                 leading: const Icon(Icons.folder_outlined),
                 title: const Text('目录契约'),
                 subtitle: Text(
-                  paths == null
-                      ? '尚未准备测试工作区。'
-                      : '已就绪：工作区、仓库、元数据、临时目录已建立。',
+                  paths == null ? '尚未准备测试工作区。' : '已就绪：工作区、仓库、元数据、临时目录已建立。',
                 ),
               ),
               ListTile(
                 leading: const Icon(Icons.terminal_outlined),
                 title: const Text('运行时状态'),
-                subtitle: Text(
-                  _runtimeStarted
-                      ? '已启动；stdout $_stdoutLines 行，stderr $_stderrLines 行。'
-                      : '尚未启动。',
-                ),
+                subtitle: Text(_runtimeStarted ? '已启动。' : '尚未启动。'),
               ),
               ListTile(
                 leading: const Icon(Icons.sync_outlined),

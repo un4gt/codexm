@@ -25,7 +25,6 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _skillContentController;
   late final TextEditingController _apiKeyController;
   late final TextEditingController _baseUrlController;
-  late final TextEditingController _configTomlController;
   late final TextEditingController _extraConfigTomlController;
 
   String _status = '正在加载设置...';
@@ -41,7 +40,6 @@ class _SettingsPageState extends State<SettingsPage> {
   List<String> _configWarnings = const <String>[];
   String? _configPreviewValidationError;
   String? _extraConfigValidationError;
-  String? _rawConfigValidationError;
 
   @override
   void initState() {
@@ -50,16 +48,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _skillContentController = TextEditingController();
     _apiKeyController = TextEditingController();
     _baseUrlController = TextEditingController();
-    _configTomlController = TextEditingController();
     _extraConfigTomlController = TextEditingController();
-    _configTomlController.addListener(() {
-      if (!mounted || _rawConfigValidationError == null) {
-        return;
-      }
-      setState(() {
-        _rawConfigValidationError = null;
-      });
-    });
     _extraConfigTomlController.addListener(() {
       if (!mounted || _extraConfigValidationError == null) {
         return;
@@ -77,7 +66,6 @@ class _SettingsPageState extends State<SettingsPage> {
     _skillContentController.dispose();
     _apiKeyController.dispose();
     _baseUrlController.dispose();
-    _configTomlController.dispose();
     _extraConfigTomlController.dispose();
     super.dispose();
   }
@@ -100,7 +88,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
       _apiKeyController.text = apiKey?.trim() ?? '';
       _baseUrlController.text = settings.openaiBaseUrl ?? '';
-      _configTomlController.text = preview.configToml.trimRight();
       _extraConfigTomlController.text =
           settings.extraConfigToml?.trimRight() ?? '';
       setState(() {
@@ -112,7 +99,6 @@ class _SettingsPageState extends State<SettingsPage> {
         _configWarnings = preview.warnings ?? const <String>[];
         _configPreviewValidationError = preview.validationError;
         _extraConfigValidationError = null;
-        _rawConfigValidationError = null;
         _status = status ?? '已加载当前设置。';
       });
     } catch (error) {
@@ -159,40 +145,6 @@ class _SettingsPageState extends State<SettingsPage> {
     await _settingsStore.materializeCodexConfigFiles(mcpServers: mcpServers);
   }
 
-  Future<void> _saveGlobalConfigTomlDraft() async {
-    final normalized = _configTomlController.text
-        .replaceAll(RegExp(r'\r\n?'), '\n')
-        .trim();
-    if (normalized.isEmpty) {
-      setState(() {
-        _status = '保存失败：config.toml 不能为空。';
-      });
-      return;
-    }
-    final validationError = _settingsStore.validateCodexConfigToml(
-      normalized,
-      label: 'config.toml',
-    );
-    if (validationError != null) {
-      setState(() {
-        _rawConfigValidationError = validationError;
-        _status = '保存失败：$validationError';
-      });
-      return;
-    }
-
-    await _runAction('正在保存全局 config.toml...', () async {
-      await _settingsStore.updateSettings(
-        (current) => current.copyWith(
-          useRawConfigToml: true,
-          rawConfigToml: '$normalized\n',
-        ),
-      );
-      await _syncRuntimeConfigFiles();
-      return '已保存全局 config.toml。';
-    });
-  }
-
   Future<void> _saveExtraConfigTomlDraft() async {
     final normalized = _extraConfigTomlController.text
         .replaceAll(RegExp(r'\r\n?'), '\n')
@@ -206,20 +158,17 @@ class _SettingsPageState extends State<SettingsPage> {
       return;
     }
 
-    final leavingRawMode = _settings.useRawConfigToml;
     await _runAction('正在保存补充配置...', () async {
       await _settingsStore.updateSettings(
         (current) => current.copyWith(
           extraConfigToml: normalized.isEmpty ? '' : '$normalized\n',
-          useRawConfigToml: false,
-          rawConfigToml: '',
         ),
       );
       await _syncRuntimeConfigFiles();
       if (normalized.isEmpty) {
         return '已清空补充配置，当前仅使用自动生成内容。';
       }
-      return leavingRawMode ? '已保存补充配置，并退出完整覆盖模式。' : '已保存补充配置。';
+      return '已保存补充配置。';
     });
   }
 
@@ -239,17 +188,6 @@ class _SettingsPageState extends State<SettingsPage> {
       );
       await _syncRuntimeConfigFiles();
       return '已清空补充配置。';
-    });
-  }
-
-  Future<void> _restoreGeneratedConfigToml() async {
-    await _runAction('正在恢复自动生成 config.toml...', () async {
-      await _settingsStore.updateSettings(
-        (current) =>
-            current.copyWith(useRawConfigToml: false, rawConfigToml: ''),
-      );
-      await _syncRuntimeConfigFiles();
-      return '已恢复自动生成 config.toml。';
     });
   }
 
@@ -547,18 +485,13 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         _ConfigTomlSection(
           busy: _busy,
-          useRawConfigToml: _settings.useRawConfigToml,
           previewConfigToml: _configPreviewToml,
-          rawConfigTomlController: _configTomlController,
           extraConfigTomlController: _extraConfigTomlController,
           warnings: _configWarnings,
           previewValidationError: _configPreviewValidationError,
           extraConfigValidationError: _extraConfigValidationError,
-          rawConfigValidationError: _rawConfigValidationError,
           onSaveExtraConfigToml: _saveExtraConfigTomlDraft,
           onClearExtraConfigToml: _clearExtraConfigTomlDraft,
-          onSaveRawConfigToml: _saveGlobalConfigTomlDraft,
-          onRestoreGeneratedConfigToml: _restoreGeneratedConfigToml,
         ),
         _PreferenceSection(
           settings: _settings,

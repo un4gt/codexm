@@ -20,7 +20,7 @@ void main() {
 
     expect(
       formatRpcErrorForUser(message),
-      'Codex 启动失败：请检查「设置 > 连接设置」中的 API Key / Base URL 后重试。',
+      'Codex 启动失败：请检查「设置 > 连接」中的 API Key / Base URL 后重试。',
     );
   });
 

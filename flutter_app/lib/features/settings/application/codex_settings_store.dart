@@ -22,8 +22,6 @@ class CodexSettings {
     this.updateCheckOnLaunch = true,
     this.enabledGlobalMcpServerIds = const <String>[],
     this.extraConfigToml,
-    this.useRawConfigToml = false,
-    this.rawConfigToml,
   });
 
   final int version;
@@ -40,8 +38,6 @@ class CodexSettings {
   final bool updateCheckOnLaunch;
   final List<String> enabledGlobalMcpServerIds;
   final String? extraConfigToml;
-  final bool useRawConfigToml;
-  final String? rawConfigToml;
 
   CodexSettings copyWith({
     bool? enabled,
@@ -57,8 +53,6 @@ class CodexSettings {
     bool? updateCheckOnLaunch,
     List<String>? enabledGlobalMcpServerIds,
     String? extraConfigToml,
-    bool? useRawConfigToml,
-    String? rawConfigToml,
     bool clearAuthRef = false,
     bool clearOpenaiBaseUrl = false,
   }) {
@@ -81,8 +75,6 @@ class CodexSettings {
       enabledGlobalMcpServerIds:
           enabledGlobalMcpServerIds ?? this.enabledGlobalMcpServerIds,
       extraConfigToml: extraConfigToml ?? this.extraConfigToml,
-      useRawConfigToml: useRawConfigToml ?? this.useRawConfigToml,
-      rawConfigToml: rawConfigToml ?? this.rawConfigToml,
     );
   }
 
@@ -102,8 +94,6 @@ class CodexSettings {
       'updateCheckOnLaunch': updateCheckOnLaunch,
       'enabledGlobalMcpServerIds': enabledGlobalMcpServerIds,
       'extraConfigToml': extraConfigToml,
-      'useRawConfigToml': useRawConfigToml,
-      'rawConfigToml': rawConfigToml,
     };
   }
 
@@ -126,8 +116,6 @@ class CodexSettings {
         map['enabledGlobalMcpServerIds'],
       ),
       extraConfigToml: map['extraConfigToml']?.toString(),
-      useRawConfigToml: map['useRawConfigToml'] as bool? ?? false,
-      rawConfigToml: map['rawConfigToml']?.toString(),
     );
   }
 }
@@ -349,6 +337,8 @@ class CodexSettingsStore {
     }
     lines.add('approval_policy = ${jsonEncode(settings.approvalPolicy)}');
     lines.add('model_provider = ${jsonEncode('openai')}');
+    lines.add('sandbox_mode = ${jsonEncode('danger-full-access')}');
+    lines.add('cli_auth_credentials_store = ${jsonEncode('file')}');
 
     final baseUrl = settings.openaiBaseUrl?.trim() ?? '';
     if (baseUrl.isNotEmpty) {
@@ -366,8 +356,6 @@ class CodexSettingsStore {
       lines.add('multi_agent = true');
     }
 
-    lines.add('sandbox_mode = ${jsonEncode('danger-full-access')}');
-    lines.add('cli_auth_credentials_store = ${jsonEncode('file')}');
     lines.add('');
     return '${lines.join('\n')}\n';
   }
@@ -442,21 +430,15 @@ class CodexSettingsStore {
     List<McpServer>? mcpServers,
     List<String>? enabledMcpServerIds,
   }) {
-    final usingRaw =
-        settings.useRawConfigToml &&
-        (settings.rawConfigToml?.trim().isNotEmpty ?? false);
-    var cfg = usingRaw
-        ? (settings.rawConfigToml ?? '')
-        : _mergeToml(
-            generateCodexConfigToml(settings),
-            settings.extraConfigToml,
-          );
+    var cfg = _mergeToml(
+      generateCodexConfigToml(settings),
+      settings.extraConfigToml,
+    );
 
-    List<String>? warnings;
     final enabled = (enabledMcpServerIds ?? const <String>[])
         .where((id) => id.trim().isNotEmpty)
         .toSet();
-    if (!usingRaw && enabled.isNotEmpty && (mcpServers?.isNotEmpty ?? false)) {
+    if (enabled.isNotEmpty && (mcpServers?.isNotEmpty ?? false)) {
       final snippet = _generateMcpServersToml(
         mcpServers!.where((server) => enabled.contains(server.id)).toList(),
       );
@@ -464,13 +446,10 @@ class CodexSettingsStore {
         cfg = '${cfg.trimRight()}\n\n${snippet.trim()}\n';
       }
     }
-    if (usingRaw && enabled.isNotEmpty) {
-      warnings = const <String>['已启用完整自定义内容：不会自动注入服务器配置，请在完整内容中自行配置。'];
-    }
 
     return _ComposedToml(
       cfg: cfg.endsWith('\n') ? cfg : '$cfg\n',
-      warnings: warnings,
+      warnings: null,
     );
   }
 

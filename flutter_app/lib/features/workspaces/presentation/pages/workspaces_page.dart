@@ -327,14 +327,16 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                                 if (currentName.isNotEmpty) {
                                   return;
                                 }
-                                final derived = _deriveWorkspaceNameFromRemoteUrl(value);
+                                final derived =
+                                    _deriveWorkspaceNameFromRemoteUrl(value);
                                 if (derived == null) {
                                   return;
                                 }
                                 nameController.text = derived;
-                                nameController.selection = TextSelection.collapsed(
-                                  offset: derived.length,
-                                );
+                                nameController.selection =
+                                    TextSelection.collapsed(
+                                      offset: derived.length,
+                                    );
                               },
                             ),
                             const SizedBox(height: 12),
@@ -378,7 +380,8 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                                 controller: usernameController,
                                 decoration: const InputDecoration(
                                   labelText: '访问账号',
-                                  hintText: '例如：git 用户名 / oauth2 / x-access-token',
+                                  hintText:
+                                      '例如：git 用户名 / oauth2 / x-access-token',
                                 ),
                               ),
                               const SizedBox(height: 12),
@@ -409,7 +412,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                                 });
                               },
                               title: const Text('允许跳过证书校验'),
-                              subtitle: const Text('仅在内网或自签名证书场景下使用。'),
+                              subtitle: const Text('允许不受信任的证书。'),
                             ),
                             const SizedBox(height: 12),
                             TextField(
@@ -434,14 +437,14 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                           color: theme.colorScheme.surfaceContainerLow,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
+                            color: theme.colorScheme.outlineVariant.withValues(
+                              alpha: 0.8,
+                            ),
                           ),
                         ),
                         child: const Padding(
                           padding: EdgeInsets.all(14),
-                          child: Text(
-                            '创建后会自动激活工作区；完成仓库准备后，可直接进入会话。',
-                          ),
+                          child: Text('创建后会自动激活工作区；完成仓库准备后，可直接进入会话。'),
                         ),
                       ),
                     ],
@@ -454,7 +457,8 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                         children: [
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: () => Navigator.of(dialogContext).pop(),
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(),
                               child: const Text('取消'),
                             ),
                           ),
@@ -469,18 +473,28 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                                     branch: branchController.text.trim().isEmpty
                                         ? null
                                         : branchController.text.trim(),
-                                    username: authMode == _WorkspaceCloneAuthMode.token &&
-                                            usernameController.text.trim().isNotEmpty
+                                    username:
+                                        authMode ==
+                                                _WorkspaceCloneAuthMode.token &&
+                                            usernameController.text
+                                                .trim()
+                                                .isNotEmpty
                                         ? usernameController.text.trim()
                                         : null,
-                                    token: authMode == _WorkspaceCloneAuthMode.token &&
-                                            tokenController.text.trim().isNotEmpty
+                                    token:
+                                        authMode ==
+                                                _WorkspaceCloneAuthMode.token &&
+                                            tokenController.text
+                                                .trim()
+                                                .isNotEmpty
                                         ? tokenController.text.trim()
                                         : null,
-                                    userName: userNameController.text.trim().isEmpty
+                                    userName:
+                                        userNameController.text.trim().isEmpty
                                         ? null
                                         : userNameController.text.trim(),
-                                    userEmail: userEmailController.text.trim().isEmpty
+                                    userEmail:
+                                        userEmailController.text.trim().isEmpty
                                         ? null
                                         : userEmailController.text.trim(),
                                     allowInsecure: allowInsecure,
@@ -607,7 +621,8 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
 
   Future<void> _syncWorkspaceGit(Workspace workspace) async {
     final git = workspace.git;
-    final paths = _selectedPaths ??
+    final paths =
+        _selectedPaths ??
         await _workspaceDirectoryService.pathsFor(workspace.id);
     if (git == null) {
       _updateView(() {

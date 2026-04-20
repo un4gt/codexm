@@ -23,15 +23,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('应用更新'), findsOneWidget);
-    expect(find.text('连接设置'), findsOneWidget);
+    expect(find.text('连接'), findsOneWidget);
 
     await tester.scrollUntilVisible(
-      find.text('当前生效内容'),
+      find.text('生效预览'),
       180,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('当前生效内容'), findsOneWidget);
-    expect(find.text('补充内容'), findsOneWidget);
+    expect(find.text('生效预览'), findsOneWidget);
+    expect(find.text('附加配置'), findsOneWidget);
 
     await tester.scrollUntilVisible(
       find.text('交互偏好'),
@@ -41,11 +41,11 @@ void main() {
     expect(find.text('交互偏好'), findsOneWidget);
 
     await tester.scrollUntilVisible(
-      find.text('全局 Skills'),
+      find.text('全局技能'),
       240,
       scrollable: find.byType(Scrollable).first,
     );
-    expect(find.text('全局 Skills'), findsOneWidget);
+    expect(find.text('全局技能'), findsOneWidget);
     expect(find.text('Android Smoke 验证'), findsNothing);
     expect(find.text('配置预览'), findsNothing);
     expect(find.text('连接与模型'), findsNothing);
