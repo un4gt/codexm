@@ -209,23 +209,13 @@ jobs:
             flutter_app/dist/${{ steps.version.outputs.artifact_basename }}.zip
           if-no-files-found: error
 
-  release:
-    name: GitHub Release
-    needs: build
-    runs-on: ubuntu-latest
-    if: ${{ github.ref_type == 'tag' }}
-    steps:
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.build.outputs.artifact_basename }}
-          path: dist
-
       - name: Publish GitHub Release
+        if: ${{ github.ref_type == 'tag' }}
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
+          fail_on_unmatched_files: true
           files: |
-            dist/**/${{ needs.build.outputs.artifact_basename }}.apk
-            dist/**/${{ needs.build.outputs.artifact_basename }}.zip
+            flutter_app/dist/${{ steps.version.outputs.artifact_basename }}.apk
+            flutter_app/dist/${{ steps.version.outputs.artifact_basename }}.zip
