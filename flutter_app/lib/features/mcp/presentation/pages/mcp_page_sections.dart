@@ -17,7 +17,7 @@ class _McpMetricsCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const StitchSectionHeader(title: '数据摘要'),
-        SizedBox(height: context.appTokens.compactSpacing),
+        const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
@@ -27,7 +27,7 @@ class _McpMetricsCard extends StatelessWidget {
                 value: '$urlCount',
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
             Expanded(
               child: _MetricTile(
                 icon: Icons.terminal_outlined,
@@ -37,7 +37,7 @@ class _McpMetricsCard extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
@@ -85,17 +85,16 @@ class _ServerListCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.appTokens;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const StitchSectionHeader(title: '服务列表'),
-        SizedBox(height: tokens.compactSpacing),
+        const SizedBox(height: 8),
         if (servers.isEmpty)
-          const StitchListItem(
-            title: '无配置服务',
-            subtitle: '点击顶部「+」添加。',
+          const ListTile(
             leading: Icon(Icons.extension_outlined),
+            title: Text('无配置服务'),
+            subtitle: Text('点击顶部「+」添加。'),
           ),
         for (final server in servers) ...[
           if (servers.first != server) const SizedBox(height: 12),
@@ -135,21 +134,18 @@ class _MetricTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final tokens = context.appTokens;
+
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(tokens.cardRadius),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.8),
-        ),
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        padding: const EdgeInsets.all(12),
         child: Row(
           children: [
             Icon(icon, color: colorScheme.primary),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -162,7 +158,7 @@ class _MetricTile extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     value,
                     style: theme.textTheme.titleLarge?.copyWith(
@@ -210,7 +206,6 @@ class _ServerStitchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final tokens = context.appTokens;
 
     final transportLabel = server.transport == 'url'
         ? 'Streamable HTTP'
@@ -225,14 +220,11 @@ class _ServerStitchCard extends StatelessWidget {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(tokens.cardRadius),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.8),
-        ),
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -244,7 +236,7 @@ class _ServerStitchCard extends StatelessWidget {
                   height: 44,
                   decoration: BoxDecoration(
                     color: colorScheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
                     server.transport == 'url'
@@ -264,7 +256,7 @@ class _ServerStitchCard extends StatelessWidget {
                           fontWeight: FontWeight.w900,
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 2),
                       Text(
                         '$transportLabel · ${server.configKey}',
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -295,35 +287,48 @@ class _ServerStitchCard extends StatelessWidget {
                 ),
               ],
             ),
-            SizedBox(height: tokens.compactSpacing),
-            StitchListItem(
-              title: enabled ? '已全局启用' : '未全局启用',
-              subtitle: runnable ? '可运行' : '可运行性待确认',
-              leading: const Icon(Icons.toggle_on_outlined),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                enabled ? '已启用' : '未启用',
+                style: theme.textTheme.bodyMedium,
+              ),
+              subtitle: Text(
+                runnable ? '可运行' : '可运行性待确认',
+                style: theme.textTheme.bodySmall,
+              ),
               trailing: Switch.adaptive(
                 value: enabled,
                 onChanged: busy ? null : onSetEnabled,
               ),
             ),
-            SizedBox(height: tokens.compactSpacing),
-            StitchListItem(
-              title: '接入信息',
-              subtitle: endpoint,
-              leading: const Icon(Icons.info_outline),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text('接入信息', style: theme.textTheme.bodyMedium),
+              subtitle: Text(
+                endpoint,
+                style: theme.textTheme.bodySmall,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             if (server.transport == 'stdio') ...[
-              SizedBox(height: tokens.compactSpacing),
-              StitchListItem(
-                title: installed ? '托管安装：已安装' : '托管安装：未安装',
-                subtitle: execPath?.trim().isNotEmpty == true
-                    ? '已安装配置'
-                    : '尚未配置',
-                leading: const Icon(Icons.inventory_2_outlined),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  installed ? '托管安装：已安装' : '托管安装：未安装',
+                  style: theme.textTheme.bodyMedium,
+                ),
+                subtitle: Text(
+                  execPath?.trim().isNotEmpty == true ? '已安装配置' : '尚未配置',
+                  style: theme.textTheme.bodySmall,
+                ),
               ),
-              SizedBox(height: tokens.compactSpacing),
+              const SizedBox(height: 8),
               Wrap(
-                spacing: 10,
-                runSpacing: 10,
+                spacing: 8,
+                runSpacing: 8,
                 children: [
                   OutlinedButton.icon(
                     onPressed: busy ? null : onInstall,

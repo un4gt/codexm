@@ -10,6 +10,7 @@ import '../features/update/application/app_update_startup_checker.dart';
 import '../features/workspaces/application/workspace_models.dart';
 import '../features/workspaces/application/workspace_store.dart';
 import '../features/workspaces/presentation/pages/workspaces_page.dart';
+import '../shared/widgets/adaptive_breakpoints.dart';
 import 'theme/app_theme.dart';
 
 class CodexmFlutterApp extends StatelessWidget {
@@ -62,6 +63,29 @@ class _AppShellState extends State<_AppShell> {
       icon: Icon(Icons.settings_outlined),
       selectedIcon: Icon(Icons.settings),
       label: '设置',
+    ),
+  ];
+
+  static const _railDestinations = <NavigationRailDestination>[
+    NavigationRailDestination(
+      icon: Icon(Icons.folder_outlined),
+      selectedIcon: Icon(Icons.folder),
+      label: Text('工作区'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.chat_bubble_outline),
+      selectedIcon: Icon(Icons.chat_bubble),
+      label: Text('会话'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.extension_outlined),
+      selectedIcon: Icon(Icons.extension),
+      label: Text('MCP'),
+    ),
+    NavigationRailDestination(
+      icon: Icon(Icons.settings_outlined),
+      selectedIcon: Icon(Icons.settings),
+      label: Text('设置'),
     ),
   ];
 
@@ -133,43 +157,69 @@ class _AppShellState extends State<_AppShell> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isCompact = context.adaptiveWidthClass.isCompact;
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
+
+    final bodyContent = IndexedStack(
+      index: _selectedIndex,
+      children: _buildPages(),
+    );
 
     return Scaffold(
       body: ColoredBox(
         color: theme.colorScheme.surface,
-        child: IndexedStack(index: _selectedIndex, children: _buildPages()),
-      ),
-      bottomNavigationBar: DecoratedBox(
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
-          boxShadow: [
-            BoxShadow(
-              color: theme.colorScheme.shadow.withValues(alpha: 0.08),
-              blurRadius: 20,
-              offset: const Offset(0, -4),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              NavigationBar(
-                selectedIndex: _selectedIndex,
-                destinations: _destinations,
-                onDestinationSelected: (index) {
-                  setState(() {
-                    _selectedIndex = index;
-                  });
-                },
+        child: isCompact
+            ? bodyContent
+            : Row(
+                children: [
+                  NavigationRail(
+                    selectedIndex: _selectedIndex,
+                    onDestinationSelected: (index) {
+                      setState(() {
+                        _selectedIndex = index;
+                      });
+                    },
+                    labelType: NavigationRailLabelType.all,
+                    destinations: _railDestinations,
+                    backgroundColor: theme.colorScheme.surface,
+                  ),
+                  const VerticalDivider(thickness: 1, width: 1),
+                  Expanded(child: bodyContent),
+                ],
               ),
-              if (bottomPadding == 0) const SizedBox(height: 8),
-            ],
-          ),
-        ),
       ),
+      bottomNavigationBar: isCompact
+          ? DecoratedBox(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.colorScheme.shadow.withValues(alpha: 0.08),
+                    blurRadius: 20,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    NavigationBar(
+                      selectedIndex: _selectedIndex,
+                      destinations: _destinations,
+                      onDestinationSelected: (index) {
+                        setState(() {
+                          _selectedIndex = index;
+                        });
+                      },
+                    ),
+                    if (bottomPadding == 0) const SizedBox(height: 8),
+                  ],
+                ),
+              ),
+            )
+          : null,
     );
   }
 }

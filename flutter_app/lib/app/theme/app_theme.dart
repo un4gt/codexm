@@ -24,8 +24,8 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
     pagePadding: EdgeInsets.fromLTRB(16, 16, 16, 20),
     sectionSpacing: 16,
     compactSpacing: 12,
-    cardRadius: 12,
-    inputRadius: 12,
+    cardRadius: 8,
+    inputRadius: 8,
     composerMinHeight: 132,
     maxContentWidth: 1180,
   );
@@ -82,11 +82,11 @@ extension AppThemeTokensBuildContext on BuildContext {
 
 ThemeData buildAppTheme() {
   final colorScheme = ColorScheme.fromSeed(
-    seedColor: const Color(0xFFEC5B13),
+    seedColor: const Color(0xFF1E293B), // Elegant slate primary
     brightness: Brightness.light,
   );
   final surfaceTint = colorScheme.surfaceContainerHighest.withValues(
-    alpha: 0.55,
+    alpha: 0.3,
   );
 
   return ThemeData(
@@ -94,24 +94,38 @@ ThemeData buildAppTheme() {
     useMaterial3: true,
     scaffoldBackgroundColor: const Color(0xFFF8F6F6),
     extensions: const <ThemeExtension<dynamic>>[AppThemeTokens.fallback],
-    textTheme: const TextTheme(
-      headlineMedium: TextStyle(fontWeight: FontWeight.w700),
-      titleLarge: TextStyle(fontWeight: FontWeight.w700),
-      titleMedium: TextStyle(fontWeight: FontWeight.w700),
-      bodyLarge: TextStyle(height: 1.45),
-      bodyMedium: TextStyle(height: 1.4),
-      bodySmall: TextStyle(height: 1.35),
+    textTheme: TextTheme(
+      headlineMedium: const TextStyle(
+        fontWeight: FontWeight.w800,
+        fontSize: 26,
+        letterSpacing: -0.5,
+      ),
+      titleLarge: const TextStyle(fontWeight: FontWeight.w700, fontSize: 20),
+      titleMedium: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+      bodyLarge: TextStyle(
+        height: 1.5,
+        fontSize: 15,
+        color: colorScheme.onSurface,
+      ),
+      bodyMedium: TextStyle(
+        height: 1.5,
+        fontSize: 13,
+        color: colorScheme.onSurface,
+      ),
+      bodySmall: TextStyle(
+        height: 1.4,
+        fontSize: 11,
+        color: colorScheme.onSurfaceVariant,
+      ),
     ),
     cardTheme: CardThemeData(
       elevation: 0,
       margin: EdgeInsets.zero,
-      color: colorScheme.surface,
+      color: colorScheme.surfaceContainerLowest,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppThemeTokens.fallback.cardRadius),
-        side: BorderSide(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.9),
-        ),
+        side: BorderSide.none,
       ),
     ),
     appBarTheme: AppBarTheme(
@@ -123,7 +137,7 @@ ThemeData buildAppTheme() {
       surfaceTintColor: Colors.transparent,
       titleTextStyle: TextStyle(
         color: colorScheme.onSurface,
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: FontWeight.w700,
       ),
     ),
@@ -181,14 +195,14 @@ ThemeData buildAppTheme() {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        minimumSize: const Size(0, 40),
+        minimumSize: const Size(0, 44),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         textStyle: const TextStyle(fontWeight: FontWeight.w700),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 40),
+        minimumSize: const Size(0, 44),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         textStyle: const TextStyle(fontWeight: FontWeight.w600),
       ),

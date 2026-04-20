@@ -1,7 +1,6 @@
 import 'package:uuid/uuid.dart';
 import 'package:flutter/material.dart';
 
-import '../../../../app/theme/app_theme.dart';
 import '../../../../shared/widgets/stitch_ui.dart';
 import '../../application/managed_mcp_installer.dart';
 import '../../application/mcp_models.dart';

@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:codexm_native/codexm_native.dart';
 
-import '../../../../app/theme/app_theme.dart';
 import '../../../../shared/widgets/stitch_ui.dart';
 import '../../../settings/application/auth_store.dart';
 import '../../../settings/application/auth_types.dart' hide AuthRef;

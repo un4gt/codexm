@@ -47,10 +47,7 @@ class StitchPageScaffold extends StatelessWidget {
                   actions: topActions,
                 ),
                 const SizedBox(height: 20),
-                StitchHeroTitle(
-                  title: pageTitle,
-                  kickerText: kickerText,
-                ),
+                StitchHeroTitle(title: pageTitle, kickerText: kickerText),
                 const SizedBox(height: 18),
                 for (var index = 0; index < children.length; index++) ...[
                   children[index],
@@ -107,21 +104,14 @@ class StitchTopBar extends StatelessWidget {
             ),
           ),
         ),
-        for (final action in actions) ...[
-          const SizedBox(width: 8),
-          action,
-        ],
+        for (final action in actions) ...[const SizedBox(width: 8), action],
       ],
     );
   }
 }
 
 class StitchHeroTitle extends StatelessWidget {
-  const StitchHeroTitle({
-    super.key,
-    required this.title,
-    this.kickerText,
-  });
+  const StitchHeroTitle({super.key, required this.title, this.kickerText});
 
   final String title;
   final String? kickerText;
@@ -159,11 +149,7 @@ class StitchHeroTitle extends StatelessWidget {
 }
 
 class StitchSectionHeader extends StatelessWidget {
-  const StitchSectionHeader({
-    super.key,
-    required this.title,
-    this.trailing,
-  });
+  const StitchSectionHeader({super.key, required this.title, this.trailing});
 
   final String title;
   final Widget? trailing;
@@ -211,11 +197,8 @@ class StitchInfoBanner extends StatelessWidget {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: colorScheme.surface,
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(tokens.cardRadius),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.8),
-        ),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
@@ -277,17 +260,10 @@ class StitchListItem extends StatelessWidget {
 
     return Material(
       color: backgroundColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(
-          color: highlighted
-              ? colorScheme.primary.withValues(alpha: 0.25)
-              : colorScheme.outlineVariant.withValues(alpha: 0.75),
-        ),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
           child: Row(
@@ -325,10 +301,7 @@ class StitchListItem extends StatelessWidget {
                   ],
                 ),
               ),
-              if (trailing != null) ...[
-                const SizedBox(width: 8),
-                trailing!,
-              ],
+              if (trailing != null) ...[const SizedBox(width: 8), trailing!],
             ],
           ),
         ),
@@ -358,11 +331,8 @@ class StitchPill extends StatelessWidget {
       decoration: BoxDecoration(
         color: emphasized
             ? colorScheme.primary.withValues(alpha: 0.16)
-            : colorScheme.surface,
+            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.7),
-        ),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

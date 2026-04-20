@@ -33,18 +33,16 @@ class _WorkspaceStitchListSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.appTokens;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const StitchSectionHeader(title: '最近工作区'),
-        SizedBox(height: tokens.compactSpacing),
+        const SizedBox(height: 8),
         if (workspaces.isEmpty)
-          const StitchListItem(
-            title: '还没有工作区',
-            subtitle: '点击右下角「新建工作区」，或使用顶部按钮克隆仓库。',
+          const ListTile(
             leading: Icon(Icons.create_new_folder_outlined),
+            title: Text('还没有工作区'),
+            subtitle: Text('点击右下角「新建工作区」，或使用顶部按钮克隆仓库。'),
           ),
         for (final workspace in workspaces) ...[
           if (workspaces.first != workspace) const SizedBox(height: 12),
@@ -100,90 +98,134 @@ class _WorkspaceStitchRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final tokens = context.appTokens;
 
-    final metaLine = active ? '当前工作区 · ${workspace.localPath}' : workspace.localPath;
+    final metaLine = active
+        ? '当前工作区 · ${workspace.localPath}'
+        : workspace.localPath;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        StitchListItem(
-          title: workspace.name,
-          subtitle: metaLine,
-          highlighted: selected,
-          leading: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: selected
-                  ? colorScheme.primary.withValues(alpha: 0.14)
-                  : colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(
-              active ? Icons.folder : Icons.folder_outlined,
-              color: colorScheme.primary,
-            ),
-          ),
-          trailing: PopupMenuButton<_WorkspaceAction>(
-            onSelected: busy
-                ? null
-                : (action) {
-                    switch (action) {
-                      case _WorkspaceAction.activate:
-                        onActivate();
-                      case _WorkspaceAction.rename:
-                        onRename();
-                      case _WorkspaceAction.delete:
-                        onDelete();
-                    }
-                  },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: _WorkspaceAction.activate,
-                child: Text('设为当前工作区'),
-              ),
-              PopupMenuItem(
-                value: _WorkspaceAction.rename,
-                child: Text('重命名'),
-              ),
-              PopupMenuItem(
-                value: _WorkspaceAction.delete,
-                child: Text('删除'),
-              ),
-            ],
-          ),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: selected
+            ? colorScheme.primaryContainer.withValues(alpha: 0.12)
+            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
           onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? colorScheme.primary.withValues(alpha: 0.14)
+                            : colorScheme.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        active ? Icons.folder : Icons.folder_outlined,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            workspace.name,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            metaLine,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuButton<_WorkspaceAction>(
+                      onSelected: busy
+                          ? null
+                          : (action) {
+                              switch (action) {
+                                case _WorkspaceAction.activate:
+                                  onActivate();
+                                case _WorkspaceAction.rename:
+                                  onRename();
+                                case _WorkspaceAction.delete:
+                                  onDelete();
+                              }
+                            },
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(
+                          value: _WorkspaceAction.activate,
+                          child: Text('设为当前工作区'),
+                        ),
+                        PopupMenuItem(
+                          value: _WorkspaceAction.rename,
+                          child: Text('重命名'),
+                        ),
+                        PopupMenuItem(
+                          value: _WorkspaceAction.delete,
+                          child: Text('删除'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                if (selected) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: busy ? null : onOpenSession,
+                        icon: const Icon(Icons.chat_bubble_outline),
+                        label: const Text('进入会话'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: busy ? null : onSyncGit,
+                        icon: Icon(
+                          repoReady
+                              ? Icons.sync_outlined
+                              : Icons.download_outlined,
+                        ),
+                        label: Text(repoReady ? '拉取更新' : '继续克隆'),
+                      ),
+                      if (!active)
+                        OutlinedButton.icon(
+                          onPressed: busy ? null : onActivate,
+                          icon: const Icon(
+                            Icons.playlist_add_check_circle_outlined,
+                          ),
+                          label: const Text('设为当前'),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
-        SizedBox(height: tokens.compactSpacing),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            FilledButton.icon(
-              onPressed: busy ? null : onOpenSession,
-              icon: const Icon(Icons.chat_bubble_outline),
-              label: const Text('进入会话'),
-            ),
-            OutlinedButton.icon(
-              onPressed: busy ? null : onSyncGit,
-              icon: Icon(
-                repoReady ? Icons.sync_outlined : Icons.download_outlined,
-              ),
-              label: Text(repoReady ? '拉取更新' : '继续克隆'),
-            ),
-            OutlinedButton.icon(
-              onPressed: busy || active ? null : onActivate,
-              icon: Icon(
-                active
-                    ? Icons.check_circle_outline
-                    : Icons.playlist_add_check_circle_outlined,
-              ),
-              label: Text(active ? '当前工作区' : '设为当前'),
-            ),
-          ],
-        ),
-      ],
+      ),
     );
   }
 }
