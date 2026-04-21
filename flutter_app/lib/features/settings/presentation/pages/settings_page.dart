@@ -4,6 +4,7 @@ import '../../../../app/theme/app_theme.dart';
 import '../../../../shared/widgets/adaptive_breakpoints.dart';
 import '../../../../shared/widgets/stitch_ui.dart';
 import '../../../codex/application/codex_skills_store.dart';
+import '../../../mcp/application/mcp_models.dart';
 import '../../../mcp/application/mcp_store.dart';
 import '../../../update/presentation/update_page.dart';
 import '../../application/codex_settings_store.dart';
@@ -40,6 +41,8 @@ class _SettingsPageState extends State<SettingsPage> {
   List<String> _configWarnings = const <String>[];
   String? _configPreviewValidationError;
   String? _extraConfigValidationError;
+  List<McpServer> _mcpServers = const <McpServer>[];
+  bool _suspendConfigDraftListeners = false;
 
   @override
   void initState() {
@@ -49,14 +52,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _apiKeyController = TextEditingController();
     _baseUrlController = TextEditingController();
     _extraConfigTomlController = TextEditingController();
-    _extraConfigTomlController.addListener(() {
-      if (!mounted || _extraConfigValidationError == null) {
-        return;
-      }
-      setState(() {
-        _extraConfigValidationError = null;
-      });
-    });
+    _baseUrlController.addListener(_handleConfigDraftChanged);
+    _extraConfigTomlController.addListener(_handleConfigDraftChanged);
     _loadSnapshot();
   }
 
@@ -87,11 +84,14 @@ class _SettingsPageState extends State<SettingsPage> {
       }
 
       _apiKeyController.text = apiKey?.trim() ?? '';
+      _suspendConfigDraftListeners = true;
       _baseUrlController.text = settings.openaiBaseUrl ?? '';
       _extraConfigTomlController.text =
           settings.extraConfigToml?.trimRight() ?? '';
+      _suspendConfigDraftListeners = false;
       setState(() {
         _settings = settings;
+        _mcpServers = mcpServers;
         _installedSkills = skills;
         _skillsDirPath = skillsDir.path;
         _apiKeyValue = apiKey;
@@ -109,6 +109,36 @@ class _SettingsPageState extends State<SettingsPage> {
         _status = '读取设置失败：$error';
       });
     }
+  }
+
+  void _handleConfigDraftChanged() {
+    if (!mounted || _suspendConfigDraftListeners) {
+      return;
+    }
+    final normalizedExtra = _extraConfigTomlController.text
+        .replaceAll(RegExp(r'\r\n?'), '\n')
+        .trim();
+    final draftSettings = _settings.copyWith(
+      openaiBaseUrl: _baseUrlController.text.trim().isEmpty
+          ? null
+          : _baseUrlController.text.trim(),
+      clearOpenaiBaseUrl: _baseUrlController.text.trim().isEmpty,
+      extraConfigToml: normalizedExtra.isEmpty ? '' : '$normalizedExtra\n',
+    );
+    final preview = _settingsStore.previewCodexConfigToml(
+      settings: draftSettings,
+      mcpServers: _mcpServers,
+      enabledMcpServerIds: draftSettings.enabledGlobalMcpServerIds,
+    );
+    final extraValidationError = _settingsStore.validateExtraConfigToml(
+      normalizedExtra,
+    );
+    setState(() {
+      _configPreviewToml = preview.configToml.trimRight();
+      _configWarnings = preview.warnings ?? const <String>[];
+      _configPreviewValidationError = preview.validationError;
+      _extraConfigValidationError = extraValidationError;
+    });
   }
 
   Future<void> _saveConnectionDrafts() async {

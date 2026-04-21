@@ -10,7 +10,7 @@ class SmokeWorkspacePathService {
   SmokeWorkspacePathService({
     WorkspaceDirectoryService? workspaceDirectoryService,
   }) : _workspaceDirectoryService =
-            workspaceDirectoryService ?? WorkspaceDirectoryService();
+           workspaceDirectoryService ?? WorkspaceDirectoryService();
 
   final WorkspaceDirectoryService _workspaceDirectoryService;
 
@@ -50,9 +50,7 @@ class SmokeWorkspacePathService {
 
     final trimmedBaseUrl = openaiBaseUrl?.trim() ?? '';
     if (trimmedBaseUrl.isNotEmpty) {
-      lines.add('');
-      lines.add('[model_providers.openai]');
-      lines.add('base_url = ${jsonEncode(trimmedBaseUrl)}');
+      lines.add('openai_base_url = ${jsonEncode(trimmedBaseUrl)}');
     }
 
     await paths.configTomlFile.writeAsString('${lines.join('\n')}\n');
@@ -66,10 +64,9 @@ class SmokeWorkspacePathService {
     }
 
     await paths.authJsonFile.writeAsString(
-      const JsonEncoder.withIndent('  ').convert({
-        'auth_mode': 'apikey',
-        'OPENAI_API_KEY': trimmedApiKey,
-      }),
+      const JsonEncoder.withIndent(
+        '  ',
+      ).convert({'auth_mode': 'apikey', 'OPENAI_API_KEY': trimmedApiKey}),
     );
   }
 
@@ -77,7 +74,9 @@ class SmokeWorkspacePathService {
   Future<File> createSmokeChange(SmokeWorkspacePaths paths) async {
     final changeFile = File('${paths.repoDir.path}/SMOKE_TEST.txt');
     final timestamp = DateTime.now().toUtc().toIso8601String();
-    await changeFile.writeAsString('Android smoke change created at $timestamp\n');
+    await changeFile.writeAsString(
+      'Android smoke change created at $timestamp\n',
+    );
     return changeFile;
   }
 }

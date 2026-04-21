@@ -18,24 +18,27 @@ class _McpMetricsCard extends StatelessWidget {
       children: [
         const StitchSectionHeader(title: '数据摘要'),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _MetricTile(
-                icon: Icons.link_outlined,
-                label: 'Streamable HTTP',
-                value: '$urlCount',
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _MetricTile(
+                  icon: Icons.link_outlined,
+                  label: 'Streamable HTTP',
+                  value: '$urlCount',
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _MetricTile(
-                icon: Icons.terminal_outlined,
-                label: 'Rust stdio',
-                value: '$localCount',
+              const SizedBox(width: 8),
+              Expanded(
+                child: _MetricTile(
+                  icon: Icons.terminal_outlined,
+                  label: 'Rust stdio',
+                  value: '$localCount',
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 8),
         Row(
@@ -47,7 +50,6 @@ class _McpMetricsCard extends StatelessWidget {
                 value: '$enabledCount',
               ),
             ),
-            const Spacer(),
           ],
         ),
       ],
@@ -141,10 +143,10 @@ class _MetricTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
           children: [
-            Icon(icon, color: colorScheme.primary),
+            Icon(icon, size: 20, color: colorScheme.primary),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
@@ -152,17 +154,16 @@ class _MetricTile extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: theme.textTheme.labelSmall?.copyWith(
+                    style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
-                      letterSpacing: 1.1,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     value,
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ],
@@ -232,31 +233,32 @@ class _ServerStitchCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  width: 44,
-                  height: 44,
+                  width: 36,
+                  height: 36,
                   decoration: BoxDecoration(
                     color: colorScheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     server.transport == 'url'
                         ? Icons.link_outlined
                         : Icons.terminal_outlined,
+                    size: 20,
                     color: colorScheme.primary,
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         server.name,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 1),
                       Text(
                         '$transportLabel · ${server.configKey}',
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -327,6 +329,7 @@ class _ServerStitchCard extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Wrap(
+                alignment: WrapAlignment.center,
                 spacing: 8,
                 runSpacing: 8,
                 children: [

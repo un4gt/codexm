@@ -57,7 +57,11 @@ void main() {
     );
 
     expect(result.configToml, contains('model = "gpt-test"'));
-    expect(result.configToml, contains('base_url = "https://example.com/v1"'));
+    expect(
+      result.configToml,
+      contains('openai_base_url = "https://example.com/v1"'),
+    );
+    expect(result.configToml, isNot(contains('[model_providers.openai]')));
     expect(result.configToml, contains('[mcp_servers.demo_mcp]'));
     expect(
       await File(result.authJsonPath).readAsString(),
@@ -148,15 +152,36 @@ void main() {
       settings: const CodexSettings(
         model: 'gpt-4.1',
         openaiBaseUrl: 'https://example.com',
+        featuresMultiAgent: true,
         extraConfigToml: '[sandbox]\nnetwork_access = true',
       ),
     );
     expect(preview.validationError, isNull);
     expect(preview.configToml, contains('model = "gpt-4.1"'));
     expect(preview.configToml, contains('[sandbox]'));
+    expect(
+      preview.configToml,
+      contains('openai_base_url = "https://example.com/v1"'),
+    );
+    expect(
+      preview.configToml.indexOf('[sandbox]'),
+      lessThan(preview.configToml.indexOf('[features]')),
+    );
 
     expect(
       settingsStore.validateExtraConfigToml('model = "duplicate"'),
+      contains('重复'),
+    );
+    expect(
+      settingsStore.validateExtraConfigToml(
+        'openai_base_url = "https://example.com/v1"',
+      ),
+      contains('重复'),
+    );
+    expect(
+      settingsStore.validateExtraConfigToml(
+        '[model_providers.custom]\nname = "Custom"',
+      ),
       contains('重复'),
     );
     expect(

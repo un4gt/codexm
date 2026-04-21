@@ -128,8 +128,8 @@ class StitchHeroTitle extends StatelessWidget {
           title,
           style: theme.textTheme.headlineMedium?.copyWith(
             fontWeight: FontWeight.w900,
-            fontSize: 38,
-            letterSpacing: -0.8,
+            fontSize: 30,
+            letterSpacing: -0.5,
           ),
         ),
         if (kickerText?.trim().isNotEmpty == true) ...[
@@ -164,10 +164,10 @@ class StitchSectionHeader extends StatelessWidget {
         Expanded(
           child: Text(
             title.toUpperCase(),
-            style: theme.textTheme.labelSmall?.copyWith(
+            style: theme.textTheme.labelMedium?.copyWith(
               color: colorScheme.primary,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 2.0,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
             ),
           ),
         ),

@@ -38,9 +38,15 @@ void main() {
       openaiBaseUrl: 'https://example.com/v1',
     );
 
-    expect(await paths.configTomlFile.readAsString(), contains('approval_policy = "never"'));
-    expect(await paths.configTomlFile.readAsString(), contains('model = "gpt-test"'));
-    expect(await paths.authJsonFile.readAsString(), contains('"OPENAI_API_KEY": "sk-test"'));
+    final configToml = await paths.configTomlFile.readAsString();
+    expect(configToml, contains('approval_policy = "never"'));
+    expect(configToml, contains('model = "gpt-test"'));
+    expect(configToml, contains('openai_base_url = "https://example.com/v1"'));
+    expect(configToml, isNot(contains('[model_providers.openai]')));
+    expect(
+      await paths.authJsonFile.readAsString(),
+      contains('"OPENAI_API_KEY": "sk-test"'),
+    );
 
     final changeFile = await service.createSmokeChange(paths);
     expect(changeFile.existsSync(), isTrue);

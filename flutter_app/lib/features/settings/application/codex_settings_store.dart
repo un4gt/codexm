@@ -344,9 +344,7 @@ class CodexSettingsStore {
     if (baseUrl.isNotEmpty) {
       final normalized = normalizeOpenaiBaseUrlForCodex(baseUrl);
       if (normalized.isNotEmpty) {
-        lines.add('');
-        lines.add('[model_providers.openai]');
-        lines.add('base_url = ${jsonEncode(normalized)}');
+        lines.add('openai_base_url = ${jsonEncode(normalized)}');
       }
     }
 
@@ -403,17 +401,20 @@ class CodexSettingsStore {
       if (line.isEmpty || line.startsWith('#')) {
         continue;
       }
-      if (line.startsWith('[mcp_servers.') || line == '[mcp_servers]') {
+      final tableName = _tomlTableName(line);
+      if (tableName == 'mcp_servers' || tableName.startsWith('mcp_servers.')) {
         return '服务器配置请在 MCP 页面管理，这里不要重复填写。';
       }
-      if (line.startsWith('model ') ||
-          line.startsWith('approval_policy ') ||
-          line.startsWith('model_provider ') ||
-          line.startsWith('sandbox_mode ') ||
-          line.startsWith('cli_auth_credentials_store ') ||
-          line == '[model_providers]' ||
-          line.startsWith('[model_providers.') ||
-          line == '[features]') {
+      final keyName = _tomlAssignmentKey(line);
+      if (keyName == 'model' ||
+          keyName == 'approval_policy' ||
+          keyName == 'model_provider' ||
+          keyName == 'sandbox_mode' ||
+          keyName == 'cli_auth_credentials_store' ||
+          keyName == 'openai_base_url' ||
+          tableName == 'model_providers' ||
+          tableName.startsWith('model_providers.') ||
+          tableName == 'features') {
         return '这部分内容和上方表单重复，请直接修改对应设置项。';
       }
     }
@@ -459,7 +460,20 @@ class CodexSettingsStore {
     if (extra.isEmpty) {
       return '$base\n';
     }
-    return '$base\n\n$extra\n';
+    const extraHeader = '# 附加配置（由设置页插入）';
+    final lines = base.split('\n');
+    final firstTableIndex = lines.indexWhere((rawLine) {
+      final line = rawLine.trim();
+      return line.startsWith('[') && line.endsWith(']');
+    });
+    final extraBlock = '$extraHeader\n$extra';
+    if (firstTableIndex == -1) {
+      return '$base\n\n$extraBlock\n';
+    }
+
+    final head = lines.take(firstTableIndex).join('\n').trimRight();
+    final tail = lines.skip(firstTableIndex).join('\n').trim();
+    return '$head\n\n$extraBlock\n\n$tail\n';
   }
 
   String _generateMcpServersToml(List<McpServer> servers) {
@@ -483,6 +497,22 @@ class CodexSettingsStore {
     }
     return '${lines.join('\n')}\n';
   }
+}
+
+String _tomlAssignmentKey(String line) {
+  final equalsIndex = line.indexOf('=');
+  if (equalsIndex <= 0) {
+    return '';
+  }
+  final key = line.substring(0, equalsIndex).trim();
+  return _isTomlKey(key) ? key : '';
+}
+
+String _tomlTableName(String line) {
+  if (!(line.startsWith('[') && line.endsWith(']'))) {
+    return '';
+  }
+  return line.substring(1, line.length - 1).trim();
 }
 
 List<String> _normalizeStringList(Object? raw) {

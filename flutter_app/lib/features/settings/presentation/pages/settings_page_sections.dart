@@ -92,8 +92,8 @@ class _ConnectionSection extends StatelessWidget {
           onSubmitted: (_) => onSaveConnection(),
         ),
         const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerRight,
+        SizedBox(
+          width: double.infinity,
           child: OutlinedButton.icon(
             onPressed: busy ? null : onSaveConnection,
             icon: const Icon(Icons.save_outlined),
@@ -218,6 +218,11 @@ class _ConfigTomlSection extends StatelessWidget {
                   hintText: '[sandbox]\nnetwork_access = true',
                 ),
               ),
+              const SizedBox(height: 8),
+              Text(
+                '附加配置会插入到自动生成的顶层键之后、各分组之前。不要在这里重复填写连接、模型、features 或 MCP 服务器。',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
               if (extraConfigValidationError?.trim().isNotEmpty == true) ...[
                 const SizedBox(height: 8),
                 _ConfigNotice(
@@ -228,6 +233,7 @@ class _ConfigTomlSection extends StatelessWidget {
               ],
               const SizedBox(height: 12),
               Wrap(
+                alignment: WrapAlignment.center,
                 spacing: 12,
                 runSpacing: 12,
                 children: [
@@ -396,7 +402,7 @@ class _PreferenceSection extends StatelessWidget {
         const SizedBox(height: 8),
         SwitchListTile.adaptive(
           contentPadding: EdgeInsets.zero,
-          title: const Text('显示推理过程'),
+          title: Text('显示推理过程', style: theme.textTheme.bodyMedium),
           value: settings.uiShowThinking,
           onChanged: busy
               ? null
@@ -407,7 +413,7 @@ class _PreferenceSection extends StatelessWidget {
         ),
         SwitchListTile.adaptive(
           contentPadding: EdgeInsets.zero,
-          title: const Text('运行日志'),
+          title: Text('运行日志', style: theme.textTheme.bodyMedium),
           value: settings.debugLogToFile,
           onChanged: busy
               ? null
@@ -422,7 +428,7 @@ class _PreferenceSection extends StatelessWidget {
             Expanded(
               child: Text(
                 '日志保留天数：${settings.debugLogRetentionDays} 天',
-                style: theme.textTheme.titleSmall,
+                style: theme.textTheme.bodyMedium,
               ),
             ),
             Text(
@@ -497,6 +503,7 @@ class _SkillsSection extends StatelessWidget {
         ],
         const SizedBox(height: 12),
         Wrap(
+          alignment: WrapAlignment.center,
           spacing: 12,
           runSpacing: 12,
           children: [
