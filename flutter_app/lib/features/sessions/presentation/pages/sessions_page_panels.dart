@@ -75,6 +75,8 @@ class _ChatPanel extends StatelessWidget {
     required this.hasApiKey,
     required this.running,
     required this.status,
+    required this.runtimeStatus,
+    required this.runtimeStatusIsRetrying,
     required this.pendingAssistantText,
     required this.pendingStartedAt,
     required this.scrollController,
@@ -104,6 +106,8 @@ class _ChatPanel extends StatelessWidget {
   final bool hasApiKey;
   final bool running;
   final String status;
+  final String? runtimeStatus;
+  final bool runtimeStatusIsRetrying;
   final String pendingAssistantText;
   final int pendingStartedAt;
   final ScrollController scrollController;
@@ -146,7 +150,6 @@ class _ChatPanel extends StatelessWidget {
               sessionCount: sessions.length,
               status: status,
               settingsReady: settingsEnabled && hasApiKey,
-              running: running,
               onOpenSessionSwitcher: onOpenSessionSwitcher,
               onMenuAction: (action) {
                 switch (action) {
@@ -184,6 +187,8 @@ class _ChatPanel extends StatelessWidget {
               hasApiKey: hasApiKey,
               running: running,
               status: status,
+              runtimeStatus: runtimeStatus,
+              runtimeStatusIsRetrying: runtimeStatusIsRetrying,
               composerController: composerController,
               pendingMentions: pendingMentions,
               slashSuggestions: slashSuggestions,
@@ -211,7 +216,6 @@ class _SessionHeader extends StatelessWidget {
     required this.sessionCount,
     required this.status,
     required this.settingsReady,
-    required this.running,
     required this.onOpenSessionSwitcher,
     required this.onMenuAction,
   });
@@ -221,7 +225,6 @@ class _SessionHeader extends StatelessWidget {
   final int sessionCount;
   final String status;
   final bool settingsReady;
-  final bool running;
   final VoidCallback onOpenSessionSwitcher;
   final ValueChanged<_HeaderMenuAction> onMenuAction;
 
@@ -237,11 +240,9 @@ class _SessionHeader extends StatelessWidget {
     final trimmedStatus = status.trim();
     final shouldShowStatus =
         trimmedStatus.isNotEmpty &&
-        (running ||
-            trimmedStatus.contains('失败') ||
+        (trimmedStatus.contains('失败') ||
             trimmedStatus.contains('请先') ||
-            trimmedStatus.contains('未连接') ||
-            trimmedStatus.contains('正在'));
+            trimmedStatus.contains('未连接'));
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -496,6 +497,8 @@ class _SessionInputBar extends StatelessWidget {
     required this.hasApiKey,
     required this.running,
     required this.status,
+    required this.runtimeStatus,
+    required this.runtimeStatusIsRetrying,
     required this.composerController,
     required this.pendingMentions,
     required this.slashSuggestions,
@@ -514,6 +517,8 @@ class _SessionInputBar extends StatelessWidget {
   final bool hasApiKey;
   final bool running;
   final String status;
+  final String? runtimeStatus;
+  final bool runtimeStatusIsRetrying;
   final TextEditingController composerController;
   final List<ComposerPendingMention> pendingMentions;
   final List<CodexSlashCommand> slashSuggestions;
@@ -542,18 +547,26 @@ class _SessionInputBar extends StatelessWidget {
     };
 
     String? helperText;
+    final trimmedRuntimeStatus = runtimeStatus?.trim() ?? '';
     if (!settingsEnabled) {
       helperText = '当前对话能力已关闭，请先在设置中启用。';
     } else if (!hasApiKey) {
       helperText = '请先配置 API Key。';
-    } else if (running) {
-      helperText = '正在回复中，请稍候。';
+    } else if (trimmedRuntimeStatus.isNotEmpty) {
+      helperText = trimmedRuntimeStatus;
     } else {
       final trimmedStatus = status.trim();
       if (trimmedStatus.contains('失败') || trimmedStatus.contains('请先')) {
         helperText = trimmedStatus;
       }
     }
+
+    final sendButtonTooltip = running
+        ? '正在等待 Codex 回复'
+        : (canSend ? '发送消息' : '请输入内容后发送');
+    final sendButtonLabel = running
+        ? '正在等待 Codex 回复'
+        : (canSend ? '发送消息' : '发送消息（不可用）');
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -578,7 +591,9 @@ class _SessionInputBar extends StatelessWidget {
           children: [
             if (helperText != null) ...[
               _InlineNotice(
-                icon: helperText.contains('失败')
+                icon: runtimeStatusIsRetrying
+                    ? Icons.sync
+                    : helperText.contains('失败')
                     ? Icons.error_outline
                     : Icons.info_outline,
                 text: helperText,
@@ -638,11 +653,29 @@ class _SessionInputBar extends StatelessWidget {
                 Semantics(
                   button: true,
                   enabled: canSend,
-                  label: canSend ? '发送消息' : '发送消息（不可用）',
+                  label: sendButtonLabel,
                   child: IconButton.filled(
-                    tooltip: canSend ? '发送消息' : '请输入内容后发送',
+                    tooltip: sendButtonTooltip,
                     onPressed: canSend ? onSendMessage : null,
-                    icon: const Icon(Icons.arrow_upward_rounded),
+                    icon: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 180),
+                      switchInCurve: Curves.easeOut,
+                      switchOutCurve: Curves.easeIn,
+                      child: running
+                          ? SizedBox(
+                              key: const ValueKey('send-loading'),
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.4,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.arrow_upward_rounded,
+                              key: ValueKey('send-icon'),
+                            ),
+                    ),
                     style: IconButton.styleFrom(
                       padding: EdgeInsets.zero,
                       minimumSize: const Size(

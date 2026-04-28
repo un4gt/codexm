@@ -23,10 +23,7 @@ extension _SessionsPageActions on _SessionsPageState {
             controller: controller,
             autofocus: true,
             textInputAction: TextInputAction.done,
-            decoration: InputDecoration(
-              labelText: '会话名称',
-              hintText: hintText,
-            ),
+            decoration: InputDecoration(labelText: '会话名称', hintText: hintText),
             onSubmitted: (value) {
               Navigator.of(dialogContext).pop(value.trim());
             },
@@ -55,10 +52,7 @@ extension _SessionsPageActions on _SessionsPageState {
     if (workspace == null || _busy || _running) {
       return;
     }
-    final name = await _promptSessionName(
-      title: '新建会话',
-      hintText: '例如：发布问题排查',
-    );
+    final name = await _promptSessionName(title: '新建会话', hintText: '例如：发布问题排查');
     if (name == null) {
       return;
     }
@@ -331,7 +325,10 @@ extension _SessionsPageActions on _SessionsPageState {
   }
 
   void _applySlashSuggestion(CodexSlashCommand command) {
-    final next = replaceActiveSlashToken(_composerController.text, command.command);
+    final next = replaceActiveSlashToken(
+      _composerController.text,
+      command.command,
+    );
     _composerController.value = TextEditingValue(
       text: next,
       selection: TextSelection.collapsed(offset: next.length),
@@ -450,17 +447,15 @@ extension _SessionsPageActions on _SessionsPageState {
       return;
     }
 
-    final isSlashPlanToggle = command != null &&
+    final isSlashPlanToggle =
+        command != null &&
         firstToken == '/plan' &&
         (slashArgs.isEmpty || slashArgs == 'on' || slashArgs == 'off');
-    if (firstToken.startsWith('/') &&
-        command == null &&
-        !isSlashPlanToggle) {
+    if (firstToken.startsWith('/') && command == null && !isSlashPlanToggle) {
       await _runLocalCommandAction(
         rawText: rawText,
         pendingStatus: '正在处理命令...',
-        action: () async =>
-            '未知命令：$firstToken\n\n输入 /help 可查看当前移动端支持的命令。',
+        action: () async => '未知命令：$firstToken\n\n输入 /help 可查看当前移动端支持的命令。',
       );
       _composerController.clear();
       return;
@@ -471,9 +466,11 @@ extension _SessionsPageActions on _SessionsPageState {
     final currentMode = _selectedSession?.codexCollaborationMode == 'plan'
         ? CodexCollaborationMode.plan
         : CodexCollaborationMode.standard;
-    final isPlanTurn = command != null && firstToken == '/plan' && slashArgs.isNotEmpty;
+    final isPlanTurn =
+        command != null && firstToken == '/plan' && slashArgs.isNotEmpty;
     final isReview = command != null && firstToken == '/review';
-    final isRpc = command != null &&
+    final isRpc =
+        command != null &&
         <String>{
           '/compact',
           '/debug-config',
@@ -499,26 +496,26 @@ extension _SessionsPageActions on _SessionsPageState {
       successStatus = firstToken == '/compact' ? '上下文整理完成。' : '命令执行完成。';
       rpcCalls = switch (firstToken) {
         '/compact' => const <CodexRpcCall>[
-            CodexRpcCall(
-              method: 'thread/compact/start',
-              requiresThread: true,
-              title: '上下文整理结果',
-            ),
-          ],
+          CodexRpcCall(
+            method: 'thread/compact/start',
+            requiresThread: true,
+            title: '上下文整理结果',
+          ),
+        ],
         '/debug-config' => const <CodexRpcCall>[
-            CodexRpcCall(method: 'config/read', title: '配置详情'),
-            CodexRpcCall(method: 'configRequirements/read', title: '配置要求'),
-          ],
+          CodexRpcCall(method: 'config/read', title: '配置详情'),
+          CodexRpcCall(method: 'configRequirements/read', title: '配置要求'),
+        ],
         '/apps' => const <CodexRpcCall>[
-            CodexRpcCall(method: 'app/list', title: '可用扩展'),
-          ],
+          CodexRpcCall(method: 'app/list', title: '可用扩展'),
+        ],
         '/ps' => const <CodexRpcCall>[
-            CodexRpcCall(
-              method: 'thread/backgroundTerminals/list',
-              requiresThread: true,
-              title: '后台任务',
-            ),
-          ],
+          CodexRpcCall(
+            method: 'thread/backgroundTerminals/list',
+            requiresThread: true,
+            title: '后台任务',
+          ),
+        ],
         _ => null,
       };
     } else {
@@ -625,7 +622,9 @@ extension _SessionsPageActions on _SessionsPageState {
             if (workspace == null) {
               return '当前没有可用工作区。';
             }
-            final paths = await _workspaceDirectoryService.pathsFor(workspace.id);
+            final paths = await _workspaceDirectoryService.pathsFor(
+              workspace.id,
+            );
             final file = File('${paths.repoDir.path}/AGENTS.md');
             if (file.existsSync()) {
               return 'AGENTS.md 已存在（未覆盖）。';
@@ -679,7 +678,9 @@ extension _SessionsPageActions on _SessionsPageState {
             if (workspace == null) {
               return '当前没有可用工作区。';
             }
-            final paths = await _workspaceDirectoryService.pathsFor(workspace.id);
+            final paths = await _workspaceDirectoryService.pathsFor(
+              workspace.id,
+            );
             final diff = await _native.gitDiff(
               localRepoDirUri: paths.repoDir.path,
               maxBytes: 200000,
@@ -703,7 +704,9 @@ extension _SessionsPageActions on _SessionsPageState {
             }
             final servers = await _mcpStore.listServers();
             final enabled = _settings.enabledGlobalMcpServerIds.toSet();
-            final enabledCount = servers.where((item) => enabled.contains(item.id)).length;
+            final enabledCount = servers
+                .where((item) => enabled.contains(item.id))
+                .length;
             final lines = [
               '当前状态',
               '- 工作区：${workspace.name}',
@@ -790,7 +793,10 @@ extension _SessionsPageActions on _SessionsPageState {
           rawText: rawText,
           pendingStatus: '正在更新实验特性...',
           action: () async {
-            final parts = slashArgs.split(RegExp(r'\s+')).where((item) => item.isNotEmpty).toList(growable: false);
+            final parts = slashArgs
+                .split(RegExp(r'\s+'))
+                .where((item) => item.isNotEmpty)
+                .toList(growable: false);
             if (parts.isEmpty) {
               return '当前多代理协作：${_settings.featuresMultiAgent ? '已开启' : '已关闭'}\n\n用法：/experimental multi_agent on|off';
             }
@@ -941,13 +947,11 @@ extension _SessionsPageActions on _SessionsPageState {
     final skillInputs = <CodexInputElement>[];
     for (final skillName in extractSkillNames(rawText, _installedSkills)) {
       final file = await _skillsStore.skillFile(skillName);
-      skillInputs.add(
-        <String, Object?>{
-          'type': 'skill',
-          'name': skillName,
-          'path': file.path,
-        },
-      );
+      skillInputs.add(<String, Object?>{
+        'type': 'skill',
+        'name': skillName,
+        'path': file.path,
+      });
     }
 
     final mentionInputs = mentions
@@ -1038,42 +1042,48 @@ extension _SessionsPageActions on _SessionsPageState {
       return;
     }
 
-    final session = await _ensureSession(titleHint: titleHint);
-    final message = userMessage?.blankAsNull;
-    if (message != null) {
-      await _sessionStore.appendMessage(
-        workspace.id,
-        session.id,
-        role: 'user',
-        content: message,
-      );
-    }
-
-    await _refresh(status: pendingStatus);
-    if (!mounted) {
-      return;
-    }
-
-    final collaborationMode =
-        collaborationModeOverride ??
-        (_selectedSession?.codexCollaborationMode == 'plan'
-            ? CodexCollaborationMode.plan
-            : CodexCollaborationMode.standard);
+    final startedAt = DateTime.now().millisecondsSinceEpoch;
     final buffer = StringBuffer();
     String? errorMessage;
+    Session? session;
 
     _updateView(() {
       _running = true;
       _pendingAssistantText = '';
-      _pendingStartedAt = DateTime.now().millisecondsSinceEpoch;
+      _pendingStartedAt = startedAt;
+      _runtimeStatus = null;
+      _runtimeStatusIsRetrying = false;
       _status = pendingStatus;
     });
-    _scrollToBottom();
 
     try {
+      final ensuredSession = await _ensureSession(titleHint: titleHint);
+      session = ensuredSession;
+      final message = userMessage?.blankAsNull;
+      if (message != null) {
+        await _sessionStore.appendMessage(
+          workspace.id,
+          ensuredSession.id,
+          role: 'user',
+          content: message,
+        );
+      }
+
+      await _refresh(status: pendingStatus);
+      if (!mounted) {
+        return;
+      }
+
+      final collaborationMode =
+          collaborationModeOverride ??
+          (_selectedSession?.codexCollaborationMode == 'plan'
+              ? CodexCollaborationMode.plan
+              : CodexCollaborationMode.standard);
+
+      _scrollToBottom(animated: false);
       await for (final event in _runner.run(
         workspace: workspace,
-        sessionId: session.id,
+        sessionId: ensuredSession.id,
         input: input,
         kind: kind,
         collaborationMode: collaborationMode,
@@ -1089,14 +1099,28 @@ extension _SessionsPageActions on _SessionsPageState {
             _updateView(() {
               _pendingAssistantText = buffer.toString();
             });
-            _scrollToBottom();
+            _scrollToBottom(animated: false);
+          case CodexTurnEventType.status:
+            final message = event.message?.trim() ?? '';
+            _updateView(() {
+              _runtimeStatus = message.isEmpty
+                  ? (_running ? '已重新连接，继续生成...' : null)
+                  : message;
+              _runtimeStatusIsRetrying = message.isNotEmpty && event.isRetrying;
+            });
           case CodexTurnEventType.error:
             errorMessage = event.message ?? '运行失败。';
             _updateView(() {
+              _runtimeStatus = null;
+              _runtimeStatusIsRetrying = false;
               _status = errorMessage!;
             });
           case CodexTurnEventType.rpcResult:
           case CodexTurnEventType.done:
+            _updateView(() {
+              _runtimeStatus = null;
+              _runtimeStatusIsRetrying = false;
+            });
             break;
         }
       }
@@ -1104,33 +1128,57 @@ extension _SessionsPageActions on _SessionsPageState {
       errorMessage = '$error';
     }
 
+    ChatMessage? assistantMessage;
+    ChatMessage? systemMessage;
+    final activeSession = session;
     final assistantText = buffer.toString().trimRight();
-    if (assistantText.isNotEmpty) {
-      await _sessionStore.appendMessage(
+    if (activeSession != null && assistantText.isNotEmpty) {
+      assistantMessage = await _sessionStore.appendMessage(
         workspace.id,
-        session.id,
+        activeSession.id,
         role: 'assistant',
         content: assistantText,
+        createdAt: startedAt,
       );
     }
-    if (errorMessage?.trim().isNotEmpty == true) {
-      await _sessionStore.appendMessage(
+    if (activeSession != null && errorMessage?.trim().isNotEmpty == true) {
+      systemMessage = await _sessionStore.appendMessage(
         workspace.id,
-        session.id,
+        activeSession.id,
         role: 'system',
         content: errorMessage!.trim(),
       );
     }
+    final updatedSessions = activeSession == null
+        ? null
+        : await _sessionStore.listSessions(workspace.id);
 
     if (!mounted) {
       return;
     }
+    final shouldUpdateVisibleMessages =
+        activeSession != null &&
+        _activeWorkspace?.id == workspace.id &&
+        _selectedSessionId == activeSession.id;
     _updateView(() {
       _running = false;
       _pendingAssistantText = '';
       _pendingStartedAt = 0;
+      _runtimeStatus = null;
+      _runtimeStatusIsRetrying = false;
+      _status = errorMessage ?? successStatus;
+      if (updatedSessions != null && _activeWorkspace?.id == workspace.id) {
+        _sessions = updatedSessions;
+      }
+      if (shouldUpdateVisibleMessages) {
+        _messages = [..._messages, ?assistantMessage, ?systemMessage];
+      }
     });
-    await _refresh(status: errorMessage ?? successStatus);
+    if (shouldUpdateVisibleMessages) {
+      _scrollToBottom(animated: false);
+    } else {
+      await _refresh(status: errorMessage ?? successStatus);
+    }
   }
 
   String _deriveSessionTitle(String input) {

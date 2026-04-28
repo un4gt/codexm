@@ -62,6 +62,8 @@ class _SessionsPageState extends State<SessionsPage> {
   bool _busy = false;
   bool _running = false;
   String _status = '正在准备会话数据...';
+  String? _runtimeStatus;
+  bool _runtimeStatusIsRetrying = false;
   String _pendingAssistantText = '';
   int _pendingStartedAt = 0;
   int _legacySessionCount = 0;
@@ -128,6 +130,8 @@ class _SessionsPageState extends State<SessionsPage> {
         _recentCommits = const <GitCommitSummary>[];
         _commitDetails = const <String, String>{};
         _status = status ?? '请先创建并激活工作区，然后再开始对话。';
+        _runtimeStatus = null;
+        _runtimeStatusIsRetrying = false;
       });
       widget.onActiveWorkspaceChanged?.call(null);
       widget.onSessionSelected?.call(null);
@@ -181,6 +185,8 @@ class _SessionsPageState extends State<SessionsPage> {
           (legacySessionCount > 0
               ? '检测到 $legacySessionCount 个历史会话，已自动继续最近主会话。'
               : '已恢复当前工作区的主会话。');
+      _runtimeStatus = null;
+      _runtimeStatusIsRetrying = false;
     });
 
     widget.onActiveWorkspaceChanged?.call(workspace);
@@ -222,13 +228,22 @@ class _SessionsPageState extends State<SessionsPage> {
     setState(change);
   }
 
-  void _scrollToBottom() {
+  void _scrollToBottom({bool animated = true}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_messagesScrollController.hasClients) {
         return;
       }
+      final position = _messagesScrollController.position;
+      final target = position.maxScrollExtent;
+      if ((position.pixels - target).abs() < 1) {
+        return;
+      }
+      if (!animated) {
+        _messagesScrollController.jumpTo(target);
+        return;
+      }
       _messagesScrollController.animateTo(
-        _messagesScrollController.position.maxScrollExtent,
+        target,
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeOut,
       );
@@ -384,6 +399,8 @@ class _SessionsPageState extends State<SessionsPage> {
             hasApiKey: _hasApiKey,
             running: _running,
             status: _status,
+            runtimeStatus: _runtimeStatus,
+            runtimeStatusIsRetrying: _runtimeStatusIsRetrying,
             pendingAssistantText: _pendingAssistantText,
             pendingStartedAt: _pendingStartedAt,
             scrollController: _messagesScrollController,

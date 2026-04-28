@@ -34,4 +34,38 @@ void main() {
   test('keeps timeout message mapping', () {
     expect(formatRpcErrorForUser('发送请求超时'), '连接超时：请检查网络与「设置」中的服务器地址/密钥是否正确。');
   });
+
+  test('parses willRetry stream error as transient retry status', () {
+    final parsed = parseRuntimeNotificationError(const <String, Object?>{
+      'willRetry': true,
+      'error': <String, Object?>{
+        'message': 'Reconnecting... 1/5',
+        'codexErrorInfo': <String, Object?>{
+          'responseStreamDisconnected': <String, Object?>{
+            'httpStatusCode': null,
+          },
+        },
+      },
+    });
+
+    expect(parsed.willRetry, isTrue);
+    expect(parsed.message, 'Reconnecting... 1/5');
+    expect(parsed.retryLimitReached, isFalse);
+  });
+
+  test('formats response retry limit as final reconnect failure', () {
+    final message = formatRuntimeNotificationError(const <String, Object?>{
+      'willRetry': false,
+      'error': <String, Object?>{
+        'message': 'Reached retry limit for responses.',
+        'codexErrorInfo': <String, Object?>{
+          'responseTooManyFailedAttempts': <String, Object?>{
+            'httpStatusCode': null,
+          },
+        },
+      },
+    });
+
+    expect(message, '重连失败：已达到重试上限，请检查网络后重试。');
+  });
 }

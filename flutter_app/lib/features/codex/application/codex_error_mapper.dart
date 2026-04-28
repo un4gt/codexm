@@ -1,5 +1,36 @@
 import 'json_rpc_client.dart';
 
+class RuntimeNotificationError {
+  const RuntimeNotificationError({
+    required this.message,
+    required this.willRetry,
+    this.codexErrorInfo,
+    this.additionalDetails,
+  });
+
+  final String message;
+  final bool willRetry;
+  final Object? codexErrorInfo;
+  final String? additionalDetails;
+
+  bool get retryLimitReached {
+    final info = codexErrorInfo;
+    if (info is Map) {
+      return info.containsKey('responseTooManyFailedAttempts') ||
+          info.containsKey('response_too_many_failed_attempts');
+    }
+    final haystack = [
+      message,
+      additionalDetails ?? '',
+      info?.toString() ?? '',
+    ].join('\n').toLowerCase();
+    return haystack.contains('responsetoomanyfailedattempts') ||
+        haystack.contains('response too many failed attempts') ||
+        haystack.contains('retry limit') ||
+        haystack.contains('max retry');
+  }
+}
+
 bool isMissingThreadState(Object error) {
   final message = error.toString();
   String details = '';
@@ -86,17 +117,41 @@ String formatRpcErrorForUser(Object error) {
   return message.trim().isEmpty ? '发生未知错误。' : message;
 }
 
-String formatRuntimeNotificationError(Object? params) {
+RuntimeNotificationError parseRuntimeNotificationError(Object? params) {
   if (params is! Map) {
-    return 'Codex 运行出错。';
+    return const RuntimeNotificationError(
+      message: 'Codex 运行出错。',
+      willRetry: false,
+    );
   }
 
   final error = params['error'];
+  final willRetry = params['willRetry'] == true || params['will_retry'] == true;
+  String? additionalDetails;
   if (error is Map && error['message'] != null) {
-    return error['message'].toString();
+    final rawAdditional =
+        error['additionalDetails'] ?? error['additional_details'];
+    additionalDetails = rawAdditional?.toString();
+    return RuntimeNotificationError(
+      message: error['message'].toString(),
+      willRetry: willRetry,
+      codexErrorInfo: error['codexErrorInfo'] ?? error['codex_error_info'],
+      additionalDetails: additionalDetails,
+    );
   }
   if (params['message'] != null) {
-    return params['message'].toString();
+    return RuntimeNotificationError(
+      message: params['message'].toString(),
+      willRetry: willRetry,
+    );
   }
-  return 'Codex 运行出错。';
+  return RuntimeNotificationError(message: 'Codex 运行出错。', willRetry: willRetry);
+}
+
+String formatRuntimeNotificationError(Object? params) {
+  final error = parseRuntimeNotificationError(params);
+  if (error.retryLimitReached) {
+    return '重连失败：已达到重试上限，请检查网络后重试。';
+  }
+  return error.message.trim().isEmpty ? 'Codex 运行出错。' : error.message;
 }

@@ -23,13 +23,13 @@ class CodexSessionRunner {
     CodexRuntimeBridge? runtimeBridge,
     bool Function()? platformIsAndroid,
     DateTime Function()? now,
-  })  : _launchContextService =
-            launchContextService ?? CodexLaunchContextService(),
-        _sessionStore = sessionStore ?? SessionStore(),
-        _debugLogStore = debugLogStore ?? DebugLogStore(),
-        _runtimeBridge = runtimeBridge ?? NativeCodexRuntimeBridge(),
-        _platformIsAndroid = platformIsAndroid ?? (() => Platform.isAndroid),
-        _now = now ?? DateTime.now;
+  }) : _launchContextService =
+           launchContextService ?? CodexLaunchContextService(),
+       _sessionStore = sessionStore ?? SessionStore(),
+       _debugLogStore = debugLogStore ?? DebugLogStore(),
+       _runtimeBridge = runtimeBridge ?? NativeCodexRuntimeBridge(),
+       _platformIsAndroid = platformIsAndroid ?? (() => Platform.isAndroid),
+       _now = now ?? DateTime.now;
 
   final CodexLaunchContextService _launchContextService;
   final SessionStore _sessionStore;
@@ -59,8 +59,7 @@ class CodexSessionRunner {
       yield const CodexTurnEvent.done();
       return;
     }
-    if (kind == CodexTurnKind.rpc &&
-        (rpcCalls == null || rpcCalls.isEmpty)) {
+    if (kind == CodexTurnKind.rpc && (rpcCalls == null || rpcCalls.isEmpty)) {
       yield const CodexTurnEvent.error('没有可执行的操作。');
       yield const CodexTurnEvent.done();
       return;
@@ -126,13 +125,11 @@ class CodexSessionRunner {
       }
     }
 
-    String formatStderrTail() => stderrRing.where((line) => line.isNotEmpty).join('\n');
+    String formatStderrTail() =>
+        stderrRing.where((line) => line.isNotEmpty).join('\n');
 
     final rpc = JsonRpcClient((line) {
-      return _runtimeBridge.sendRuntimeLine(
-        runtimeId: runtimeId,
-        line: line,
-      );
+      return _runtimeBridge.sendRuntimeLine(runtimeId: runtimeId, line: line);
     });
     final notificationSubscription = rpc.notifications.listen(
       notificationQueue.push,
@@ -158,9 +155,7 @@ class CodexSessionRunner {
         return null;
       }
       final nowMs = _now().millisecondsSinceEpoch;
-      if (force ||
-          nowMs - lastFlushMs >= 33 ||
-          pendingText.length >= 512) {
+      if (force || nowMs - lastFlushMs >= 33 || pendingText.length >= 512) {
         final out = pendingText;
         pendingText = '';
         lastFlushMs = nowMs;
@@ -215,9 +210,7 @@ class CodexSessionRunner {
             'title': 'CodexM Android',
             'version': '0.0.7',
           },
-          'capabilities': const <String, Object?>{
-            'experimentalApi': true,
-          },
+          'capabilities': const <String, Object?>{'experimentalApi': true},
         },
         timeoutMs: 12000,
       );
@@ -231,12 +224,13 @@ class CodexSessionRunner {
         );
       }
 
-      final needsThread = kind != CodexTurnKind.rpc ||
-          (rpcCalls ?? const <CodexRpcCall>[])
-              .any((call) => call.requiresThread);
+      final needsThread =
+          kind != CodexTurnKind.rpc ||
+          (rpcCalls ?? const <CodexRpcCall>[]).any(
+            (call) => call.requiresThread,
+          );
       final approvalPolicy = settings.approvalPolicy;
-      var threadId =
-          needsThread ? launchContext.session.codexThreadId : null;
+      var threadId = needsThread ? launchContext.session.codexThreadId : null;
 
       if (needsThread && threadId != null && threadId.isNotEmpty) {
         try {
@@ -285,19 +279,13 @@ class CodexSessionRunner {
       }
 
       if (needsThread && (threadId == null || threadId.isEmpty)) {
-        await logEvent(
-          'thread_missing',
-          message: 'threadId 缺失',
-          flush: true,
-        );
+        await logEvent('thread_missing', message: 'threadId 缺失', flush: true);
         throw StateError('无法建立会话，请重试。');
       }
 
       if (kind == CodexTurnKind.rpc) {
         for (final call in rpcCalls ?? const <CodexRpcCall>[]) {
-          final params = <String, Object?>{
-            ...?call.params,
-          };
+          final params = <String, Object?>{...?call.params};
           if (call.requiresThread && !params.containsKey('threadId')) {
             params['threadId'] = threadId;
           }
@@ -349,7 +337,8 @@ class CodexSessionRunner {
           params: <String, Object?>{
             'threadId': threadId,
             'delivery': 'inline',
-            'target': reviewTarget ??
+            'target':
+                reviewTarget ??
                 const <String, Object?>{'type': 'uncommittedChanges'},
           },
           timeoutMs: 120000,
@@ -385,6 +374,7 @@ class CodexSessionRunner {
       const turnIdleTimeoutMs = 180000;
       var lastActivityMs = _now().millisecondsSinceEpoch;
       var completed = false;
+      var retryStatusActive = false;
 
       while (!completed) {
         final nowMs = _now().millisecondsSinceEpoch;
@@ -425,6 +415,10 @@ class CodexSessionRunner {
         }
 
         lastActivityMs = _now().millisecondsSinceEpoch;
+        if (notification.method != 'error' && retryStatusActive) {
+          retryStatusActive = false;
+          yield const CodexTurnEvent.status(null);
+        }
 
         if (notification.method == 'item/agentMessage/delta' ||
             notification.method.endsWith('/outputDelta')) {
@@ -444,6 +438,20 @@ class CodexSessionRunner {
           if (chunk != null) {
             yield CodexTurnEvent.text(chunk);
           }
+          final runtimeError = parseRuntimeNotificationError(
+            notification.params,
+          );
+          if (runtimeError.willRetry) {
+            retryStatusActive = true;
+            await logEvent(
+              'runtime_retry',
+              message: runtimeError.message,
+              details: runtimeError.additionalDetails,
+            );
+            yield CodexTurnEvent.status(runtimeError.message, isRetrying: true);
+            continue;
+          }
+          retryStatusActive = false;
           final message = formatRuntimeNotificationError(notification.params);
           final stderrTail = formatStderrTail();
           await logEvent(
@@ -453,6 +461,7 @@ class CodexSessionRunner {
             flush: true,
           );
           yield CodexTurnEvent.error(message);
+          completed = true;
           continue;
         }
 
@@ -471,8 +480,7 @@ class CodexSessionRunner {
 
           if (!sawAnyDelta && item != null) {
             final itemType = item['type']?.toString();
-            if (itemType == 'agentMessage' ||
-                itemType == 'assistantMessage') {
+            if (itemType == 'agentMessage' || itemType == 'assistantMessage') {
               final full = _extractCompletedItemText(item);
               if (full != null && full.isNotEmpty) {
                 final chunk = takeFlush(force: true);
@@ -493,7 +501,8 @@ class CodexSessionRunner {
             yield CodexTurnEvent.text(chunk);
           }
           final turn = _readTurn(notification.params);
-          final completedTurnId = turn?['id']?.toString() ??
+          final completedTurnId =
+              turn?['id']?.toString() ??
               (notification.params is Map
                   ? (notification.params as Map)['turnId']?.toString()
                   : null);
@@ -501,7 +510,7 @@ class CodexSessionRunner {
             if (turn?['status'] == 'failed') {
               final message =
                   _readNestedMap(turn, 'error')?['message']?.toString() ??
-                      '运行失败。';
+                  '运行失败。';
               final stderrTail = formatStderrTail();
               await logEvent(
                 'turn_failed',
@@ -577,10 +586,7 @@ class CodexSessionRunner {
           .toList(growable: false);
     }
     return <CodexInputElement>[
-      <String, Object?>{
-        'type': 'text',
-        'text': input?.toString() ?? '',
-      },
+      <String, Object?>{'type': 'text', 'text': input?.toString() ?? ''},
     ];
   }
 
@@ -664,7 +670,10 @@ class CodexSessionRunner {
     return Map<Object?, Object?>.from(params['turn'] as Map);
   }
 
-  Map<Object?, Object?>? _readNestedMap(Map<Object?, Object?>? source, String key) {
+  Map<Object?, Object?>? _readNestedMap(
+    Map<Object?, Object?>? source,
+    String key,
+  ) {
     if (source == null || source[key] is! Map) {
       return null;
     }
@@ -678,9 +687,10 @@ class CodexSessionRunner {
     }
 
     final maybeParts =
-        item['output'] ?? _readNestedMap(item, 'message')?['output'] ??
-            _readNestedMap(item, 'message')?['content'] ??
-            item['content'];
+        item['output'] ??
+        _readNestedMap(item, 'message')?['output'] ??
+        _readNestedMap(item, 'message')?['content'] ??
+        item['content'];
     if (maybeParts is! List) {
       return null;
     }

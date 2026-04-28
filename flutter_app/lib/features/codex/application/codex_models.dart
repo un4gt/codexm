@@ -5,19 +5,13 @@ import '../../workspaces/application/workspace_paths.dart';
 
 typedef CodexInputElement = Map<String, Object?>;
 
-enum CodexTurnKind {
-  turn,
-  review,
-  rpc,
-}
+enum CodexTurnKind { turn, review, rpc }
 
-enum CodexCollaborationMode {
-  standard,
-  plan,
-}
+enum CodexCollaborationMode { standard, plan }
 
 extension CodexCollaborationModeWire on CodexCollaborationMode {
-  String get wireValue => this == CodexCollaborationMode.plan ? 'plan' : 'default';
+  String get wireValue =>
+      this == CodexCollaborationMode.plan ? 'plan' : 'default';
 }
 
 class CodexRpcCall {
@@ -36,12 +30,7 @@ class CodexRpcCall {
   final String? title;
 }
 
-enum CodexTurnEventType {
-  text,
-  error,
-  rpcResult,
-  done,
-}
+enum CodexTurnEventType { text, status, error, rpcResult, done }
 
 class CodexTurnEvent {
   const CodexTurnEvent._({
@@ -50,54 +39,53 @@ class CodexTurnEvent {
     this.message,
     this.method,
     this.result,
+    this.isRetrying = false,
   });
 
   const CodexTurnEvent.text(String text)
-      : this._(type: CodexTurnEventType.text, text: text);
+    : this._(type: CodexTurnEventType.text, text: text);
 
   const CodexTurnEvent.error(String message)
-      : this._(type: CodexTurnEventType.error, message: message);
+    : this._(type: CodexTurnEventType.error, message: message);
+
+  const CodexTurnEvent.status(String? message, {bool isRetrying = false})
+    : this._(
+        type: CodexTurnEventType.status,
+        message: message,
+        isRetrying: isRetrying,
+      );
 
   const CodexTurnEvent.rpcResult({
     required String method,
     required Object? result,
   }) : this._(
-          type: CodexTurnEventType.rpcResult,
-          method: method,
-          result: result,
-        );
+         type: CodexTurnEventType.rpcResult,
+         method: method,
+         result: result,
+       );
 
-  const CodexTurnEvent.done()
-      : this._(type: CodexTurnEventType.done);
+  const CodexTurnEvent.done() : this._(type: CodexTurnEventType.done);
 
   final CodexTurnEventType type;
   final String? text;
   final String? message;
   final String? method;
   final Object? result;
+  final bool isRetrying;
 }
 
-enum CodexStreamEventType {
-  text,
-  error,
-  done,
-}
+enum CodexStreamEventType { text, error, done }
 
 class CodexStreamEvent {
-  const CodexStreamEvent._({
-    required this.type,
-    this.text,
-    this.message,
-  });
+  const CodexStreamEvent._({required this.type, this.text, this.message});
 
   const CodexStreamEvent.text(String text)
-      : this._(type: CodexStreamEventType.text, text: text);
+    : this._(type: CodexStreamEventType.text, text: text);
 
   const CodexStreamEvent.error(String message)
-      : this._(type: CodexStreamEventType.error, message: message);
+    : this._(type: CodexStreamEventType.error, message: message);
 
-  const CodexStreamEvent.done()
-      : this._(type: CodexStreamEventType.done);
+  const CodexStreamEvent.done() : this._(type: CodexStreamEventType.done);
 
   final CodexStreamEventType type;
   final String? text;
@@ -105,10 +93,7 @@ class CodexStreamEvent {
 }
 
 class CodexServerConfig {
-  const CodexServerConfig({
-    required this.baseUrl,
-    this.apiKey,
-  });
+  const CodexServerConfig({required this.baseUrl, this.apiKey});
 
   final String baseUrl;
   final String? apiKey;
