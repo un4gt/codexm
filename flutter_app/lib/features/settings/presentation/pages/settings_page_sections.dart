@@ -11,13 +11,14 @@ class _UpdateEntrySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const StitchSectionHeader(title: '系统'),
+        StitchSectionHeader(title: l10n.settingsSystemSection),
         const SizedBox(height: 8),
         StitchListItem(
-          title: '应用更新',
+          title: l10n.settingsAppUpdates,
           leading: const Icon(Icons.system_update_alt_outlined),
           trailing: const Icon(Icons.chevron_right),
           onTap: busy ? null : () => onOpenUpdatePage(),
@@ -55,14 +56,15 @@ class _ConnectionSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.appTokens;
+    final l10n = AppLocalizations.of(context);
     final modelValue = (selectedModel ?? '').trim().isEmpty
-        ? '默认'
+        ? l10n.settingsDefaultValue
         : selectedModel!.trim();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const StitchSectionHeader(title: '连接'),
+        StitchSectionHeader(title: l10n.settingsConnectionSection),
         const SizedBox(height: 12),
         TextField(
           controller: apiKeyController,
@@ -73,7 +75,7 @@ class _ConnectionSection extends StatelessWidget {
             hintText: 'sk-...',
             suffixIcon: IconButton(
               onPressed: busy ? null : onToggleApiKeyVisible,
-              tooltip: apiKeyVisible ? '隐藏' : '显示',
+              tooltip: apiKeyVisible ? l10n.settingsHide : l10n.settingsShow,
               icon: Icon(
                 apiKeyVisible ? Icons.visibility_off : Icons.visibility,
               ),
@@ -84,8 +86,8 @@ class _ConnectionSection extends StatelessWidget {
         TextField(
           controller: baseUrlController,
           enabled: !busy,
-          decoration: const InputDecoration(
-            labelText: 'Base URL（可选）',
+          decoration: InputDecoration(
+            labelText: l10n.settingsBaseUrlOptional,
             hintText: 'https://api.openai.com/v1',
           ),
           textInputAction: TextInputAction.done,
@@ -97,12 +99,12 @@ class _ConnectionSection extends StatelessWidget {
           child: OutlinedButton.icon(
             onPressed: busy ? null : onSaveConnection,
             icon: const Icon(Icons.save_outlined),
-            label: const Text('保存'),
+            label: Text(l10n.settingsSave),
           ),
         ),
         SizedBox(height: tokens.sectionSpacing),
         StitchListItem(
-          title: '默认模型',
+          title: l10n.settingsDefaultModel,
           subtitle: modelValue,
           leading: const Icon(Icons.auto_awesome_outlined),
           trailing: modelsLoading
@@ -120,7 +122,7 @@ class _ConnectionSection extends StatelessWidget {
             initialValue: availableModels.contains(selectedModel)
                 ? selectedModel
                 : null,
-            decoration: const InputDecoration(labelText: '选择模型'),
+            decoration: InputDecoration(labelText: l10n.settingsChooseModel),
             items: [
               for (final model in availableModels)
                 DropdownMenuItem<String>(value: model, child: Text(model)),
@@ -164,6 +166,7 @@ class _ConfigTomlSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.appTokens;
+    final l10n = AppLocalizations.of(context);
     final widthClass = context.adaptiveWidthClass;
     final editorMaxLines = widthClass.isCompact ? 8 : 10;
     final previewMaxHeight = widthClass.isCompact ? 240.0 : 300.0;
@@ -171,10 +174,10 @@ class _ConfigTomlSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const StitchSectionHeader(title: '高级配置'),
+        StitchSectionHeader(title: l10n.settingsAdvancedConfig),
         const SizedBox(height: 12),
         _ConfigPanel(
-          title: '生效预览',
+          title: l10n.settingsEffectivePreview,
           child: _ReadonlyConfigPreview(
             content: previewConfigToml,
             maxHeight: previewMaxHeight,
@@ -198,7 +201,7 @@ class _ConfigTomlSection extends StatelessWidget {
         ],
         SizedBox(height: tokens.sectionSpacing),
         _ConfigPanel(
-          title: '附加配置',
+          title: l10n.settingsExtraConfig,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -213,14 +216,14 @@ class _ConfigTomlSection extends StatelessWidget {
                 enableSuggestions: false,
                 smartDashesType: SmartDashesType.disabled,
                 smartQuotesType: SmartQuotesType.disabled,
-                decoration: const InputDecoration(
-                  labelText: '附加配置项',
+                decoration: InputDecoration(
+                  labelText: l10n.settingsExtraConfigItems,
                   hintText: '[sandbox]\nnetwork_access = true',
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                '附加配置会插入到自动生成的顶层键之后、各分组之前。不要在这里重复填写连接、模型、features 或 MCP 服务器。',
+                l10n.settingsExtraConfigHelp,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               if (extraConfigValidationError?.trim().isNotEmpty == true) ...[
@@ -240,12 +243,12 @@ class _ConfigTomlSection extends StatelessWidget {
                   FilledButton.icon(
                     onPressed: busy ? null : onSaveExtraConfigToml,
                     icon: const Icon(Icons.save_outlined),
-                    label: const Text('保存内容'),
+                    label: Text(l10n.settingsSaveContent),
                   ),
                   OutlinedButton.icon(
                     onPressed: busy ? null : onClearExtraConfigToml,
                     icon: const Icon(Icons.clear_outlined),
-                    label: const Text('清空内容'),
+                    label: Text(l10n.settingsClearContent),
                   ),
                 ],
               ),
@@ -354,6 +357,7 @@ class _ReadonlyConfigPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -366,7 +370,7 @@ class _ReadonlyConfigPreview extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           child: SelectionArea(
             child: Text(
-              content.trim().isEmpty ? '# 暂无可预览内容' : content,
+              content.trim().isEmpty ? l10n.settingsNoPreviewContent : content,
               style: theme.textTheme.bodySmall?.copyWith(height: 1.5),
             ),
           ),
@@ -381,6 +385,7 @@ class _PreferenceSection extends StatelessWidget {
     required this.settings,
     required this.busy,
     required this.onUpdatePreference,
+    required this.onUpdateLocalePreference,
   });
 
   final CodexSettings settings;
@@ -390,36 +395,74 @@ class _PreferenceSection extends StatelessWidget {
     required String status,
   })
   onUpdatePreference;
+  final ValueChanged<String> onUpdateLocalePreference;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
+    final selectedLocalePreference = CodexLocalePreference.normalize(
+      settings.appLocalePreference,
+    );
+    final languageLabels = <String, String>{
+      CodexLocalePreference.system: l10n.settingsLanguageSystem,
+      CodexLocalePreference.english: l10n.settingsLanguageEnglish,
+      CodexLocalePreference.simplifiedChinese:
+          l10n.settingsLanguageChineseSimplified,
+    };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const StitchSectionHeader(title: '交互偏好'),
+        StitchSectionHeader(title: l10n.settingsInteractionPreferences),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          initialValue: selectedLocalePreference,
+          decoration: InputDecoration(labelText: l10n.settingsLanguageTitle),
+          items: [
+            for (final value in CodexLocalePreference.values)
+              DropdownMenuItem<String>(
+                value: value,
+                child: Text(languageLabels[value] ?? value),
+              ),
+          ],
+          onChanged: busy
+              ? null
+              : (value) {
+                  if (value == null || value == selectedLocalePreference) {
+                    return;
+                  }
+                  onUpdateLocalePreference(value);
+                },
+        ),
         const SizedBox(height: 8),
         SwitchListTile.adaptive(
           contentPadding: EdgeInsets.zero,
-          title: Text('显示推理过程', style: theme.textTheme.bodyMedium),
+          title: Text(
+            l10n.settingsShowReasoning,
+            style: theme.textTheme.bodyMedium,
+          ),
           value: settings.uiShowThinking,
           onChanged: busy
               ? null
               : (value) => onUpdatePreference(
                   (current) => current.copyWith(uiShowThinking: value),
-                  status: value ? '已开启思考内容展示。' : '已关闭思考内容展示。',
+                  status: value
+                      ? l10n.settingsShowReasoningOn
+                      : l10n.settingsShowReasoningOff,
                 ),
         ),
         SwitchListTile.adaptive(
           contentPadding: EdgeInsets.zero,
-          title: Text('运行日志', style: theme.textTheme.bodyMedium),
+          title: Text(l10n.settingsRunLogs, style: theme.textTheme.bodyMedium),
           value: settings.debugLogToFile,
           onChanged: busy
               ? null
               : (value) => onUpdatePreference(
                   (current) => current.copyWith(debugLogToFile: value),
-                  status: value ? '已开启运行日志。' : '已关闭运行日志。',
+                  status: value
+                      ? l10n.settingsRunLogsOn
+                      : l10n.settingsRunLogsOff,
                 ),
         ),
         const SizedBox(height: 8),
@@ -427,7 +470,7 @@ class _PreferenceSection extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                '日志保留天数：${settings.debugLogRetentionDays} 天',
+                l10n.settingsLogRetentionDays(settings.debugLogRetentionDays),
                 style: theme.textTheme.bodyMedium,
               ),
             ),
@@ -449,7 +492,7 @@ class _PreferenceSection extends StatelessWidget {
               : (value) => onUpdatePreference(
                   (current) =>
                       current.copyWith(debugLogRetentionDays: value.round()),
-                  status: '已更新日志保留天数。',
+                  status: l10n.settingsLogRetentionUpdated,
                 ),
         ),
       ],
@@ -462,13 +505,13 @@ class _BusySettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ListTile(
-      leading: SizedBox(
+    return ListTile(
+      leading: const SizedBox(
         width: 20,
         height: 20,
         child: CircularProgressIndicator(strokeWidth: 2),
       ),
-      title: Text('正在同步设置'),
+      title: Text(AppLocalizations.of(context).settingsSyncing),
     );
   }
 }

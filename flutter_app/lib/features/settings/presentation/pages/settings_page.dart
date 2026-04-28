@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_theme.dart';
+import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/adaptive_breakpoints.dart';
 import '../../../../shared/widgets/stitch_ui.dart';
 import '../../../mcp/application/mcp_models.dart';
@@ -10,7 +11,9 @@ import '../../application/codex_settings_store.dart';
 part 'settings_page_sections.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({super.key, this.onLocalePreferenceChanged});
+
+  final ValueChanged<Locale?>? onLocalePreferenceChanged;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -91,8 +94,9 @@ class _SettingsPageState extends State<SettingsPage> {
       if (!mounted) {
         return;
       }
+      final l10n = AppLocalizations.of(context);
       setState(() {
-        _status = '读取设置失败：$error';
+        _status = l10n.settingsLoadFailed(error.toString());
       });
     }
   }
@@ -130,7 +134,8 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _saveConnectionDrafts() async {
     final apiKey = _apiKeyController.text.trim();
     final baseUrl = _baseUrlController.text.trim();
-    await _runAction('正在保存连接设置...', () async {
+    final l10n = AppLocalizations.of(context);
+    await _runAction(l10n.settingsConnectionSaving, () async {
       if (apiKey.isEmpty) {
         await _settingsStore.clearCodexApiKey();
       } else {
@@ -144,15 +149,15 @@ class _SettingsPageState extends State<SettingsPage> {
       );
       await _syncRuntimeConfigFiles();
       if (apiKey.isEmpty && baseUrl.isEmpty) {
-        return '已清除密钥和服务地址。';
+        return l10n.settingsConnectionCleared;
       }
       if (apiKey.isEmpty) {
-        return '已保存服务地址，并清除密钥。';
+        return l10n.settingsConnectionBaseSavedKeyCleared;
       }
       if (baseUrl.isEmpty) {
-        return '已保存密钥，并清除服务地址。';
+        return l10n.settingsConnectionKeySavedBaseCleared;
       }
-      return '已保存密钥和服务地址。';
+      return l10n.settingsConnectionSaved;
     }, refreshModelsAfterSuccess: true);
   }
 
@@ -167,14 +172,16 @@ class _SettingsPageState extends State<SettingsPage> {
         .trim();
     final validationError = _settingsStore.validateExtraConfigToml(normalized);
     if (validationError != null) {
+      final l10n = AppLocalizations.of(context);
       setState(() {
         _extraConfigValidationError = validationError;
-        _status = '保存失败：$validationError';
+        _status = l10n.settingsExtraConfigSaveFailed(validationError);
       });
       return;
     }
 
-    await _runAction('正在保存补充配置...', () async {
+    final l10n = AppLocalizations.of(context);
+    await _runAction(l10n.settingsExtraConfigSaving, () async {
       await _settingsStore.updateSettings(
         (current) => current.copyWith(
           extraConfigToml: normalized.isEmpty ? '' : '$normalized\n',
@@ -182,35 +189,36 @@ class _SettingsPageState extends State<SettingsPage> {
       );
       await _syncRuntimeConfigFiles();
       if (normalized.isEmpty) {
-        return '已清空补充配置，当前仅使用自动生成内容。';
+        return l10n.settingsExtraConfigClearedRuntime;
       }
-      return '已保存补充配置。';
+      return l10n.settingsExtraConfigSaved;
     });
   }
 
   Future<void> _clearExtraConfigTomlDraft() async {
+    final l10n = AppLocalizations.of(context);
     if ((_settings.extraConfigToml?.trim().isEmpty ?? true) &&
         _extraConfigTomlController.text.trim().isEmpty) {
       setState(() {
         _extraConfigValidationError = null;
-        _status = '补充配置已是空白。';
+        _status = l10n.settingsExtraConfigAlreadyBlank;
       });
       return;
     }
 
-    await _runAction('正在清空补充配置...', () async {
+    await _runAction(l10n.settingsExtraConfigClearing, () async {
       await _settingsStore.updateSettings(
         (current) => current.copyWith(extraConfigToml: ''),
       );
       await _syncRuntimeConfigFiles();
-      return '已清空补充配置。';
+      return l10n.settingsExtraConfigCleared;
     });
   }
 
   Future<void> _refreshModels({
     String? statusOnEmpty,
     String? statusOnSuccess,
-    String? statusOnErrorPrefix,
+    String Function(String error)? statusOnError,
   }) async {
     if (_modelsLoading) {
       return;
@@ -228,15 +236,21 @@ class _SettingsPageState extends State<SettingsPage> {
       setState(() {
         _availableModels = models;
         _status = models.isEmpty
-            ? (statusOnEmpty ?? '未返回可用模型列表。')
-            : (statusOnSuccess ?? '已刷新模型列表。');
+            ? (statusOnEmpty ??
+                  AppLocalizations.of(context).settingsModelsEmpty)
+            : (statusOnSuccess ??
+                  AppLocalizations.of(context).settingsModelsRefreshed);
       });
     } catch (error) {
       if (!mounted) {
         return;
       }
+      final l10n = AppLocalizations.of(context);
+      final errorText = error.toString();
       setState(() {
-        _status = '${statusOnErrorPrefix ?? '获取模型列表失败：'}$error';
+        _status =
+            statusOnError?.call(errorText) ??
+            l10n.settingsModelsFetchFailed(errorText);
       });
     } finally {
       if (mounted) {
@@ -259,10 +273,14 @@ class _SettingsPageState extends State<SettingsPage> {
       });
       return;
     }
+    final l10n = AppLocalizations.of(context);
     await _refreshModels(
-      statusOnEmpty: '$successStatus 未返回可用模型列表。',
-      statusOnSuccess: '$successStatus 已刷新模型列表。',
-      statusOnErrorPrefix: '$successStatus 获取模型列表失败：',
+      statusOnEmpty: l10n.settingsConnectionSavedModelsEmpty(successStatus),
+      statusOnSuccess: l10n.settingsConnectionSavedModelsRefreshed(
+        successStatus,
+      ),
+      statusOnError: (error) =>
+          l10n.settingsConnectionSavedModelsFetchFailed(successStatus, error),
     );
   }
 
@@ -271,18 +289,39 @@ class _SettingsPageState extends State<SettingsPage> {
     required String status,
     bool syncRuntimeConfig = false,
   }) {
-    return _runAction('正在保存偏好...', () async {
-      final next = update(_settings);
-      final saved = await _settingsStore.saveSettings(next);
-      if (syncRuntimeConfig) {
-        await _syncRuntimeConfigFiles();
-      }
+    return _runAction(
+      AppLocalizations.of(context).settingsSavingPreferences,
+      () async {
+        final next = update(_settings);
+        final saved = await _settingsStore.saveSettings(next);
+        if (syncRuntimeConfig) {
+          await _syncRuntimeConfigFiles();
+        }
+        if (mounted) {
+          setState(() {
+            _settings = saved;
+          });
+        }
+        return status;
+      },
+    );
+  }
+
+  Future<void> _updateLocalePreference(String value) {
+    final l10n = AppLocalizations.of(context);
+    return _runAction(l10n.settingsSavingPreferences, () async {
+      final saved = await _settingsStore.updateSettings(
+        (current) => current.copyWith(appLocalePreference: value),
+      );
+      widget.onLocalePreferenceChanged?.call(
+        CodexLocalePreference.toLocale(saved.appLocalePreference),
+      );
       if (mounted) {
         setState(() {
           _settings = saved;
         });
       }
-      return status;
+      return l10n.settingsLanguageUpdated;
     });
   }
 
@@ -310,8 +349,9 @@ class _SettingsPageState extends State<SettingsPage> {
       if (!mounted) {
         return;
       }
+      final l10n = AppLocalizations.of(context);
       setState(() {
-        _status = '执行失败：$error';
+        _status = l10n.settingsActionFailed(error.toString());
       });
     } finally {
       if (mounted) {
@@ -330,14 +370,15 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return StitchPageScaffold(
-      pageTitle: '设置',
+      pageTitle: l10n.settingsPageTitle,
       brandIcon: Icons.settings_outlined,
-      kickerText: '偏好与连接',
+      kickerText: l10n.settingsKicker,
       topActions: [
         IconButton.filledTonal(
           onPressed: _busy ? null : _refreshModels,
-          tooltip: '刷新模型列表',
+          tooltip: l10n.settingsRefreshModelsTooltip,
           icon: _modelsLoading
               ? const SizedBox(
                   width: 20,
@@ -351,7 +392,7 @@ class _SettingsPageState extends State<SettingsPage> {
         if (_status.trim().isNotEmpty)
           StitchInfoBanner(
             icon: Icons.info_outline,
-            title: '设置状态',
+            title: l10n.settingsStatusTitle,
             subtitle: _status,
           ),
         _UpdateEntrySection(busy: _busy, onOpenUpdatePage: _openUpdatePage),
@@ -378,7 +419,7 @@ class _SettingsPageState extends State<SettingsPage> {
             }
             _updatePreference(
               (current) => current.copyWith(model: value),
-              status: '已更新模型为：$value',
+              status: l10n.settingsModelUpdated(value),
               syncRuntimeConfig: true,
             );
           },
@@ -397,6 +438,7 @@ class _SettingsPageState extends State<SettingsPage> {
           settings: _settings,
           busy: _busy,
           onUpdatePreference: _updatePreference,
+          onUpdateLocalePreference: _updateLocalePreference,
         ),
         if (_busy) const _BusySettingsCard(),
       ],

@@ -5,30 +5,79 @@ import 'package:flutter/material.dart';
 import '../features/mcp/presentation/pages/mcp_page.dart';
 import '../features/sessions/application/session_models.dart';
 import '../features/sessions/presentation/pages/sessions_page.dart';
+import '../features/settings/application/codex_settings_store.dart';
 import '../features/settings/presentation/pages/settings_page.dart';
 import '../features/update/application/app_update_startup_checker.dart';
 import '../features/workspaces/application/workspace_models.dart';
 import '../features/workspaces/application/workspace_store.dart';
 import '../features/workspaces/presentation/pages/workspaces_page.dart';
+import '../l10n/app_localizations.dart';
 import '../shared/widgets/adaptive_breakpoints.dart';
 import 'theme/app_theme.dart';
 
-class CodexmFlutterApp extends StatelessWidget {
+class CodexmFlutterApp extends StatefulWidget {
   const CodexmFlutterApp({super.key});
+
+  @override
+  State<CodexmFlutterApp> createState() => _CodexmFlutterAppState();
+}
+
+class _CodexmFlutterAppState extends State<CodexmFlutterApp> {
+  final _settingsStore = CodexSettingsStore();
+
+  Locale? _locale;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadLocalePreference());
+  }
+
+  Future<void> _loadLocalePreference() async {
+    try {
+      final settings = await _settingsStore.getSettings();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _locale = CodexLocalePreference.toLocale(settings.appLocalePreference);
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _locale = null;
+      });
+    }
+  }
+
+  void _handleLocalePreferenceChanged(Locale? locale) {
+    setState(() {
+      _locale = locale;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'CodexM Flutter',
+      onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
-      home: const _AppShell(),
+      locale: _locale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: _AppShell(
+        onLocalePreferenceChanged: _handleLocalePreferenceChanged,
+      ),
     );
   }
 }
 
 class _AppShell extends StatefulWidget {
-  const _AppShell();
+  const _AppShell({required this.onLocalePreferenceChanged});
+
+  final ValueChanged<Locale?> onLocalePreferenceChanged;
 
   @override
   State<_AppShell> createState() => _AppShellState();
@@ -42,52 +91,6 @@ class _AppShellState extends State<_AppShell> {
   Workspace? _activeWorkspace;
   Session? _selectedSession;
   bool _startupUpdateCheckTriggered = false;
-
-  static const _destinations = <NavigationDestination>[
-    NavigationDestination(
-      icon: Icon(Icons.folder_outlined),
-      selectedIcon: Icon(Icons.folder),
-      label: '工作区',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.chat_bubble_outline),
-      selectedIcon: Icon(Icons.chat_bubble),
-      label: '会话',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.extension_outlined),
-      selectedIcon: Icon(Icons.extension),
-      label: 'MCP & Skills',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.settings_outlined),
-      selectedIcon: Icon(Icons.settings),
-      label: '设置',
-    ),
-  ];
-
-  static const _railDestinations = <NavigationRailDestination>[
-    NavigationRailDestination(
-      icon: Icon(Icons.folder_outlined),
-      selectedIcon: Icon(Icons.folder),
-      label: Text('工作区'),
-    ),
-    NavigationRailDestination(
-      icon: Icon(Icons.chat_bubble_outline),
-      selectedIcon: Icon(Icons.chat_bubble),
-      label: Text('会话'),
-    ),
-    NavigationRailDestination(
-      icon: Icon(Icons.extension_outlined),
-      selectedIcon: Icon(Icons.extension),
-      label: Text('MCP & Skills'),
-    ),
-    NavigationRailDestination(
-      icon: Icon(Icons.settings_outlined),
-      selectedIcon: Icon(Icons.settings),
-      label: Text('设置'),
-    ),
-  ];
 
   @override
   void initState() {
@@ -150,15 +153,60 @@ class _AppShellState extends State<_AppShell> {
         },
       ),
       const McpPage(),
-      const SettingsPage(),
+      SettingsPage(onLocalePreferenceChanged: widget.onLocalePreferenceChanged),
     ];
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
     final isCompact = context.adaptiveWidthClass.isCompact;
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
+    final destinations = <NavigationDestination>[
+      NavigationDestination(
+        icon: const Icon(Icons.folder_outlined),
+        selectedIcon: const Icon(Icons.folder),
+        label: l10n.navWorkspaces,
+      ),
+      NavigationDestination(
+        icon: const Icon(Icons.chat_bubble_outline),
+        selectedIcon: const Icon(Icons.chat_bubble),
+        label: l10n.navSessions,
+      ),
+      NavigationDestination(
+        icon: const Icon(Icons.extension_outlined),
+        selectedIcon: const Icon(Icons.extension),
+        label: l10n.navMcpSkills,
+      ),
+      NavigationDestination(
+        icon: const Icon(Icons.settings_outlined),
+        selectedIcon: const Icon(Icons.settings),
+        label: l10n.navSettings,
+      ),
+    ];
+    final railDestinations = <NavigationRailDestination>[
+      NavigationRailDestination(
+        icon: const Icon(Icons.folder_outlined),
+        selectedIcon: const Icon(Icons.folder),
+        label: Text(l10n.navWorkspaces),
+      ),
+      NavigationRailDestination(
+        icon: const Icon(Icons.chat_bubble_outline),
+        selectedIcon: const Icon(Icons.chat_bubble),
+        label: Text(l10n.navSessions),
+      ),
+      NavigationRailDestination(
+        icon: const Icon(Icons.extension_outlined),
+        selectedIcon: const Icon(Icons.extension),
+        label: Text(l10n.navMcpSkills),
+      ),
+      NavigationRailDestination(
+        icon: const Icon(Icons.settings_outlined),
+        selectedIcon: const Icon(Icons.settings),
+        label: Text(l10n.navSettings),
+      ),
+    ];
 
     final bodyContent = IndexedStack(
       index: _selectedIndex,
@@ -180,7 +228,7 @@ class _AppShellState extends State<_AppShell> {
                       });
                     },
                     labelType: NavigationRailLabelType.all,
-                    destinations: _railDestinations,
+                    destinations: railDestinations,
                     backgroundColor: theme.colorScheme.surface,
                   ),
                   const VerticalDivider(thickness: 1, width: 1),
@@ -207,7 +255,7 @@ class _AppShellState extends State<_AppShell> {
                   children: [
                     NavigationBar(
                       selectedIndex: _selectedIndex,
-                      destinations: _destinations,
+                      destinations: destinations,
                       onDestinationSelected: (index) {
                         setState(() {
                           _selectedIndex = index;

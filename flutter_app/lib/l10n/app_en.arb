@@ -1,0 +1,133 @@
+{
+  "@@locale": "en",
+  "appTitle": "CodexM",
+  "navWorkspaces": "Workspaces",
+  "navSessions": "Sessions",
+  "navMcpSkills": "MCP & Skills",
+  "navSettings": "Settings",
+  "settingsPageTitle": "Settings",
+  "settingsKicker": "Preferences and connection",
+  "settingsRefreshModelsTooltip": "Refresh model list",
+  "settingsStatusTitle": "Settings status",
+  "settingsLoadFailed": "Failed to load settings: {error}",
+  "@settingsLoadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsSavingPreferences": "Saving preferences...",
+  "settingsActionFailed": "Action failed: {error}",
+  "@settingsActionFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsSystemSection": "System",
+  "settingsAppUpdates": "App updates",
+  "settingsLanguageTitle": "App language",
+  "settingsLanguageSystem": "Follow system",
+  "settingsLanguageEnglish": "English",
+  "settingsLanguageChineseSimplified": "Simplified Chinese",
+  "settingsLanguageUpdated": "Language preference updated.",
+  "settingsConnectionSection": "Connection",
+  "settingsDefaultValue": "Default",
+  "settingsHide": "Hide",
+  "settingsShow": "Show",
+  "settingsBaseUrlOptional": "Base URL (optional)",
+  "settingsSave": "Save",
+  "settingsDefaultModel": "Default model",
+  "settingsChooseModel": "Choose model",
+  "settingsModelsEmpty": "No available models returned.",
+  "settingsModelsRefreshed": "Model list refreshed.",
+  "settingsModelsFetchFailed": "Failed to fetch model list: {error}",
+  "@settingsModelsFetchFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsConnectionSaving": "Saving connection settings...",
+  "settingsConnectionCleared": "API key and service URL cleared.",
+  "settingsConnectionBaseSavedKeyCleared": "Service URL saved and API key cleared.",
+  "settingsConnectionKeySavedBaseCleared": "API key saved and service URL cleared.",
+  "settingsConnectionSaved": "API key and service URL saved.",
+  "settingsConnectionSavedModelsEmpty": "{status} No available models returned.",
+  "@settingsConnectionSavedModelsEmpty": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsConnectionSavedModelsRefreshed": "{status} Model list refreshed.",
+  "@settingsConnectionSavedModelsRefreshed": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsConnectionSavedModelsFetchFailed": "{status} Failed to fetch model list: {error}",
+  "@settingsConnectionSavedModelsFetchFailed": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsModelUpdated": "Model updated to: {model}",
+  "@settingsModelUpdated": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsAdvancedConfig": "Advanced config",
+  "settingsEffectivePreview": "Effective preview",
+  "settingsNoPreviewContent": "# No preview content",
+  "settingsExtraConfig": "Extra config",
+  "settingsExtraConfigItems": "Extra config entries",
+  "settingsExtraConfigHelp": "Extra config is inserted after generated top-level keys and before sections. Do not repeat connection, model, features, or MCP server settings here.",
+  "settingsSaveContent": "Save content",
+  "settingsClearContent": "Clear content",
+  "settingsExtraConfigSaveFailed": "Save failed: {error}",
+  "@settingsExtraConfigSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsExtraConfigSaving": "Saving extra config...",
+  "settingsExtraConfigClearedRuntime": "Extra config cleared. Only generated content is used now.",
+  "settingsExtraConfigSaved": "Extra config saved.",
+  "settingsExtraConfigAlreadyBlank": "Extra config is already blank.",
+  "settingsExtraConfigClearing": "Clearing extra config...",
+  "settingsExtraConfigCleared": "Extra config cleared.",
+  "settingsInteractionPreferences": "Interaction preferences",
+  "settingsShowReasoning": "Show reasoning",
+  "settingsShowReasoningOn": "Reasoning display enabled.",
+  "settingsShowReasoningOff": "Reasoning display disabled.",
+  "settingsRunLogs": "Runtime logs",
+  "settingsRunLogsOn": "Runtime logs enabled.",
+  "settingsRunLogsOff": "Runtime logs disabled.",
+  "settingsLogRetentionDays": "Log retention: {days} days",
+  "@settingsLogRetentionDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsLogRetentionUpdated": "Log retention updated.",
+  "settingsSyncing": "Syncing settings"
+}

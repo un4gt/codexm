@@ -1,10 +1,41 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui';
 
 import '../../../shared/persistence/app_directory_service.dart';
 import '../../mcp/application/mcp_models.dart';
 import 'auth_store.dart';
 import 'auth_types.dart';
+
+class CodexLocalePreference {
+  const CodexLocalePreference._();
+
+  static const system = 'system';
+  static const english = 'en';
+  static const simplifiedChinese = 'zh_Hans';
+
+  static const values = <String>[system, english, simplifiedChinese];
+
+  static String normalize(String? value) {
+    final normalized = value?.trim();
+    if (normalized == english || normalized == simplifiedChinese) {
+      return normalized!;
+    }
+    return system;
+  }
+
+  static Locale? toLocale(String? value) {
+    switch (normalize(value)) {
+      case english:
+        return const Locale('en');
+      case simplifiedChinese:
+        return const Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hans');
+      case system:
+        return null;
+    }
+    return null;
+  }
+}
 
 class CodexSettings {
   const CodexSettings({
@@ -20,6 +51,7 @@ class CodexSettings {
     this.debugLogToFile = false,
     this.debugLogRetentionDays = 7,
     this.updateCheckOnLaunch = true,
+    this.appLocalePreference = CodexLocalePreference.system,
     this.enabledGlobalMcpServerIds = const <String>[],
     this.extraConfigToml,
   });
@@ -36,6 +68,7 @@ class CodexSettings {
   final bool debugLogToFile;
   final int debugLogRetentionDays;
   final bool updateCheckOnLaunch;
+  final String appLocalePreference;
   final List<String> enabledGlobalMcpServerIds;
   final String? extraConfigToml;
 
@@ -51,6 +84,7 @@ class CodexSettings {
     bool? debugLogToFile,
     int? debugLogRetentionDays,
     bool? updateCheckOnLaunch,
+    String? appLocalePreference,
     List<String>? enabledGlobalMcpServerIds,
     String? extraConfigToml,
     bool clearAuthRef = false,
@@ -72,6 +106,9 @@ class CodexSettings {
       debugLogRetentionDays:
           debugLogRetentionDays ?? this.debugLogRetentionDays,
       updateCheckOnLaunch: updateCheckOnLaunch ?? this.updateCheckOnLaunch,
+      appLocalePreference: CodexLocalePreference.normalize(
+        appLocalePreference ?? this.appLocalePreference,
+      ),
       enabledGlobalMcpServerIds:
           enabledGlobalMcpServerIds ?? this.enabledGlobalMcpServerIds,
       extraConfigToml: extraConfigToml ?? this.extraConfigToml,
@@ -92,6 +129,7 @@ class CodexSettings {
       'debugLogToFile': debugLogToFile,
       'debugLogRetentionDays': debugLogRetentionDays,
       'updateCheckOnLaunch': updateCheckOnLaunch,
+      'appLocalePreference': appLocalePreference,
       'enabledGlobalMcpServerIds': enabledGlobalMcpServerIds,
       'extraConfigToml': extraConfigToml,
     };
@@ -112,6 +150,9 @@ class CodexSettings {
       debugLogRetentionDays:
           (map['debugLogRetentionDays'] as num?)?.toInt() ?? 7,
       updateCheckOnLaunch: map['updateCheckOnLaunch'] as bool? ?? true,
+      appLocalePreference: CodexLocalePreference.normalize(
+        map['appLocalePreference']?.toString(),
+      ),
       enabledGlobalMcpServerIds: _normalizeStringList(
         map['enabledGlobalMcpServerIds'],
       ),

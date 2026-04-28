@@ -30,9 +30,12 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   codexm_native:
     path: packages/codexm_native
   flutter_secure_storage: ^9.2.4
+  intl: any
   path_provider: ^2.1.5
   uuid: ^4.5.1
   xml: ^6.5.0
@@ -57,6 +60,7 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  generate: true
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
