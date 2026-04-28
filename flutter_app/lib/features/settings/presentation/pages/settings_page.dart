@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../../../shared/widgets/adaptive_breakpoints.dart';
 import '../../../../shared/widgets/stitch_ui.dart';
-import '../../../codex/application/codex_skills_store.dart';
 import '../../../mcp/application/mcp_models.dart';
 import '../../../mcp/application/mcp_store.dart';
 import '../../../update/presentation/update_page.dart';
@@ -19,20 +18,15 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _settingsStore = CodexSettingsStore();
-  final _skillsStore = CodexSkillsStore();
   final _mcpStore = McpStore();
 
-  late final TextEditingController _skillNameController;
-  late final TextEditingController _skillContentController;
   late final TextEditingController _apiKeyController;
   late final TextEditingController _baseUrlController;
   late final TextEditingController _extraConfigTomlController;
 
-  String _status = '正在加载设置...';
+  String _status = '';
   CodexSettings _settings = const CodexSettings();
   bool _busy = false;
-  String? _skillsDirPath;
-  List<String> _installedSkills = const <String>[];
   String? _apiKeyValue;
   bool _apiKeyVisible = false;
   List<String> _availableModels = const <String>[];
@@ -47,8 +41,6 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
-    _skillNameController = TextEditingController();
-    _skillContentController = TextEditingController();
     _apiKeyController = TextEditingController();
     _baseUrlController = TextEditingController();
     _extraConfigTomlController = TextEditingController();
@@ -59,8 +51,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void dispose() {
-    _skillNameController.dispose();
-    _skillContentController.dispose();
     _apiKeyController.dispose();
     _baseUrlController.dispose();
     _extraConfigTomlController.dispose();
@@ -71,8 +61,6 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       final settings = await _settingsStore.getSettings();
       final apiKey = await _settingsStore.getCodexApiKey();
-      final skills = await _skillsStore.listInstalledSkills();
-      final skillsDir = await _skillsStore.skillsDir();
       final mcpServers = await _mcpStore.listServers();
       final preview = _settingsStore.previewCodexConfigToml(
         settings: settings,
@@ -92,14 +80,12 @@ class _SettingsPageState extends State<SettingsPage> {
       setState(() {
         _settings = settings;
         _mcpServers = mcpServers;
-        _installedSkills = skills;
-        _skillsDirPath = skillsDir.path;
         _apiKeyValue = apiKey;
         _configPreviewToml = preview.configToml.trimRight();
         _configWarnings = preview.warnings ?? const <String>[];
         _configPreviewValidationError = preview.validationError;
         _extraConfigValidationError = null;
-        _status = status ?? '已加载当前设置。';
+        _status = status ?? '';
       });
     } catch (error) {
       if (!mounted) {
@@ -336,123 +322,6 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _refreshSkills() {
-    return _runAction('正在刷新全局 skills...', () async {
-      await _skillsStore.listInstalledSkills();
-      return '已刷新全局 skills。';
-    });
-  }
-
-  Future<void> _loadSkillDraft(String name) {
-    final normalized = _skillsStore.normalizeSkillName(name);
-    if (normalized.isEmpty) {
-      setState(() {
-        _status = '读取失败：技能名称为空。';
-      });
-      return Future<void>.value();
-    }
-
-    return _runAction('正在读取全局技能...', () async {
-      final content = await _skillsStore.readSkill(normalized);
-      if (mounted) {
-        setState(() {
-          _skillNameController.text = normalized;
-          _skillContentController.text = content;
-        });
-      }
-      return '已载入全局技能：$normalized。';
-    });
-  }
-
-  void _clearSkillDraft() {
-    if (_busy) {
-      return;
-    }
-    setState(() {
-      _skillNameController.clear();
-      _skillContentController.clear();
-      _status = '已清空技能编辑草稿。';
-    });
-  }
-
-  Future<void> _saveSkillDraft() {
-    final normalized = _skillsStore.normalizeSkillName(
-      _skillNameController.text,
-    );
-    final content = _skillContentController.text.trim();
-    if (normalized.isEmpty) {
-      setState(() {
-        _status = '保存失败：请输入技能名称。';
-      });
-      return Future<void>.value();
-    }
-    if (content.isEmpty) {
-      setState(() {
-        _status = '保存失败：请输入技能内容。';
-      });
-      return Future<void>.value();
-    }
-
-    return _runAction('正在保存全局技能...', () async {
-      final savedName = await _skillsStore.writeSkill(
-        name: normalized,
-        content: content,
-      );
-      if (mounted) {
-        setState(() {
-          _skillNameController.text = savedName;
-          _skillContentController.text = content;
-        });
-      }
-      return '已保存全局技能：$savedName。';
-    });
-  }
-
-  Future<void> _confirmDeleteSkill() async {
-    final normalized = _skillsStore.normalizeSkillName(
-      _skillNameController.text,
-    );
-    if (normalized.isEmpty) {
-      setState(() {
-        _status = '删除失败：请先选择或填写技能名称。';
-      });
-      return;
-    }
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('删除全局技能'),
-          content: Text('确认删除技能「$normalized」吗？'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('删除'),
-            ),
-          ],
-        );
-      },
-    );
-    if (result != true) {
-      return;
-    }
-
-    await _runAction('正在删除全局技能...', () async {
-      await _skillsStore.deleteSkill(normalized);
-      if (mounted) {
-        setState(() {
-          _skillNameController.clear();
-          _skillContentController.clear();
-        });
-      }
-      return '已删除全局技能：$normalized。';
-    });
-  }
-
   Future<void> _openUpdatePage() async {
     await Navigator.of(
       context,
@@ -479,11 +348,12 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ],
       children: [
-        StitchInfoBanner(
-          icon: Icons.info_outline,
-          title: '设置状态',
-          subtitle: _status,
-        ),
+        if (_status.trim().isNotEmpty)
+          StitchInfoBanner(
+            icon: Icons.info_outline,
+            title: '设置状态',
+            subtitle: _status,
+          ),
         _UpdateEntrySection(busy: _busy, onOpenUpdatePage: _openUpdatePage),
         _ConnectionSection(
           apiKeyController: _apiKeyController,
@@ -527,18 +397,6 @@ class _SettingsPageState extends State<SettingsPage> {
           settings: _settings,
           busy: _busy,
           onUpdatePreference: _updatePreference,
-        ),
-        _SkillsSection(
-          installedSkills: _installedSkills,
-          skillsDirPath: _skillsDirPath,
-          busy: _busy,
-          skillNameController: _skillNameController,
-          skillContentController: _skillContentController,
-          onRefresh: _refreshSkills,
-          onClearDraft: _clearSkillDraft,
-          onLoadSkill: _loadSkillDraft,
-          onSaveSkill: _saveSkillDraft,
-          onDeleteSkill: _confirmDeleteSkill,
         ),
         if (_busy) const _BusySettingsCard(),
       ],

@@ -86,7 +86,16 @@ class MessageBubble extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(spec.icon, size: 14, color: spec.iconColor),
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: isStreaming
+                        ? CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: spec.iconColor,
+                          )
+                        : Icon(spec.icon, size: 14, color: spec.iconColor),
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -108,28 +117,6 @@ class MessageBubble extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               SimpleMarkdownView(content: content, showThinking: showThinking),
-              if (isStreaming) ...[
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '正在生成回复...',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
             ],
           ),
         ),

@@ -147,7 +147,7 @@ ThemeData buildAppTheme() {
       indicatorColor: colorScheme.primaryContainer,
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         return TextStyle(
-          fontSize: 12,
+          fontSize: 10,
           fontWeight: states.contains(WidgetState.selected)
               ? FontWeight.w700
               : FontWeight.w500,
@@ -156,6 +156,19 @@ ThemeData buildAppTheme() {
               : colorScheme.onSurfaceVariant,
         );
       }),
+    ),
+    navigationRailTheme: NavigationRailThemeData(
+      minWidth: 88,
+      selectedLabelTextStyle: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: colorScheme.onSurface,
+      ),
+      unselectedLabelTextStyle: TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w500,
+        color: colorScheme.onSurfaceVariant,
+      ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,

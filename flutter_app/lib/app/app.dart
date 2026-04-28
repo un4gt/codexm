@@ -57,7 +57,7 @@ class _AppShellState extends State<_AppShell> {
     NavigationDestination(
       icon: Icon(Icons.extension_outlined),
       selectedIcon: Icon(Icons.extension),
-      label: 'MCP',
+      label: 'MCP & Skills',
     ),
     NavigationDestination(
       icon: Icon(Icons.settings_outlined),
@@ -80,7 +80,7 @@ class _AppShellState extends State<_AppShell> {
     NavigationRailDestination(
       icon: Icon(Icons.extension_outlined),
       selectedIcon: Icon(Icons.extension),
-      label: Text('MCP'),
+      label: Text('MCP & Skills'),
     ),
     NavigationRailDestination(
       icon: Icon(Icons.settings_outlined),
