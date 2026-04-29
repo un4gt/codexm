@@ -30,7 +30,7 @@ class CodexRpcCall {
   final String? title;
 }
 
-enum CodexTurnEventType { text, status, error, rpcResult, done }
+enum CodexTurnEventType { text, messagePart, status, error, rpcResult, done }
 
 class CodexTurnEvent {
   const CodexTurnEvent._({
@@ -39,11 +39,31 @@ class CodexTurnEvent {
     this.message,
     this.method,
     this.result,
+    this.partId,
+    this.partKind,
+    this.partTitle,
+    this.partContent,
+    this.partStatus,
     this.isRetrying = false,
   });
 
   const CodexTurnEvent.text(String text)
     : this._(type: CodexTurnEventType.text, text: text);
+
+  const CodexTurnEvent.messagePart({
+    required String id,
+    required String kind,
+    required String title,
+    String content = '',
+    String? status,
+  }) : this._(
+         type: CodexTurnEventType.messagePart,
+         partId: id,
+         partKind: kind,
+         partTitle: title,
+         partContent: content,
+         partStatus: status,
+       );
 
   const CodexTurnEvent.error(String message)
     : this._(type: CodexTurnEventType.error, message: message);
@@ -71,6 +91,11 @@ class CodexTurnEvent {
   final String? message;
   final String? method;
   final Object? result;
+  final String? partId;
+  final String? partKind;
+  final String? partTitle;
+  final String? partContent;
+  final String? partStatus;
   final bool isRetrying;
 }
 

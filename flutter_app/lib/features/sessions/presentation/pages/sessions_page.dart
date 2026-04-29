@@ -65,6 +65,7 @@ class _SessionsPageState extends State<SessionsPage> {
   String? _runtimeStatus;
   bool _runtimeStatusIsRetrying = false;
   String _pendingAssistantText = '';
+  List<ChatMessagePart> _pendingAssistantParts = const <ChatMessagePart>[];
   int _pendingStartedAt = 0;
   int _legacySessionCount = 0;
   List<String> _installedSkills = const <String>[];
@@ -402,6 +403,7 @@ class _SessionsPageState extends State<SessionsPage> {
             runtimeStatus: _runtimeStatus,
             runtimeStatusIsRetrying: _runtimeStatusIsRetrying,
             pendingAssistantText: _pendingAssistantText,
+            pendingAssistantParts: _pendingAssistantParts,
             pendingStartedAt: _pendingStartedAt,
             scrollController: _messagesScrollController,
             composerController: _composerController,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../shared/widgets/adaptive_breakpoints.dart';
+import '../../application/session_models.dart';
 import 'simple_markdown_view.dart';
 
 class MessageBubble extends StatelessWidget {
@@ -10,14 +11,14 @@ class MessageBubble extends StatelessWidget {
     required this.content,
     required this.createdAt,
     required this.showThinking,
-    this.isStreaming = false,
+    this.parts = const <ChatMessagePart>[],
   });
 
   final String role;
   final String content;
   final int createdAt;
   final bool showThinking;
-  final bool isStreaming;
+  final List<ChatMessagePart> parts;
 
   @override
   Widget build(BuildContext context) {
@@ -70,6 +71,18 @@ class MessageBubble extends StatelessWidget {
       AdaptiveWidthClass.expanded => 760.0,
     };
 
+    if (role != 'user' && parts.isNotEmpty) {
+      return _StructuredAssistantMessage(
+        spec: spec,
+        content: content,
+        parts: parts,
+        createdAt: createdAt,
+        showThinking: showThinking,
+        maxWidth: maxBubbleWidth,
+        formatTime: _formatTime,
+      );
+    }
+
     return Align(
       alignment: spec.alignment,
       child: ConstrainedBox(
@@ -89,12 +102,7 @@ class MessageBubble extends StatelessWidget {
                   SizedBox(
                     width: 14,
                     height: 14,
-                    child: isStreaming
-                        ? CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: spec.iconColor,
-                          )
-                        : Icon(spec.icon, size: 14, color: spec.iconColor),
+                    child: Icon(spec.icon, size: 14, color: spec.iconColor),
                   ),
                   const SizedBox(width: 6),
                   Expanded(
@@ -159,6 +167,254 @@ class MessageBubble extends StatelessWidget {
       timeColor: scheme.onSurfaceVariant,
     );
   }
+}
+
+class _StructuredAssistantMessage extends StatelessWidget {
+  const _StructuredAssistantMessage({
+    required this.spec,
+    required this.content,
+    required this.parts,
+    required this.createdAt,
+    required this.showThinking,
+    required this.maxWidth,
+    required this.formatTime,
+  });
+
+  final _MessageSpec spec;
+  final String content;
+  final List<ChatMessagePart> parts;
+  final int createdAt;
+  final bool showThinking;
+  final double maxWidth;
+  final String Function(int millis) formatTime;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final visibleParts = [
+      if (content.trim().isNotEmpty)
+        ChatMessagePart(
+          id: 'assistant-text',
+          kind: 'agentText',
+          title: '回复',
+          content: content,
+          status: 'completed',
+        ),
+      ...parts.where(
+        (part) => part.content.trim().isNotEmpty || part.status != null,
+      ),
+    ];
+
+    return Align(
+      alignment: spec.alignment,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 2),
+                child: Row(
+                  children: [
+                    Icon(spec.icon, size: 14, color: spec.iconColor),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        spec.label,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: spec.labelColor,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      formatTime(createdAt),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color:
+                            spec.timeColor ??
+                            theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              for (final part in visibleParts)
+                _MessagePartCard(part: part, showThinking: showThinking),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MessagePartCard extends StatelessWidget {
+  const _MessagePartCard({required this.part, required this.showThinking});
+
+  final ChatMessagePart part;
+  final bool showThinking;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final spec = _partSpec(colorScheme, part.kind);
+    final content = part.content.trimRight();
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      decoration: BoxDecoration(
+        color: spec.backgroundColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: spec.borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(spec.icon, size: 16, color: spec.iconColor),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  part.title,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              ),
+              if (part.status != null) _PartStatusChip(status: part.status!),
+            ],
+          ),
+          if (content.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            if (_usesMonospace(part.kind))
+              SelectableText(
+                content,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurface,
+                  fontFamily: 'monospace',
+                  height: 1.35,
+                ),
+              )
+            else
+              SimpleMarkdownView(content: content, showThinking: showThinking),
+          ],
+        ],
+      ),
+    );
+  }
+
+  bool _usesMonospace(String kind) {
+    return kind == 'command' || kind == 'fileChange';
+  }
+
+  _PartVisualSpec _partSpec(ColorScheme colorScheme, String kind) {
+    return switch (kind) {
+      'reasoning' => _PartVisualSpec(
+        icon: Icons.lightbulb_outline,
+        iconColor: colorScheme.tertiary,
+        backgroundColor: colorScheme.tertiaryContainer.withValues(alpha: 0.22),
+        borderColor: colorScheme.tertiary.withValues(alpha: 0.22),
+      ),
+      'command' => _PartVisualSpec(
+        icon: Icons.terminal,
+        iconColor: colorScheme.primary,
+        backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.18),
+        borderColor: colorScheme.primary.withValues(alpha: 0.2),
+      ),
+      'fileChange' => _PartVisualSpec(
+        icon: Icons.description_outlined,
+        iconColor: colorScheme.secondary,
+        backgroundColor: colorScheme.secondaryContainer.withValues(alpha: 0.18),
+        borderColor: colorScheme.secondary.withValues(alpha: 0.22),
+      ),
+      'plan' => _PartVisualSpec(
+        icon: Icons.checklist_outlined,
+        iconColor: colorScheme.primary,
+        backgroundColor: colorScheme.surfaceContainerHigh.withValues(
+          alpha: 0.8,
+        ),
+        borderColor: colorScheme.outlineVariant,
+      ),
+      'agentText' => _PartVisualSpec(
+        icon: Icons.chat_bubble_outline,
+        iconColor: colorScheme.onSurfaceVariant,
+        backgroundColor: colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.3,
+        ),
+        borderColor: colorScheme.outlineVariant.withValues(alpha: 0.45),
+      ),
+      _ => _PartVisualSpec(
+        icon: Icons.build_outlined,
+        iconColor: colorScheme.onSurfaceVariant,
+        backgroundColor: colorScheme.surfaceContainerHigh.withValues(
+          alpha: 0.6,
+        ),
+        borderColor: colorScheme.outlineVariant,
+      ),
+    };
+  }
+}
+
+class _PartStatusChip extends StatelessWidget {
+  const _PartStatusChip({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final normalized = status.trim();
+    final failed = normalized == 'failed';
+    final inProgress = normalized == 'inProgress';
+    final label = switch (normalized) {
+      'inProgress' => '进行中',
+      'completed' => '完成',
+      'failed' => '失败',
+      'declined' => '已拒绝',
+      _ => normalized,
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: failed
+            ? colorScheme.errorContainer.withValues(alpha: 0.65)
+            : inProgress
+            ? colorScheme.primaryContainer.withValues(alpha: 0.5)
+            : colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: failed ? colorScheme.onErrorContainer : colorScheme.onSurface,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class _PartVisualSpec {
+  const _PartVisualSpec({
+    required this.icon,
+    required this.iconColor,
+    required this.backgroundColor,
+    required this.borderColor,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final Color backgroundColor;
+  final Color borderColor;
 }
 
 class _MessageSpec {

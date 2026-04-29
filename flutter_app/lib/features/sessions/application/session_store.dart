@@ -186,6 +186,7 @@ class SessionStore {
     SessionId sessionId, {
     required String role,
     required String content,
+    List<ChatMessagePart> parts = const <ChatMessagePart>[],
     int? createdAt,
   }) async {
     final all = await listMessages(workspaceId, sessionId);
@@ -196,6 +197,7 @@ class SessionStore {
       role: role,
       createdAt: createdAt ?? DateTime.now().millisecondsSinceEpoch,
       content: content,
+      parts: parts,
     );
     await _writeMessagesFile(workspaceId, sessionId, [...all, message]);
     await _updateSession(

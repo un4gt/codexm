@@ -78,6 +78,7 @@ class _ChatPanel extends StatelessWidget {
     required this.runtimeStatus,
     required this.runtimeStatusIsRetrying,
     required this.pendingAssistantText,
+    required this.pendingAssistantParts,
     required this.pendingStartedAt,
     required this.scrollController,
     required this.composerController,
@@ -109,6 +110,7 @@ class _ChatPanel extends StatelessWidget {
   final String? runtimeStatus;
   final bool runtimeStatusIsRetrying;
   final String pendingAssistantText;
+  final List<ChatMessagePart> pendingAssistantParts;
   final int pendingStartedAt;
   final ScrollController scrollController;
   final TextEditingController composerController;
@@ -176,6 +178,7 @@ class _ChatPanel extends StatelessWidget {
                 messages: messages,
                 showThinking: showThinking,
                 pendingAssistantText: pendingAssistantText,
+                pendingAssistantParts: pendingAssistantParts,
                 pendingStartedAt: pendingStartedAt,
                 scrollController: scrollController,
                 workspaceName: workspace.name,
@@ -423,6 +426,7 @@ class _MessageList extends StatelessWidget {
     required this.messages,
     required this.showThinking,
     required this.pendingAssistantText,
+    required this.pendingAssistantParts,
     required this.pendingStartedAt,
     required this.scrollController,
     required this.workspaceName,
@@ -432,6 +436,7 @@ class _MessageList extends StatelessWidget {
   final List<ChatMessage> messages;
   final bool showThinking;
   final String pendingAssistantText;
+  final List<ChatMessagePart> pendingAssistantParts;
   final int pendingStartedAt;
   final ScrollController scrollController;
   final String workspaceName;
@@ -439,7 +444,9 @@ class _MessageList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasStreaming = pendingAssistantText.trim().isNotEmpty;
+    final hasStreaming =
+        pendingAssistantText.trim().isNotEmpty ||
+        pendingAssistantParts.isNotEmpty;
     final widthClass = context.adaptiveWidthClass;
     final horizontalPadding = switch (widthClass) {
       AdaptiveWidthClass.compact => _SessionUiSpecs.compactHorizontalPadding,
@@ -476,6 +483,7 @@ class _MessageList extends StatelessWidget {
               content: message.content,
               createdAt: message.createdAt,
               showThinking: showThinking,
+              parts: message.parts,
             );
           }
           return MessageBubble(
@@ -483,7 +491,7 @@ class _MessageList extends StatelessWidget {
             content: pendingAssistantText,
             createdAt: pendingStartedAt,
             showThinking: showThinking,
-            isStreaming: true,
+            parts: pendingAssistantParts,
           );
         },
       ),

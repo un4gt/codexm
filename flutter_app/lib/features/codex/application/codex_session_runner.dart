@@ -14,6 +14,7 @@ import 'codex_launch_context_service.dart';
 import 'codex_models.dart';
 import 'codex_runtime_bridge.dart';
 import 'json_rpc_client.dart';
+import 'runtime_path_mapper.dart';
 
 class CodexSessionRunner {
   CodexSessionRunner({
@@ -71,6 +72,7 @@ class CodexSessionRunner {
       workspace: workspace,
       sessionId: sessionId,
     );
+    final pathMapper = RuntimePathMapper.fromLaunchContext(launchContext);
 
     final settings = launchContext.settings;
     final debugLogEnabled = settings.debugLogToFile;
@@ -149,6 +151,7 @@ class CodexSessionRunner {
     var pendingText = '';
     var sawAnyDelta = false;
     var lastFlushMs = _now().millisecondsSinceEpoch;
+    final messagePartInfoById = <String, _RuntimeMessagePartInfo>{};
 
     String? takeFlush({bool force = false}) {
       if (pendingText.isEmpty) {
@@ -165,8 +168,27 @@ class CodexSessionRunner {
     }
 
     String? pushDelta(String delta) {
-      pendingText += delta;
+      pendingText += pathMapper.realToVirtual(delta);
       return takeFlush();
+    }
+
+    CodexTurnEvent mappedText(String text) {
+      return CodexTurnEvent.text(pathMapper.realToVirtual(text));
+    }
+
+    CodexTurnEvent mappedStatus(String? message, {bool isRetrying = false}) {
+      return CodexTurnEvent.status(
+        message == null ? null : pathMapper.realToVirtual(message),
+        isRetrying: isRetrying,
+      );
+    }
+
+    CodexTurnEvent mappedError(String message) {
+      return CodexTurnEvent.error(pathMapper.realToVirtual(message));
+    }
+
+    CodexTurnEvent mappedEvent(CodexTurnEvent event) {
+      return pathMapper.sanitizeEvent(event);
     }
 
     try {
@@ -298,9 +320,9 @@ class CodexSessionRunner {
           if (call.emitText) {
             final title = call.title?.trim() ?? '';
             if (title.isNotEmpty) {
-              yield CodexTurnEvent.text('$title\n');
+              yield mappedText('$title\n');
             }
-            yield CodexTurnEvent.text(_formatJsonBlock(result));
+            yield mappedText(_formatJsonBlock(result));
           }
           if (call.method == 'thread/compact/start') {
             var compactDone = false;
@@ -325,7 +347,7 @@ class CodexSessionRunner {
 
         final tail = takeFlush(force: true);
         if (tail != null) {
-          yield CodexTurnEvent.text(tail);
+          yield mappedText(tail);
         }
         return;
       }
@@ -381,7 +403,7 @@ class CodexSessionRunner {
         if (pendingText.isNotEmpty && nowMs - lastFlushMs >= 33) {
           final chunk = takeFlush(force: true);
           if (chunk != null) {
-            yield CodexTurnEvent.text(chunk);
+            yield mappedText(chunk);
           }
         }
 
@@ -392,7 +414,7 @@ class CodexSessionRunner {
         if (notification == null) {
           final chunk = takeFlush(force: true);
           if (chunk != null) {
-            yield CodexTurnEvent.text(chunk);
+            yield mappedText(chunk);
           }
           if (notificationQueue.isClosed) {
             break;
@@ -417,26 +439,38 @@ class CodexSessionRunner {
         lastActivityMs = _now().millisecondsSinceEpoch;
         if (notification.method != 'error' && retryStatusActive) {
           retryStatusActive = false;
-          yield const CodexTurnEvent.status(null);
+          yield mappedStatus(null);
         }
 
-        if (notification.method == 'item/agentMessage/delta' ||
-            notification.method.endsWith('/outputDelta')) {
+        if (notification.method == 'item/agentMessage/delta') {
           final delta = _extractDelta(notification.params);
           if (delta != null && delta.isNotEmpty) {
             sawAnyDelta = true;
             final chunk = pushDelta(delta);
             if (chunk != null) {
-              yield CodexTurnEvent.text(chunk);
+              yield mappedText(chunk);
             }
           }
+          continue;
+        }
+
+        final messagePartEvent = _messagePartEventForNotification(
+          notification,
+          messagePartInfoById,
+        );
+        if (messagePartEvent != null) {
+          final chunk = takeFlush(force: true);
+          if (chunk != null) {
+            yield mappedText(chunk);
+          }
+          yield mappedEvent(messagePartEvent);
           continue;
         }
 
         if (notification.method == 'error') {
           final chunk = takeFlush(force: true);
           if (chunk != null) {
-            yield CodexTurnEvent.text(chunk);
+            yield mappedText(chunk);
           }
           final runtimeError = parseRuntimeNotificationError(
             notification.params,
@@ -448,7 +482,7 @@ class CodexSessionRunner {
               message: runtimeError.message,
               details: runtimeError.additionalDetails,
             );
-            yield CodexTurnEvent.status(runtimeError.message, isRetrying: true);
+            yield mappedStatus(runtimeError.message, isRetrying: true);
             continue;
           }
           retryStatusActive = false;
@@ -460,21 +494,33 @@ class CodexSessionRunner {
             details: stderrTail.isEmpty ? null : 'stderr:\n$stderrTail',
             flush: true,
           );
-          yield CodexTurnEvent.error(message);
+          yield mappedError(message);
           completed = true;
           continue;
         }
 
         if (notification.method == 'item/completed') {
           final item = _readItem(notification.params);
+          final messagePartEvent = _messagePartEventForCompletedItem(
+            notification.params,
+            item,
+            messagePartInfoById,
+          );
+          if (messagePartEvent != null) {
+            final chunk = takeFlush(force: true);
+            if (chunk != null) {
+              yield mappedText(chunk);
+            }
+            yield mappedEvent(messagePartEvent);
+          }
           if (item?['type'] == 'exitedReviewMode') {
             final review = item?['review']?.toString() ?? '';
             if (review.trim().isNotEmpty) {
               final chunk = takeFlush(force: true);
               if (chunk != null) {
-                yield CodexTurnEvent.text(chunk);
+                yield mappedText(chunk);
               }
-              yield CodexTurnEvent.text(review);
+              yield mappedText(review);
             }
           }
 
@@ -485,9 +531,9 @@ class CodexSessionRunner {
               if (full != null && full.isNotEmpty) {
                 final chunk = takeFlush(force: true);
                 if (chunk != null) {
-                  yield CodexTurnEvent.text(chunk);
+                  yield mappedText(chunk);
                 }
-                yield CodexTurnEvent.text(full);
+                yield mappedText(full);
                 sawAnyDelta = true;
               }
             }
@@ -498,7 +544,7 @@ class CodexSessionRunner {
         if (notification.method == 'turn/completed') {
           final chunk = takeFlush(force: true);
           if (chunk != null) {
-            yield CodexTurnEvent.text(chunk);
+            yield mappedText(chunk);
           }
           final turn = _readTurn(notification.params);
           final completedTurnId =
@@ -518,7 +564,7 @@ class CodexSessionRunner {
                 details: stderrTail.isEmpty ? null : 'stderr:\n$stderrTail',
                 flush: true,
               );
-              yield CodexTurnEvent.error(message);
+              yield mappedError(message);
             }
             completed = true;
           }
@@ -527,7 +573,7 @@ class CodexSessionRunner {
 
       final tail = takeFlush(force: true);
       if (tail != null) {
-        yield CodexTurnEvent.text(tail);
+        yield mappedText(tail);
       }
     } catch (error) {
       rpc.rejectAllPending(error);
@@ -543,7 +589,7 @@ class CodexSessionRunner {
         ].join('\n\n'),
         flush: true,
       );
-      yield CodexTurnEvent.error(messageForUser);
+      yield mappedError(messageForUser);
     } finally {
       pumpRunning = false;
       lineQueue.close();
@@ -610,6 +656,374 @@ class CodexSessionRunner {
     return null;
   }
 
+  CodexTurnEvent? _messagePartEventForNotification(
+    JsonRpcNotification notification,
+    Map<String, _RuntimeMessagePartInfo> partInfoById,
+  ) {
+    final method = notification.method;
+    if (method == 'item/completed') {
+      return null;
+    }
+
+    if (method == 'item/started') {
+      final item = _readItem(notification.params);
+      final info = _messagePartInfoForItem(item);
+      if (item == null || info == null) {
+        return null;
+      }
+      final id = _messagePartId(notification.params, info.kind);
+      partInfoById[id] = info;
+      return CodexTurnEvent.messagePart(
+        id: id,
+        kind: info.kind,
+        title: info.title,
+        content: _summarizeStartedItem(item),
+        status: _normalizeStatus(item['status']) ?? 'inProgress',
+      );
+    }
+
+    final isReasoningDelta =
+        method == 'item/reasoning/summaryTextDelta' ||
+        method == 'item/reasoning/textDelta';
+    if (isReasoningDelta) {
+      final delta = _extractDelta(notification.params);
+      if (delta == null || delta.isEmpty) {
+        return null;
+      }
+      final id = _reasoningPartId(notification.params);
+      return CodexTurnEvent.messagePart(
+        id: id,
+        kind: 'reasoning',
+        title: '思考过程',
+        content: delta,
+        status: 'inProgress',
+      );
+    }
+
+    if (method == 'item/reasoning/summaryPartAdded') {
+      return CodexTurnEvent.messagePart(
+        id: _reasoningPartId(notification.params),
+        kind: 'reasoning',
+        title: '思考过程',
+        content: '\n\n',
+        status: 'inProgress',
+      );
+    }
+
+    if (method == 'item/plan/delta') {
+      final delta = _extractDelta(notification.params);
+      if (delta == null || delta.isEmpty) {
+        return null;
+      }
+      return CodexTurnEvent.messagePart(
+        id: _messagePartId(notification.params, 'plan'),
+        kind: 'plan',
+        title: '计划',
+        content: delta,
+        status: 'inProgress',
+      );
+    }
+
+    if (method == 'turn/plan/updated') {
+      final text = _summarizePlan(notification.params);
+      if (text.isEmpty) {
+        return null;
+      }
+      return CodexTurnEvent.messagePart(
+        id: _messagePartId(notification.params, 'plan'),
+        kind: 'plan',
+        title: '计划',
+        content: text,
+        status: 'completed',
+      );
+    }
+
+    if (method == 'item/fileChange/patchUpdated') {
+      final content = _extractPatchText(notification.params);
+      if (content == null || content.isEmpty) {
+        return null;
+      }
+      final id = _messagePartId(notification.params, 'fileChange');
+      final info =
+          partInfoById[id] ??
+          const _RuntimeMessagePartInfo(kind: 'fileChange', title: '文件变更');
+      return CodexTurnEvent.messagePart(
+        id: id,
+        kind: info.kind,
+        title: info.title,
+        content: content,
+        status: 'inProgress',
+      );
+    }
+
+    if (method == 'item/mcpToolCall/progress') {
+      final content = _summarizeToolProgress(notification.params);
+      if (content.isEmpty) {
+        return null;
+      }
+      final id = _messagePartId(notification.params, 'toolCall');
+      final info =
+          partInfoById[id] ??
+          const _RuntimeMessagePartInfo(kind: 'toolCall', title: '工具调用');
+      return CodexTurnEvent.messagePart(
+        id: id,
+        kind: info.kind,
+        title: info.title,
+        content: content,
+        status: 'inProgress',
+      );
+    }
+
+    if (method.endsWith('/outputDelta')) {
+      final delta = _extractDelta(notification.params);
+      if (delta == null || delta.isEmpty) {
+        return null;
+      }
+      final id = _messagePartId(
+        notification.params,
+        method.contains('/commandExecution/')
+            ? 'command'
+            : method.contains('/fileChange/')
+            ? 'fileChange'
+            : 'toolCall',
+      );
+      final info = partInfoById[id] ?? _messagePartInfoForMethod(method);
+      return CodexTurnEvent.messagePart(
+        id: id,
+        kind: info.kind,
+        title: info.title,
+        content: delta,
+        status: 'inProgress',
+      );
+    }
+
+    return null;
+  }
+
+  CodexTurnEvent? _messagePartEventForCompletedItem(
+    Object? params,
+    Map<Object?, Object?>? item,
+    Map<String, _RuntimeMessagePartInfo> partInfoById,
+  ) {
+    final info = _messagePartInfoForItem(item);
+    if (item == null || info == null) {
+      return null;
+    }
+    final id = _messagePartId(params, info.kind);
+    partInfoById[id] = info;
+    return CodexTurnEvent.messagePart(
+      id: id,
+      kind: info.kind,
+      title: info.title,
+      content: _summarizeCompletedItem(item),
+      status: _normalizeStatus(item['status']) ?? 'completed',
+    );
+  }
+
+  _RuntimeMessagePartInfo _messagePartInfoForMethod(String method) {
+    if (method.contains('/commandExecution/')) {
+      return const _RuntimeMessagePartInfo(kind: 'command', title: '命令执行');
+    }
+    if (method.contains('/fileChange/')) {
+      return const _RuntimeMessagePartInfo(kind: 'fileChange', title: '文件变更');
+    }
+    if (method.contains('/reasoning/')) {
+      return const _RuntimeMessagePartInfo(kind: 'reasoning', title: '思考过程');
+    }
+    if (method.contains('/plan/')) {
+      return const _RuntimeMessagePartInfo(kind: 'plan', title: '计划');
+    }
+    return const _RuntimeMessagePartInfo(kind: 'toolCall', title: '工具调用');
+  }
+
+  _RuntimeMessagePartInfo? _messagePartInfoForItem(
+    Map<Object?, Object?>? item,
+  ) {
+    final type = item?['type']?.toString();
+    return switch (type) {
+      'commandExecution' => const _RuntimeMessagePartInfo(
+        kind: 'command',
+        title: '命令执行',
+      ),
+      'fileChange' => const _RuntimeMessagePartInfo(
+        kind: 'fileChange',
+        title: '文件变更',
+      ),
+      'mcpToolCall' || 'collabToolCall' || 'webSearch' =>
+        const _RuntimeMessagePartInfo(kind: 'toolCall', title: '工具调用'),
+      'reasoning' => const _RuntimeMessagePartInfo(
+        kind: 'reasoning',
+        title: '思考过程',
+      ),
+      'plan' => const _RuntimeMessagePartInfo(kind: 'plan', title: '计划'),
+      'contextCompaction' || 'modelVerification' =>
+        const _RuntimeMessagePartInfo(kind: 'event', title: '运行事件'),
+      _ => null,
+    };
+  }
+
+  String _messagePartId(Object? params, String fallbackKind) {
+    final map = _readMap(params);
+    final item = _readNestedMap(map, 'item');
+    final rawId = map?['itemId'] ?? map?['id'] ?? item?['id'];
+    final id = rawId?.toString().trim();
+    if (id != null && id.isNotEmpty) {
+      return id;
+    }
+    return '$fallbackKind:${map?['summaryIndex'] ?? 'current'}';
+  }
+
+  String _reasoningPartId(Object? params) {
+    final map = _readMap(params);
+    final itemId = _messagePartId(params, 'reasoning');
+    if (itemId != 'reasoning:current') {
+      return itemId;
+    }
+    return 'reasoning:${map?['summaryIndex'] ?? 'current'}';
+  }
+
+  String _summarizeStartedItem(Map<Object?, Object?> item) {
+    final type = item['type']?.toString();
+    if (type == 'commandExecution') {
+      final command = _stringFromValue(
+        item['command'] ?? item['cmd'] ?? item['argv'],
+      );
+      final cwd = _stringFromValue(item['cwd']);
+      if (command.isEmpty && cwd.isEmpty) {
+        return '';
+      }
+      final buffer = StringBuffer();
+      if (command.isNotEmpty) {
+        buffer.writeln('\$ $command');
+      }
+      if (cwd.isNotEmpty) {
+        buffer.writeln('cwd: $cwd');
+      }
+      return buffer.toString();
+    }
+    if (type == 'fileChange') {
+      final path = _stringFromValue(item['path']);
+      final kind = _stringFromValue(item['kind']);
+      if (path.isEmpty && kind.isEmpty) {
+        return '';
+      }
+      return [if (kind.isNotEmpty) kind, if (path.isNotEmpty) path].join(' ');
+    }
+    if (type == 'mcpToolCall' || type == 'collabToolCall') {
+      final server = _stringFromValue(item['server'] ?? item['serverName']);
+      final tool = _stringFromValue(
+        item['tool'] ?? item['toolName'] ?? item['name'],
+      );
+      return [
+        if (server.isNotEmpty) server,
+        if (tool.isNotEmpty) tool,
+      ].join(' / ');
+    }
+    if (type == 'webSearch') {
+      final query = _stringFromValue(item['query']);
+      return query.isEmpty ? '正在搜索网页。' : query;
+    }
+    return _stringFromValue(item['message'] ?? item['title']);
+  }
+
+  String _summarizeCompletedItem(Map<Object?, Object?> item) {
+    final status = _normalizeStatus(item['status']);
+    final output = _stringFromValue(item['output'] ?? item['result']);
+    final error = _stringFromValue(
+      item['error'] ?? _readNestedMap(item, 'error')?['message'],
+    );
+    final exitCode = _stringFromValue(item['exitCode']);
+    final buffer = StringBuffer();
+    if (output.isNotEmpty) {
+      buffer.writeln(output);
+    }
+    if (error.isNotEmpty) {
+      buffer.writeln(error);
+    }
+    if (status == 'failed' && exitCode.isNotEmpty) {
+      buffer.writeln('退出码：$exitCode');
+    }
+    return buffer.toString();
+  }
+
+  String _summarizePlan(Object? params) {
+    final map = _readMap(params);
+    final plan = map?['plan'] ?? map?['items'];
+    if (plan is List) {
+      final lines = <String>[];
+      for (final item in plan) {
+        if (item is Map) {
+          final step = _stringFromValue(item['step'] ?? item['text']);
+          final status = _stringFromValue(item['status']);
+          if (step.isNotEmpty) {
+            lines.add('- ${status.isEmpty ? step : '[$status] $step'}');
+          }
+        } else {
+          final line = _stringFromValue(item);
+          if (line.isNotEmpty) {
+            lines.add('- $line');
+          }
+        }
+      }
+      return lines.join('\n');
+    }
+    return _stringFromValue(map?['text'] ?? map?['message']);
+  }
+
+  String _summarizeToolProgress(Object? params) {
+    final map = _readMap(params);
+    return _stringFromValue(
+      map?['message'] ?? map?['text'] ?? map?['progress'],
+    );
+  }
+
+  String? _extractPatchText(Object? params) {
+    final map = _readMap(params);
+    final direct = _stringFromValue(
+      map?['diff'] ?? map?['patch'] ?? map?['text'],
+    );
+    if (direct.isNotEmpty) {
+      return direct;
+    }
+    final item = _readNestedMap(map, 'item');
+    final fromItem = _stringFromValue(item?['diff'] ?? item?['patch']);
+    return fromItem.isEmpty ? null : fromItem;
+  }
+
+  String? _normalizeStatus(Object? value) {
+    final status = value?.toString().trim();
+    return status == null || status.isEmpty ? null : status;
+  }
+
+  Map<Object?, Object?>? _readMap(Object? value) {
+    if (value is! Map) {
+      return null;
+    }
+    return Map<Object?, Object?>.from(value);
+  }
+
+  String _stringFromValue(Object? value) {
+    if (value == null) {
+      return '';
+    }
+    if (value is String) {
+      return value.trim();
+    }
+    if (value is Iterable) {
+      return value
+          .map(_stringFromValue)
+          .where((item) => item.isNotEmpty)
+          .join(' ');
+    }
+    if (value is Map) {
+      final text = value['text'] ?? value['message'] ?? value['content'];
+      if (text != null) {
+        return _stringFromValue(text);
+      }
+    }
+    return value.toString().trim();
+  }
+
   String _formatJsonBlock(Object? result) {
     String body;
     try {
@@ -646,12 +1060,21 @@ class CodexSessionRunner {
     if (params is! Map) {
       return null;
     }
-    final delta = params['delta'];
+    final delta = params['delta'] ?? params['chunk'] ?? params['output'];
     if (delta is String) {
       return delta;
     }
     if (delta is Map && delta['text'] is String) {
       return delta['text'] as String;
+    }
+    if (delta is Map && delta['output'] is String) {
+      return delta['output'] as String;
+    }
+    if (delta is Map && delta['stdout'] is String) {
+      return delta['stdout'] as String;
+    }
+    if (delta is Map && delta['stderr'] is String) {
+      return delta['stderr'] as String;
     }
     return null;
   }
@@ -712,4 +1135,11 @@ class CodexSessionRunner {
     final text = buffer.toString();
     return text.isEmpty ? null : text;
   }
+}
+
+class _RuntimeMessagePartInfo {
+  const _RuntimeMessagePartInfo({required this.kind, required this.title});
+
+  final String kind;
+  final String title;
 }

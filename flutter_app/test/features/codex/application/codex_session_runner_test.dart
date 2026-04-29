@@ -81,6 +81,35 @@ void main() {
     expect(events.last.type, CodexTurnEventType.done);
   });
 
+  test('splits app-server tool output into message parts', () async {
+    final bridge = _FakeRuntimeBridge(emitStructuredEvents: true);
+    final fixture = await _createRunnerFixture(bridge);
+    addTearDown(fixture.dispose);
+
+    final events = await fixture.runner
+        .run(
+          workspace: fixture.workspace,
+          sessionId: fixture.session.id,
+          input: '列出文件',
+        )
+        .toList();
+
+    final text = events
+        .where((event) => event.type == CodexTurnEventType.text)
+        .map((event) => event.text ?? '')
+        .join();
+    final parts = events
+        .where((event) => event.type == CodexTurnEventType.messagePart)
+        .toList();
+
+    expect(text, 'hello world');
+    expect(parts.map((event) => event.partKind), contains('command'));
+    final partText = parts.map((event) => event.partContent ?? '').join();
+    expect(partText, contains('/workspace/pubspec.yaml'));
+    expect(partText, isNot(contains('/data/')));
+    expect(events.last.type, CodexTurnEventType.done);
+  });
+
   test('turns retry limit notification into a final error', () async {
     final bridge = _FakeRuntimeBridge(
       emitRetryBeforeResponse: true,
@@ -121,16 +150,19 @@ class _FakeRuntimeBridge implements CodexRuntimeBridge {
   _FakeRuntimeBridge({
     this.emitRetryBeforeResponse = false,
     this.failAfterRetry = false,
+    this.emitStructuredEvents = false,
   });
 
   final bool emitRetryBeforeResponse;
   final bool failAfterRetry;
+  final bool emitStructuredEvents;
 
   final StreamController<RuntimeLineEvent> _controller =
       StreamController<RuntimeLineEvent>.broadcast();
 
   Map<String, String>? startedEnv;
   String? _runtimeId;
+  String? structuredRepoPath;
 
   @override
   Stream<RuntimeLineEvent> runtimeLineEvents() => _controller.stream;
@@ -213,6 +245,44 @@ class _FakeRuntimeBridge implements CodexRuntimeBridge {
               }),
             );
             return;
+          }
+          if (emitStructuredEvents) {
+            final repoPath = structuredRepoPath ?? '/data/user/0/app/repo';
+            _emit(
+              jsonEncode(<String, Object?>{
+                'method': 'item/started',
+                'params': <String, Object?>{
+                  'item': <String, Object?>{
+                    'id': 'cmd_1',
+                    'type': 'commandExecution',
+                    'status': 'inProgress',
+                    'command': 'ls',
+                    'cwd': repoPath,
+                  },
+                },
+              }),
+            );
+            _emit(
+              jsonEncode(<String, Object?>{
+                'method': 'item/commandExecution/outputDelta',
+                'params': <String, Object?>{
+                  'itemId': 'cmd_1',
+                  'delta': '$repoPath/pubspec.yaml\n$repoPath/lib\n',
+                },
+              }),
+            );
+            _emit(
+              jsonEncode(<String, Object?>{
+                'method': 'item/completed',
+                'params': const <String, Object?>{
+                  'item': <String, Object?>{
+                    'id': 'cmd_1',
+                    'type': 'commandExecution',
+                    'status': 'completed',
+                  },
+                },
+              }),
+            );
           }
           _emit(
             jsonEncode(<String, Object?>{
@@ -312,6 +382,8 @@ Future<_RunnerFixture> _createRunnerFixture(_FakeRuntimeBridge bridge) async {
     const CodexSettings(model: 'gpt-test', debugLogToFile: true),
   );
   await settingsStore.saveCodexApiKey('sk-test-1234567890');
+  final paths = await workspaceDirectoryService.pathsFor(workspace.id);
+  bridge.structuredRepoPath = paths.repoDir.path;
 
   final runner = CodexSessionRunner(
     launchContextService: CodexLaunchContextService(

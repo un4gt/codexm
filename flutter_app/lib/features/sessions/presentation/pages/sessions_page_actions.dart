@@ -1044,12 +1044,60 @@ extension _SessionsPageActions on _SessionsPageState {
 
     final startedAt = DateTime.now().millisecondsSinceEpoch;
     final buffer = StringBuffer();
+    var assistantParts = <ChatMessagePart>[];
     String? errorMessage;
     Session? session;
+
+    void mergeAssistantPart(CodexTurnEvent event) {
+      final id = event.partId?.trim();
+      final kind = event.partKind?.trim();
+      final title = event.partTitle?.trim();
+      if (id == null ||
+          id.isEmpty ||
+          kind == null ||
+          kind.isEmpty ||
+          title == null ||
+          title.isEmpty) {
+        return;
+      }
+
+      final content = event.partContent ?? '';
+      final status = event.partStatus?.trim();
+      final existingIndex = assistantParts.indexWhere((part) => part.id == id);
+      if (existingIndex == -1) {
+        if (content.isEmpty && status != 'inProgress') {
+          return;
+        }
+        assistantParts = [
+          ...assistantParts,
+          ChatMessagePart(
+            id: id,
+            kind: kind,
+            title: title,
+            content: content,
+            status: status,
+          ),
+        ];
+        return;
+      }
+
+      final current = assistantParts[existingIndex];
+      final next = current.copyWith(
+        title: title,
+        content: '${current.content}$content',
+        status: status?.isEmpty == true ? current.status : status,
+      );
+      assistantParts = [
+        ...assistantParts.take(existingIndex),
+        next,
+        ...assistantParts.skip(existingIndex + 1),
+      ];
+    }
 
     _updateView(() {
       _running = true;
       _pendingAssistantText = '';
+      _pendingAssistantParts = const <ChatMessagePart>[];
       _pendingStartedAt = startedAt;
       _runtimeStatus = null;
       _runtimeStatusIsRetrying = false;
@@ -1100,6 +1148,12 @@ extension _SessionsPageActions on _SessionsPageState {
               _pendingAssistantText = buffer.toString();
             });
             _scrollToBottom(animated: false);
+          case CodexTurnEventType.messagePart:
+            mergeAssistantPart(event);
+            _updateView(() {
+              _pendingAssistantParts = assistantParts;
+            });
+            _scrollToBottom(animated: false);
           case CodexTurnEventType.status:
             final message = event.message?.trim() ?? '';
             _updateView(() {
@@ -1132,12 +1186,14 @@ extension _SessionsPageActions on _SessionsPageState {
     ChatMessage? systemMessage;
     final activeSession = session;
     final assistantText = buffer.toString().trimRight();
-    if (activeSession != null && assistantText.isNotEmpty) {
+    if (activeSession != null &&
+        (assistantText.isNotEmpty || assistantParts.isNotEmpty)) {
       assistantMessage = await _sessionStore.appendMessage(
         workspace.id,
         activeSession.id,
         role: 'assistant',
         content: assistantText,
+        parts: assistantParts,
         createdAt: startedAt,
       );
     }
@@ -1163,6 +1219,7 @@ extension _SessionsPageActions on _SessionsPageState {
     _updateView(() {
       _running = false;
       _pendingAssistantText = '';
+      _pendingAssistantParts = const <ChatMessagePart>[];
       _pendingStartedAt = 0;
       _runtimeStatus = null;
       _runtimeStatusIsRetrying = false;
