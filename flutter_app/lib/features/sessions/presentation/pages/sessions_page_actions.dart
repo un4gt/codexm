@@ -907,7 +907,7 @@ extension _SessionsPageActions on _SessionsPageState {
             _updateView(() {
               _pendingMentions = next;
             });
-            return '已标记文件：$trimmed\n下一条消息会自动附带该文件上下文。';
+            return '已标记文件：$label\n下一条消息会自动附带该文件上下文。';
           },
         );
         return true;
@@ -1065,56 +1065,9 @@ extension _SessionsPageActions on _SessionsPageState {
     }
 
     final startedAt = DateTime.now().millisecondsSinceEpoch;
-    final buffer = StringBuffer();
-    var assistantParts = <ChatMessagePart>[];
+    final accumulator = AssistantPartAccumulator();
     String? errorMessage;
     Session? session;
-
-    void mergeAssistantPart(CodexTurnEvent event) {
-      final id = event.partId?.trim();
-      final kind = event.partKind?.trim();
-      final title = event.partTitle?.trim();
-      if (id == null ||
-          id.isEmpty ||
-          kind == null ||
-          kind.isEmpty ||
-          title == null ||
-          title.isEmpty) {
-        return;
-      }
-
-      final content = event.partContent ?? '';
-      final status = event.partStatus?.trim();
-      final existingIndex = assistantParts.indexWhere((part) => part.id == id);
-      if (existingIndex == -1) {
-        if (content.isEmpty && status != 'inProgress') {
-          return;
-        }
-        assistantParts = [
-          ...assistantParts,
-          ChatMessagePart(
-            id: id,
-            kind: kind,
-            title: title,
-            content: content,
-            status: status,
-          ),
-        ];
-        return;
-      }
-
-      final current = assistantParts[existingIndex];
-      final next = current.copyWith(
-        title: title,
-        content: '${current.content}$content',
-        status: status?.isEmpty == true ? current.status : status,
-      );
-      assistantParts = [
-        ...assistantParts.take(existingIndex),
-        next,
-        ...assistantParts.skip(existingIndex + 1),
-      ];
-    }
 
     _updateView(() {
       _running = true;
@@ -1131,11 +1084,12 @@ extension _SessionsPageActions on _SessionsPageState {
       session = ensuredSession;
       final message = userMessage?.blankAsNull;
       if (message != null) {
+        final displayMessage = await _displayTextForActiveWorkspace(message);
         await _sessionStore.appendMessage(
           workspace.id,
           ensuredSession.id,
           role: 'user',
-          content: message,
+          content: displayMessage,
         );
       }
 
@@ -1165,15 +1119,22 @@ extension _SessionsPageActions on _SessionsPageState {
 
         switch (event.type) {
           case CodexTurnEventType.text:
-            buffer.write(event.text ?? '');
+            accumulator.appendText(event.text ?? '');
             _updateView(() {
-              _pendingAssistantText = buffer.toString();
+              _pendingAssistantText = accumulator.text;
+              _pendingAssistantParts = accumulator.parts;
             });
             _scrollToBottom(animated: false);
           case CodexTurnEventType.messagePart:
-            mergeAssistantPart(event);
+            accumulator.mergePart(
+              id: event.partId,
+              kind: event.partKind,
+              title: event.partTitle,
+              content: event.partContent ?? '',
+              status: event.partStatus,
+            );
             _updateView(() {
-              _pendingAssistantParts = assistantParts;
+              _pendingAssistantParts = accumulator.parts;
             });
             _scrollToBottom(animated: false);
           case CodexTurnEventType.status:
@@ -1207,7 +1168,8 @@ extension _SessionsPageActions on _SessionsPageState {
     ChatMessage? assistantMessage;
     ChatMessage? systemMessage;
     final activeSession = session;
-    final assistantText = buffer.toString().trimRight();
+    final assistantText = accumulator.text.trimRight();
+    final assistantParts = accumulator.parts;
     if (activeSession != null &&
         (assistantText.isNotEmpty || assistantParts.isNotEmpty)) {
       assistantMessage = await _sessionStore.appendMessage(
@@ -1220,12 +1182,16 @@ extension _SessionsPageActions on _SessionsPageState {
       );
     }
     if (activeSession != null && errorMessage?.trim().isNotEmpty == true) {
+      final displayError = await _displayTextForActiveWorkspace(
+        errorMessage!.trim(),
+      );
       systemMessage = await _sessionStore.appendMessage(
         workspace.id,
         activeSession.id,
         role: 'system',
-        content: errorMessage!.trim(),
+        content: displayError,
       );
+      errorMessage = displayError;
     }
     final updatedSessions = activeSession == null
         ? null

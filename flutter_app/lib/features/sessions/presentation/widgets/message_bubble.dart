@@ -71,7 +71,8 @@ class MessageBubble extends StatelessWidget {
       AdaptiveWidthClass.expanded => 760.0,
     };
 
-    if (role != 'user' && parts.isNotEmpty) {
+    final hasStructuredParts = parts.any((part) => part.kind != 'agentText');
+    if (role != 'user' && hasStructuredParts) {
       return _StructuredAssistantMessage(
         spec: spec,
         content: content,
@@ -82,6 +83,13 @@ class MessageBubble extends StatelessWidget {
         formatTime: _formatTime,
       );
     }
+
+    final plainContent = content.trim().isNotEmpty
+        ? content
+        : parts
+              .where((part) => part.kind == 'agentText')
+              .map((part) => part.content)
+              .join();
 
     return Align(
       alignment: spec.alignment,
@@ -124,7 +132,10 @@ class MessageBubble extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 6),
-              SimpleMarkdownView(content: content, showThinking: showThinking),
+              SimpleMarkdownView(
+                content: plainContent,
+                showThinking: showThinking,
+              ),
             ],
           ),
         ),
@@ -191,8 +202,11 @@ class _StructuredAssistantMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final hasOrderedText = parts.any(
+      (part) => part.kind == 'agentText' && part.content.trim().isNotEmpty,
+    );
     final visibleParts = [
-      if (content.trim().isNotEmpty)
+      if (!hasOrderedText && content.trim().isNotEmpty)
         ChatMessagePart(
           id: 'assistant-text',
           kind: 'agentText',

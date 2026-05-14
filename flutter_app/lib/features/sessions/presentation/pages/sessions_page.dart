@@ -14,6 +14,7 @@ import '../../../settings/application/codex_settings_store.dart';
 import '../../../workspaces/application/workspace_models.dart';
 import '../../../workspaces/application/workspace_paths.dart';
 import '../../../workspaces/application/workspace_store.dart';
+import '../../application/assistant_part_accumulator.dart';
 import '../../application/session_composer_logic.dart';
 import '../../application/session_models.dart';
 import '../../application/session_store.dart';

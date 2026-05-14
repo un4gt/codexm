@@ -102,12 +102,40 @@ void main() {
         .where((event) => event.type == CodexTurnEventType.messagePart)
         .toList();
 
-    expect(text, 'hello world');
+    expect(text, '准备执行命令。hello world');
     expect(parts.map((event) => event.partKind), contains('command'));
     final partText = parts.map((event) => event.partContent ?? '').join();
     expect(partText, contains('/workspace/pubspec.yaml'));
     expect(partText, isNot(contains('/data/')));
     expect(events.last.type, CodexTurnEventType.done);
+  });
+
+  test('keeps text and command events in protocol order', () async {
+    final bridge = _FakeRuntimeBridge(emitStructuredEvents: true);
+    final fixture = await _createRunnerFixture(bridge);
+    addTearDown(fixture.dispose);
+
+    final events = await fixture.runner
+        .run(
+          workspace: fixture.workspace,
+          sessionId: fixture.session.id,
+          input: '列出文件',
+        )
+        .where(
+          (event) =>
+              event.type == CodexTurnEventType.text ||
+              event.type == CodexTurnEventType.messagePart,
+        )
+        .toList();
+
+    expect(events.first.type, CodexTurnEventType.text);
+    expect(events.first.text, '准备执行命令。');
+    expect(
+      events.skip(1).take(3).map((event) => event.partKind),
+      everyElement('command'),
+    );
+    expect(events.last.type, CodexTurnEventType.text);
+    expect(events.last.text, 'hello world');
   });
 
   test('turns retry limit notification into a final error', () async {
@@ -248,6 +276,14 @@ class _FakeRuntimeBridge implements CodexRuntimeBridge {
           }
           if (emitStructuredEvents) {
             final repoPath = structuredRepoPath ?? '/data/user/0/app/repo';
+            _emit(
+              jsonEncode(<String, Object?>{
+                'method': 'item/agentMessage/delta',
+                'params': const <String, Object?>{
+                  'delta': <String, Object?>{'text': '准备执行命令。'},
+                },
+              }),
+            );
             _emit(
               jsonEncode(<String, Object?>{
                 'method': 'item/started',
