@@ -2,14 +2,14 @@ import 'package:codexm_native/codexm_native.dart';
 
 import '../../codex/application/codex_models.dart';
 import '../../codex/application/codex_slash_commands.dart';
+import '../../codex/application/runtime_path_mapper.dart';
+import '../../workspaces/application/workspace_paths.dart';
 
 enum ComposerMentionKind { file, commit }
 
 class ComposerPendingMention {
-  const ComposerPendingMention.file({
-    required this.label,
-    required this.value,
-  }) : kind = ComposerMentionKind.file;
+  const ComposerPendingMention.file({required this.label, required this.value})
+    : kind = ComposerMentionKind.file;
 
   const ComposerPendingMention.commit({
     required this.label,
@@ -87,7 +87,9 @@ List<CodexSlashCommand> filterSlashCommands(String input) {
     return visibleCodexSlashCommands;
   }
   return visibleCodexSlashCommands
-      .where((item) => item.command.substring(1).toLowerCase().startsWith(query))
+      .where(
+        (item) => item.command.substring(1).toLowerCase().startsWith(query),
+      )
       .toList(growable: false);
 }
 
@@ -153,7 +155,10 @@ List<ComposerMentionSuggestion> filterMentionSuggestions({
 }
 
 List<String> extractSkillNames(String text, Iterable<String> installedSkills) {
-  final known = installedSkills.map((item) => item.trim()).where((item) => item.isNotEmpty).toSet();
+  final known = installedSkills
+      .map((item) => item.trim())
+      .where((item) => item.isNotEmpty)
+      .toSet();
   if (known.isEmpty) {
     return const <String>[];
   }
@@ -165,7 +170,10 @@ List<String> extractSkillNames(String text, Iterable<String> installedSkills) {
   return tokens.toList(growable: false);
 }
 
-String buildUserFacingInput(String text, List<ComposerPendingMention> mentions) {
+String buildUserFacingInput(
+  String text,
+  List<ComposerPendingMention> mentions,
+) {
   if (mentions.isEmpty) {
     return text.trim();
   }
@@ -179,4 +187,29 @@ String buildUserFacingInput(String text, List<ComposerPendingMention> mentions) 
     }
   }
   return buffer.toString().trimRight();
+}
+
+String displayPathForWorkspace(WorkspacePaths paths, String rawPath) {
+  final hasFileScheme = rawPath.trim().startsWith('file://');
+  final value = rawPath.trim().replaceFirst(RegExp(r'^file://'), '');
+  if (value.isEmpty) {
+    return value;
+  }
+
+  final mapper = RuntimePathMapper(
+    workspaceRepoDir: paths.repoDir.path,
+    codexHomeDir: paths.codexHomeDir.path,
+    tmpDir: paths.tmpDir.path,
+  );
+  final mapped = mapper.realToVirtual(value);
+  if (mapped == RuntimePathMapper.workspaceAlias) {
+    return RuntimePathMapper.workspaceAlias;
+  }
+  if (mapped.startsWith('${RuntimePathMapper.workspaceAlias}/')) {
+    return mapped.substring(RuntimePathMapper.workspaceAlias.length + 1);
+  }
+  if (!hasFileScheme && !value.startsWith('/')) {
+    return value;
+  }
+  return mapped;
 }

@@ -47,6 +47,39 @@ void main() {
     );
   });
 
+  test('maps repo paths inside markdown links', () {
+    final mapper = RuntimePathMapper(
+      workspaceRepoDir:
+          '/data/user/0/com.unsafe.codexm.flutterapp/app_flutter/workspaces/ws_1/repo',
+      codexHomeDir:
+          '/data/user/0/com.unsafe.codexm.flutterapp/app_flutter/workspaces/ws_1/.meta/codex',
+      tmpDir:
+          '/data/user/0/com.unsafe.codexm.flutterapp/cache/workspaces/ws_1/tmp',
+    );
+
+    final text = mapper.realToVirtual(
+      '[main.dart](/data/user/0/com.unsafe.codexm.flutterapp/app_flutter/workspaces/ws_1/repo/flutter_app/lib/main.dart)',
+    );
+
+    expect(text, '[main.dart](/workspace/flutter_app/lib/main.dart)');
+    expect(text, isNot(contains('/data/user/0/')));
+  });
+
+  test('hides android private data prefix for unknown app paths', () {
+    final mapper = RuntimePathMapper(
+      workspaceRepoDir: '/real/repo',
+      codexHomeDir: '/real/home',
+      tmpDir: '/real/tmp',
+    );
+
+    final text = mapper.realToVirtual(
+      '/data/user/0/com.unsafe.codexm.flutterapp/app_flutter/other/file.txt',
+    );
+
+    expect(text, '/app/app_flutter/other/file.txt');
+    expect(text, isNot(contains('/data/user/0/')));
+  });
+
   test('maps aliases back to real paths for future outbound use', () {
     final mapper = RuntimePathMapper(
       workspaceRepoDir: '/real/repo',

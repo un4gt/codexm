@@ -300,19 +300,34 @@ extension _SessionsPageActions on _SessionsPageState {
     }
 
     final session = await _ensureSession(titleHint: titleHint);
+    final displayContent = await _displayTextForActiveWorkspace(content);
+    final displayUserInput = await _displayTextForActiveWorkspace(userInput);
     await _sessionStore.appendMessage(
       workspace.id,
       session.id,
       role: 'user',
-      content: userInput,
+      content: displayUserInput,
     );
     await _sessionStore.appendMessage(
       workspace.id,
       session.id,
       role: assistantRole,
-      content: content,
+      content: displayContent,
     );
-    await _refresh(status: status ?? _firstStatusLine(content));
+    await _refresh(status: status ?? _firstStatusLine(displayContent));
+  }
+
+  Future<String> _displayTextForActiveWorkspace(String value) async {
+    final workspace = _activeWorkspace;
+    if (workspace == null || value.trim().isEmpty) {
+      return value;
+    }
+    final paths = await _workspaceDirectoryService.pathsFor(workspace.id);
+    return RuntimePathMapper(
+      workspaceRepoDir: paths.repoDir.path,
+      codexHomeDir: paths.codexHomeDir.path,
+      tmpDir: paths.tmpDir.path,
+    ).realToVirtual(value);
   }
 
   String _firstStatusLine(String content) {
@@ -872,6 +887,13 @@ extension _SessionsPageActions on _SessionsPageState {
             if (trimmed.isEmpty) {
               return '路径为空：用法 /mention <path>';
             }
+            final workspace = _activeWorkspace;
+            final label = workspace == null
+                ? trimmed
+                : displayPathForWorkspace(
+                    await _workspaceDirectoryService.pathsFor(workspace.id),
+                    trimmed,
+                  );
             final next = [..._pendingMentions];
             if (!next.any(
               (item) =>
@@ -879,7 +901,7 @@ extension _SessionsPageActions on _SessionsPageState {
                   item.value == trimmed,
             )) {
               next.add(
-                ComposerPendingMention.file(label: trimmed, value: trimmed),
+                ComposerPendingMention.file(label: label, value: trimmed),
               );
             }
             _updateView(() {

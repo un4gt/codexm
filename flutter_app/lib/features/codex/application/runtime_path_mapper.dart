@@ -31,6 +31,9 @@ class RuntimePathMapper {
   static final _androidRuntimeBinPattern = RegExp(
     r'/(?:data/user/\d+|data/data)/[^/\s:,"\)\]\}]+/files/codexm/bin/[^/\s:,"\)\]\}]+',
   );
+  static final _androidPrivateDataPattern = RegExp(
+    r'/(?:data/user/\d+|data/data)/[^/\s:,"\)\]\}]+',
+  );
 
   final List<_PathAlias> _aliases;
 
@@ -43,7 +46,8 @@ class RuntimePathMapper {
         virtualPrefix: alias.virtualPath,
       );
     }
-    return output.replaceAll(_androidRuntimeBinPattern, runtimeBinAlias);
+    output = output.replaceAll(_androidRuntimeBinPattern, runtimeBinAlias);
+    return output.replaceAll(_androidPrivateDataPattern, '/app');
   }
 
   String virtualToReal(String input) {
