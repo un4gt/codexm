@@ -56,6 +56,7 @@ List<_MarkdownBlock> _parseBlocks(String content) {
   final blocks = <_MarkdownBlock>[];
   final paragraph = <String>[];
   final quote = <String>[];
+  final listItems = <String>[];
   final fenced = <String>[];
   final thinking = <String>[];
 
@@ -87,6 +88,20 @@ List<_MarkdownBlock> _parseBlocks(String content) {
       ),
     );
     quote.clear();
+  }
+
+  void flushList() {
+    if (listItems.isEmpty) {
+      return;
+    }
+    blocks.add(
+      _MarkdownBlock(
+        type: _MarkdownBlockType.unorderedList,
+        text: '',
+        items: List<String>.from(listItems),
+      ),
+    );
+    listItems.clear();
   }
 
   void flushFence() {
@@ -145,6 +160,7 @@ List<_MarkdownBlock> _parseBlocks(String content) {
     if (trimmed == '<thinking>' || trimmed == '<think>') {
       flushParagraph();
       flushQuote();
+      flushList();
       inThinkingTag = true;
       continue;
     }
@@ -152,6 +168,7 @@ List<_MarkdownBlock> _parseBlocks(String content) {
     if (trimmed.startsWith('```')) {
       flushParagraph();
       flushQuote();
+      flushList();
       inFence = true;
       fenceLanguage = trimmed.substring(3).trim().toLowerCase();
       continue;
@@ -159,6 +176,7 @@ List<_MarkdownBlock> _parseBlocks(String content) {
 
     if (trimmed.startsWith('>')) {
       flushParagraph();
+      flushList();
       quote.add(trimmed.substring(1).trimLeft());
       continue;
     }
@@ -166,14 +184,30 @@ List<_MarkdownBlock> _parseBlocks(String content) {
     if (trimmed.isEmpty) {
       flushParagraph();
       flushQuote();
+      flushList();
       continue;
     }
 
+    final unorderedMatch = RegExp(r'^\s*[-*+]\s+(.+)$').firstMatch(line);
+    if (unorderedMatch != null) {
+      flushParagraph();
+      flushQuote();
+      listItems.add(unorderedMatch.group(1)!.trimRight());
+      continue;
+    }
+
+    if (listItems.isNotEmpty && line.startsWith(RegExp(r'\s'))) {
+      listItems[listItems.length - 1] = '${listItems.last}\n${line.trimLeft()}';
+      continue;
+    }
+
+    flushList();
     paragraph.add(line);
   }
 
   flushParagraph();
   flushQuote();
+  flushList();
   flushFence();
   flushThinkingTag();
   return blocks;
@@ -189,22 +223,16 @@ class _MarkdownBlockView extends StatelessWidget {
     switch (block.type) {
       case _MarkdownBlockType.paragraph:
         return SelectableText.rich(
-          TextSpan(
-            children: _inlineSpans(
-              context,
-              block.text,
-            ),
-          ),
+          TextSpan(children: _inlineSpans(context, block.text)),
         );
       case _MarkdownBlockType.quote:
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Theme.of(context)
-                .colorScheme
-                .surfaceContainerHighest
-                .withValues(alpha: 0.5),
+            color: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(16),
             border: Border(
               left: BorderSide(
@@ -215,6 +243,35 @@ class _MarkdownBlockView extends StatelessWidget {
           ),
           child: SelectableText(block.text),
         );
+      case _MarkdownBlockType.unorderedList:
+        final items = block.items.isNotEmpty
+            ? block.items
+            : block.text.split('\n');
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var index = 0; index < items.length; index += 1) ...[
+              if (index > 0) const SizedBox(height: 6),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 18,
+                    child: Text(
+                      '•',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
+                  Expanded(
+                    child: SelectableText.rich(
+                      TextSpan(children: _inlineSpans(context, items[index])),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        );
       case _MarkdownBlockType.code:
       case _MarkdownBlockType.thinking:
         return _CodeLikeBlockView(block: block);
@@ -223,30 +280,26 @@ class _MarkdownBlockView extends StatelessWidget {
 
   List<InlineSpan> _inlineSpans(BuildContext context, String text) {
     final spans = <InlineSpan>[];
-    final matches = RegExp(r'`([^`]+)`').allMatches(text).toList(growable: false);
+    final matches = RegExp(
+      r'`([^`]+)`',
+    ).allMatches(text).toList(growable: false);
     if (matches.isEmpty) {
       return <InlineSpan>[TextSpan(text: text)];
     }
 
     var cursor = 0;
     final codeStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
-          fontFamily: 'monospace',
-          backgroundColor: Theme.of(context)
-              .colorScheme
-              .surfaceContainerHighest
-              .withValues(alpha: 0.7),
-        );
+      fontFamily: 'monospace',
+      backgroundColor: Theme.of(
+        context,
+      ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+    );
 
     for (final match in matches) {
       if (match.start > cursor) {
         spans.add(TextSpan(text: text.substring(cursor, match.start)));
       }
-      spans.add(
-        TextSpan(
-          text: match.group(1),
-          style: codeStyle,
-        ),
-      );
+      spans.add(TextSpan(text: match.group(1), style: codeStyle));
       cursor = match.end;
     }
 
@@ -292,19 +345,14 @@ class _CodeLikeBlockView extends StatelessWidget {
                   size: 18,
                 ),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: theme.textTheme.labelLarge,
-                  ),
-                ),
+                Expanded(child: Text(label, style: theme.textTheme.labelLarge)),
                 IconButton(
                   tooltip: '复制内容',
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: block.text));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('已复制到剪贴板')),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
                   },
                   icon: const Icon(Icons.copy_all_outlined, size: 18),
                 ),
@@ -327,21 +375,18 @@ class _CodeLikeBlockView extends StatelessWidget {
   }
 }
 
-enum _MarkdownBlockType {
-  paragraph,
-  code,
-  quote,
-  thinking,
-}
+enum _MarkdownBlockType { paragraph, code, quote, unorderedList, thinking }
 
 class _MarkdownBlock {
   const _MarkdownBlock({
     required this.type,
     required this.text,
     this.language,
+    this.items = const <String>[],
   });
 
   final _MarkdownBlockType type;
   final String text;
   final String? language;
+  final List<String> items;
 }
