@@ -255,7 +255,11 @@ class _StructuredAssistantMessage extends StatelessWidget {
                 ),
               ),
               for (final part in visibleParts)
-                _MessagePartCard(part: part, showThinking: showThinking),
+                _MessagePartCard(
+                  key: ValueKey('${part.id}:${part.kind}'),
+                  part: part,
+                  showThinking: showThinking,
+                ),
             ],
           ),
         ),
@@ -264,11 +268,46 @@ class _StructuredAssistantMessage extends StatelessWidget {
   }
 }
 
-class _MessagePartCard extends StatelessWidget {
-  const _MessagePartCard({required this.part, required this.showThinking});
+class _MessagePartCard extends StatefulWidget {
+  const _MessagePartCard({
+    super.key,
+    required this.part,
+    required this.showThinking,
+  });
 
   final ChatMessagePart part;
   final bool showThinking;
+
+  @override
+  State<_MessagePartCard> createState() => _MessagePartCardState();
+}
+
+class _MessagePartCardState extends State<_MessagePartCard> {
+  late bool _expanded;
+
+  ChatMessagePart get part => widget.part;
+
+  bool get _isCollapsible =>
+      (part.kind == 'command' || part.kind == 'toolCall') &&
+      part.content.trim().isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    _expanded = !_isCollapsible || part.status == 'inProgress';
+  }
+
+  @override
+  void didUpdateWidget(covariant _MessagePartCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_isCollapsible) {
+      _expanded = true;
+      return;
+    }
+    if (oldWidget.part.status != 'inProgress' && part.status == 'inProgress') {
+      _expanded = true;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -276,6 +315,8 @@ class _MessagePartCard extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final spec = _partSpec(colorScheme, part.kind);
     final content = part.content.trimRight();
+    final summary = _summaryFor(content);
+    final showContent = content.isNotEmpty && (!_isCollapsible || _expanded);
 
     return Container(
       width: double.infinity,
@@ -289,23 +330,67 @@ class _MessagePartCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(spec.icon, size: 16, color: spec.iconColor),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  part.title,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: colorScheme.onSurface,
-                  ),
+          InkWell(
+            onTap: _isCollapsible
+                ? () {
+                    setState(() {
+                      _expanded = !_expanded;
+                    });
+                  }
+                : null,
+            borderRadius: BorderRadius.circular(8),
+            child: Semantics(
+              button: _isCollapsible,
+              label: _isCollapsible
+                  ? (_expanded ? '折叠${part.title}' : '展开${part.title}')
+                  : null,
+              child: Padding(
+                padding: EdgeInsets.only(bottom: _isCollapsible ? 2 : 0),
+                child: Row(
+                  children: [
+                    Icon(spec.icon, size: 16, color: spec.iconColor),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        part.title,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    if (part.status != null)
+                      _PartStatusChip(status: part.status!),
+                    if (_isCollapsible) ...[
+                      const SizedBox(width: 4),
+                      Tooltip(
+                        message: _expanded ? '折叠内容' : '展开内容',
+                        child: Icon(
+                          _expanded ? Icons.expand_less : Icons.expand_more,
+                          size: 20,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              if (part.status != null) _PartStatusChip(status: part.status!),
-            ],
+            ),
           ),
-          if (content.isNotEmpty) ...[
+          if (_isCollapsible && !_expanded && summary.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              summary,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontFamily: _usesMonospace(part.kind) ? 'monospace' : null,
+                height: 1.35,
+              ),
+            ),
+          ],
+          if (showContent) ...[
             const SizedBox(height: 8),
             if (_usesMonospace(part.kind))
               SelectableText(
@@ -317,11 +402,21 @@ class _MessagePartCard extends StatelessWidget {
                 ),
               )
             else
-              SimpleMarkdownView(content: content, showThinking: showThinking),
+              SimpleMarkdownView(
+                content: content,
+                showThinking: widget.showThinking,
+              ),
           ],
         ],
       ),
     );
+  }
+
+  String _summaryFor(String content) {
+    return content
+        .split('\n')
+        .map((line) => line.trim())
+        .firstWhere((line) => line.isNotEmpty, orElse: () => '');
   }
 
   bool _usesMonospace(String kind) {
@@ -340,6 +435,12 @@ class _MessagePartCard extends StatelessWidget {
         icon: Icons.terminal,
         iconColor: colorScheme.primary,
         backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.18),
+        borderColor: colorScheme.primary.withValues(alpha: 0.2),
+      ),
+      'toolCall' => _PartVisualSpec(
+        icon: Icons.build_circle_outlined,
+        iconColor: colorScheme.primary,
+        backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.16),
         borderColor: colorScheme.primary.withValues(alpha: 0.2),
       ),
       'fileChange' => _PartVisualSpec(
