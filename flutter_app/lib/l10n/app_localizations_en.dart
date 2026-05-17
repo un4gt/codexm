@@ -24,6 +24,45 @@ class AppLocalizationsEn extends AppLocalizations {
   String get navSettings => 'Settings';
 
   @override
+  String get commonCopy => 'Copy';
+
+  @override
+  String get commonCopiedToClipboard => 'Copied to clipboard.';
+
+  @override
+  String get commonExpand => 'Expand';
+
+  @override
+  String get commonCollapse => 'Collapse';
+
+  @override
+  String get statusRunning => 'Running';
+
+  @override
+  String get statusCompleted => 'Done';
+
+  @override
+  String get statusFailed => 'Failed';
+
+  @override
+  String get statusDeclined => 'Declined';
+
+  @override
+  String get statusWaiting => 'Waiting';
+
+  @override
+  String get sessionComposerMentionLoading => 'Searching files and commits...';
+
+  @override
+  String get sessionComposerMentionEmpty => 'No matching files or commits.';
+
+  @override
+  String get sessionComposerMentionFile => 'File';
+
+  @override
+  String get sessionComposerMentionCommit => 'Commit';
+
+  @override
   String get settingsPageTitle => 'Settings';
 
   @override

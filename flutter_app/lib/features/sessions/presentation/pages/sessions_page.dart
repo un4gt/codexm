@@ -2,8 +2,12 @@ import 'dart:io';
 
 import 'package:codexm_native/codexm_native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../../../app/theme/app_theme.dart';
+import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/adaptive_breakpoints.dart';
+import '../../../../shared/widgets/codex_ui.dart';
 import '../../../codex/application/codex_models.dart';
 import '../../../codex/application/codex_session_runner.dart';
 import '../../../codex/application/codex_skills_store.dart';
@@ -53,6 +57,7 @@ class _SessionsPageState extends State<SessionsPage> {
   final _skillsStore = CodexSkillsStore();
   final _runner = CodexSessionRunner();
   final _composerController = TextEditingController();
+  final _composerFocusNode = FocusNode(debugLabel: 'session_composer');
   final _messagesScrollController = ScrollController();
 
   Workspace? _activeWorkspace;
@@ -93,6 +98,7 @@ class _SessionsPageState extends State<SessionsPage> {
   void dispose() {
     _composerController.removeListener(_handleComposerChanged);
     _composerController.dispose();
+    _composerFocusNode.dispose();
     _messagesScrollController.dispose();
     super.dispose();
   }
@@ -409,6 +415,7 @@ class _SessionsPageState extends State<SessionsPage> {
             pendingStartedAt: _pendingStartedAt,
             scrollController: _messagesScrollController,
             composerController: _composerController,
+            composerFocusNode: _composerFocusNode,
             pendingMentions: _pendingMentions,
             slashSuggestions: _slashSuggestions,
             mentionSuggestions: _mentionSuggestions,

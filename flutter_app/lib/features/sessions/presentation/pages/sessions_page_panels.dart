@@ -64,7 +64,7 @@ class _WorkspaceEmptyState extends StatelessWidget {
   }
 }
 
-class _ChatPanel extends StatelessWidget {
+class _ChatPanel extends StatefulWidget {
   const _ChatPanel({
     required this.workspace,
     required this.sessions,
@@ -82,6 +82,7 @@ class _ChatPanel extends StatelessWidget {
     required this.pendingStartedAt,
     required this.scrollController,
     required this.composerController,
+    required this.composerFocusNode,
     required this.pendingMentions,
     required this.slashSuggestions,
     required this.mentionSuggestions,
@@ -114,6 +115,7 @@ class _ChatPanel extends StatelessWidget {
   final int pendingStartedAt;
   final ScrollController scrollController;
   final TextEditingController composerController;
+  final FocusNode composerFocusNode;
   final List<ComposerPendingMention> pendingMentions;
   final List<CodexSlashCommand> slashSuggestions;
   final List<ComposerMentionSuggestion> mentionSuggestions;
@@ -130,14 +132,113 @@ class _ChatPanel extends StatelessWidget {
   final bool canEditComposer;
 
   @override
-  Widget build(BuildContext context) {
-    final mentionToken = extractMentionToken(composerController.text);
-    final showSuggestions =
-        slashSuggestions.isNotEmpty ||
-        mentionLoading ||
-        mentionSuggestions.isNotEmpty ||
-        mentionToken != null;
+  State<_ChatPanel> createState() => _ChatPanelState();
+}
 
+class _ChatPanelState extends State<_ChatPanel> {
+  double _composerHeight = 132;
+  int _highlightedSuggestionIndex = 0;
+
+  bool get _showSuggestions {
+    final mentionToken = extractMentionToken(widget.composerController.text);
+    return widget.slashSuggestions.isNotEmpty ||
+        widget.mentionLoading ||
+        widget.mentionSuggestions.isNotEmpty ||
+        mentionToken != null;
+  }
+
+  int get _suggestionCount {
+    if (widget.slashSuggestions.isNotEmpty) {
+      return widget.slashSuggestions.take(8).length;
+    }
+    if (widget.mentionLoading || widget.mentionSuggestions.isEmpty) {
+      return 0;
+    }
+    return widget.mentionSuggestions.length;
+  }
+
+  @override
+  void didUpdateWidget(covariant _ChatPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final count = _suggestionCount;
+    if (count == 0) {
+      _highlightedSuggestionIndex = 0;
+      return;
+    }
+    if (_highlightedSuggestionIndex >= count) {
+      _highlightedSuggestionIndex = count - 1;
+    }
+  }
+
+  KeyEventResult _handleKeyboardEvent(FocusNode node, KeyEvent event) {
+    if (!_showSuggestions || event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    final count = _suggestionCount;
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      setState(() {
+        _highlightedSuggestionIndex = 0;
+      });
+      widget.composerFocusNode.requestFocus();
+      return KeyEventResult.handled;
+    }
+    if (count == 0) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      setState(() {
+        _highlightedSuggestionIndex = (_highlightedSuggestionIndex + 1).clamp(
+          0,
+          count - 1,
+        );
+      });
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      setState(() {
+        _highlightedSuggestionIndex = (_highlightedSuggestionIndex - 1).clamp(
+          0,
+          count - 1,
+        );
+      });
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.tab) {
+      _selectHighlightedSuggestion();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _selectHighlightedSuggestion() {
+    if (widget.slashSuggestions.isNotEmpty) {
+      final visible = widget.slashSuggestions.take(8).toList(growable: false);
+      if (visible.isEmpty) {
+        return;
+      }
+      widget.onSelectSlashSuggestion(visible[_highlightedSuggestionIndex]);
+      return;
+    }
+    if (widget.mentionSuggestions.isEmpty) {
+      return;
+    }
+    widget.onSelectMentionSuggestion(
+      widget.mentionSuggestions[_highlightedSuggestionIndex],
+    );
+  }
+
+  void _handleComposerSizeChanged(Size size) {
+    if ((size.height - _composerHeight).abs() < 0.5) {
+      return;
+    }
+    setState(() {
+      _composerHeight = size.height;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
@@ -147,63 +248,96 @@ class _ChatPanel extends StatelessWidget {
         child: Column(
           children: [
             _SessionHeader(
-              workspace: workspace,
-              selectedSession: selectedSession,
-              sessionCount: sessions.length,
-              status: status,
-              settingsReady: settingsEnabled && hasApiKey,
-              onOpenSessionSwitcher: onOpenSessionSwitcher,
+              workspace: widget.workspace,
+              selectedSession: widget.selectedSession,
+              sessionCount: widget.sessions.length,
+              status: widget.status,
+              settingsReady: widget.settingsEnabled && widget.hasApiKey,
+              onOpenSessionSwitcher: widget.onOpenSessionSwitcher,
               onMenuAction: (action) {
                 switch (action) {
                   case _HeaderMenuAction.newSession:
-                    onCreateSession();
+                    widget.onCreateSession();
                     break;
                   case _HeaderMenuAction.renameSession:
-                    final session = selectedSession;
+                    final session = widget.selectedSession;
                     if (session != null) {
-                      onRenameSession(session);
+                      widget.onRenameSession(session);
                     }
                     break;
                   case _HeaderMenuAction.deleteSession:
-                    final session = selectedSession;
+                    final session = widget.selectedSession;
                     if (session != null) {
-                      onDeleteSession(session);
+                      widget.onDeleteSession(session);
                     }
                     break;
                 }
               },
             ),
             Expanded(
-              child: _MessageList(
-                messages: messages,
-                showThinking: showThinking,
-                pendingAssistantText: pendingAssistantText,
-                pendingAssistantParts: pendingAssistantParts,
-                pendingStartedAt: pendingStartedAt,
-                scrollController: scrollController,
-                workspaceName: workspace.name,
-                canDirectChat: settingsEnabled && hasApiKey,
+              child: Focus(
+                onKeyEvent: _handleKeyboardEvent,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: _MessageList(
+                        messages: widget.messages,
+                        showThinking: widget.showThinking,
+                        pendingAssistantText: widget.pendingAssistantText,
+                        pendingAssistantParts: widget.pendingAssistantParts,
+                        pendingStartedAt: widget.pendingStartedAt,
+                        scrollController: widget.scrollController,
+                        workspaceName: widget.workspace.name,
+                        canDirectChat:
+                            widget.settingsEnabled && widget.hasApiKey,
+                        bottomReserve:
+                            _composerHeight +
+                            (_showSuggestions ? 132 : CodexMSpacing.sm),
+                      ),
+                    ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: _MeasureSize(
+                        onChange: _handleComposerSizeChanged,
+                        child: _SessionInputBar(
+                          settingsEnabled: widget.settingsEnabled,
+                          hasApiKey: widget.hasApiKey,
+                          running: widget.running,
+                          status: widget.status,
+                          runtimeStatus: widget.runtimeStatus,
+                          runtimeStatusIsRetrying:
+                              widget.runtimeStatusIsRetrying,
+                          composerController: widget.composerController,
+                          composerFocusNode: widget.composerFocusNode,
+                          pendingMentions: widget.pendingMentions,
+                          onRemovePendingMention: widget.onRemovePendingMention,
+                          onSendMessage: widget.onSendMessage,
+                          canSend: widget.canSend,
+                          canEditComposer: widget.canEditComposer,
+                        ),
+                      ),
+                    ),
+                    _ComposerSuggestionsOverlay(
+                      visible: _showSuggestions,
+                      composerHeight: _composerHeight,
+                      slashSuggestions: widget.slashSuggestions,
+                      mentionLoading: widget.mentionLoading,
+                      mentionSuggestions: widget.mentionSuggestions,
+                      highlightedIndex: _highlightedSuggestionIndex,
+                      onHighlightChanged: (index) {
+                        setState(() {
+                          _highlightedSuggestionIndex = index;
+                        });
+                      },
+                      onSelectSlashSuggestion: widget.onSelectSlashSuggestion,
+                      onSelectMentionSuggestion:
+                          widget.onSelectMentionSuggestion,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            _SessionInputBar(
-              settingsEnabled: settingsEnabled,
-              hasApiKey: hasApiKey,
-              running: running,
-              status: status,
-              runtimeStatus: runtimeStatus,
-              runtimeStatusIsRetrying: runtimeStatusIsRetrying,
-              composerController: composerController,
-              pendingMentions: pendingMentions,
-              slashSuggestions: slashSuggestions,
-              mentionSuggestions: mentionSuggestions,
-              mentionLoading: mentionLoading,
-              onSelectSlashSuggestion: onSelectSlashSuggestion,
-              onSelectMentionSuggestion: onSelectMentionSuggestion,
-              onRemovePendingMention: onRemovePendingMention,
-              onSendMessage: onSendMessage,
-              canSend: canSend,
-              canEditComposer: canEditComposer,
-              showSuggestions: showSuggestions,
             ),
           ],
         ),
@@ -431,6 +565,7 @@ class _MessageList extends StatelessWidget {
     required this.scrollController,
     required this.workspaceName,
     required this.canDirectChat,
+    required this.bottomReserve,
   });
 
   final List<ChatMessage> messages;
@@ -441,6 +576,7 @@ class _MessageList extends StatelessWidget {
   final ScrollController scrollController;
   final String workspaceName;
   final bool canDirectChat;
+  final double bottomReserve;
 
   @override
   Widget build(BuildContext context) {
@@ -472,7 +608,7 @@ class _MessageList extends StatelessWidget {
           horizontalPadding,
           12,
           horizontalPadding,
-          12,
+          12 + bottomReserve,
         ),
         itemCount: totalCount,
         itemBuilder: (context, index) {
@@ -508,17 +644,12 @@ class _SessionInputBar extends StatelessWidget {
     required this.runtimeStatus,
     required this.runtimeStatusIsRetrying,
     required this.composerController,
+    required this.composerFocusNode,
     required this.pendingMentions,
-    required this.slashSuggestions,
-    required this.mentionSuggestions,
-    required this.mentionLoading,
-    required this.onSelectSlashSuggestion,
-    required this.onSelectMentionSuggestion,
     required this.onRemovePendingMention,
     required this.onSendMessage,
     required this.canSend,
     required this.canEditComposer,
-    required this.showSuggestions,
   });
 
   final bool settingsEnabled;
@@ -528,21 +659,17 @@ class _SessionInputBar extends StatelessWidget {
   final String? runtimeStatus;
   final bool runtimeStatusIsRetrying;
   final TextEditingController composerController;
+  final FocusNode composerFocusNode;
   final List<ComposerPendingMention> pendingMentions;
-  final List<CodexSlashCommand> slashSuggestions;
-  final List<ComposerMentionSuggestion> mentionSuggestions;
-  final bool mentionLoading;
-  final ValueChanged<CodexSlashCommand> onSelectSlashSuggestion;
-  final ValueChanged<ComposerMentionSuggestion> onSelectMentionSuggestion;
   final ValueChanged<ComposerPendingMention> onRemovePendingMention;
   final VoidCallback onSendMessage;
   final bool canSend;
   final bool canEditComposer;
-  final bool showSuggestions;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = context.codexColors;
     final widthClass = context.adaptiveWidthClass;
     final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
     final bottomPadding = keyboardVisible
@@ -578,12 +705,15 @@ class _SessionInputBar extends StatelessWidget {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border(
-          top: BorderSide(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
+        color: colors.surface,
+        border: Border(top: BorderSide(color: colors.divider)),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.shadow.withValues(alpha: 0.08),
+            blurRadius: 18,
+            offset: const Offset(0, -4),
           ),
-        ),
+        ],
       ),
       child: AnimatedPadding(
         duration: const Duration(milliseconds: 180),
@@ -616,6 +746,10 @@ class _SessionInputBar extends StatelessWidget {
                   for (final mention in pendingMentions)
                     InputChip(
                       label: Text('@${mention.label}'),
+                      labelStyle: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: colors.text,
+                      ),
                       avatar: Icon(
                         mention.kind == ComposerMentionKind.file
                             ? Icons.insert_drive_file_outlined
@@ -632,27 +766,40 @@ class _SessionInputBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
-                  child: Semantics(
-                    textField: true,
-                    label: '消息输入框',
-                    child: TextField(
-                      controller: composerController,
-                      enabled: canEditComposer,
-                      minLines: 1,
-                      maxLines: 6,
-                      textInputAction: TextInputAction.newline,
-                      decoration: const InputDecoration(
-                        hintText: '在这里输入消息...',
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 52),
+                    child: Semantics(
+                      textField: true,
+                      label: '消息输入框',
+                      child: TextField(
+                        focusNode: composerFocusNode,
+                        controller: composerController,
+                        enabled: canEditComposer,
+                        minLines: 1,
+                        maxLines: 6,
+                        textInputAction: TextInputAction.newline,
+                        decoration: InputDecoration(
+                          hintText: '在这里输入消息...',
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 14,
+                          ),
+                          isDense: true,
+                          filled: true,
+                          fillColor: colors.surfaceMuted,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(CodexMRadii.lg),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(CodexMRadii.lg),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(CodexMRadii.lg),
+                            borderSide: BorderSide(color: colors.primary),
+                          ),
                         ),
-                        isDense: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(24)),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
                       ),
                     ),
                   ),
@@ -676,7 +823,7 @@ class _SessionInputBar extends StatelessWidget {
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.4,
-                                color: theme.colorScheme.onSurfaceVariant,
+                                color: colors.primary,
                               ),
                             )
                           : const Icon(
@@ -686,25 +833,17 @@ class _SessionInputBar extends StatelessWidget {
                     ),
                     style: IconButton.styleFrom(
                       padding: EdgeInsets.zero,
-                      minimumSize: const Size(
-                        _SessionUiSpecs.minTapTarget,
-                        _SessionUiSpecs.minTapTarget,
-                      ),
+                      minimumSize: const Size(52, 52),
+                      fixedSize: const Size(52, 52),
+                      backgroundColor: colors.primary,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: colors.surfaceMuted,
+                      disabledForegroundColor: colors.textSubtle,
                     ),
                   ),
                 ),
               ],
             ),
-            if (showSuggestions) ...[
-              const SizedBox(height: 10),
-              _ComposerSuggestionsPanel(
-                slashSuggestions: slashSuggestions,
-                mentionLoading: mentionLoading,
-                mentionSuggestions: mentionSuggestions,
-                onSelectSlashSuggestion: onSelectSlashSuggestion,
-                onSelectMentionSuggestion: onSelectMentionSuggestion,
-              ),
-            ],
           ],
         ),
       ),
@@ -721,31 +860,124 @@ class _InlineNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = context.codexColors;
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
-        ),
+        color: colors.surfaceMuted,
+        borderRadius: BorderRadius.circular(CodexMRadii.md),
+        border: Border.all(color: colors.divider),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
+            Icon(icon, size: 18, color: colors.textMuted),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 text,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+                  color: colors.textMuted,
                 ),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ComposerSuggestionsOverlay extends StatelessWidget {
+  const _ComposerSuggestionsOverlay({
+    required this.visible,
+    required this.composerHeight,
+    required this.slashSuggestions,
+    required this.mentionLoading,
+    required this.mentionSuggestions,
+    required this.highlightedIndex,
+    required this.onHighlightChanged,
+    required this.onSelectSlashSuggestion,
+    required this.onSelectMentionSuggestion,
+  });
+
+  final bool visible;
+  final double composerHeight;
+  final List<CodexSlashCommand> slashSuggestions;
+  final bool mentionLoading;
+  final List<ComposerMentionSuggestion> mentionSuggestions;
+  final int highlightedIndex;
+  final ValueChanged<int> onHighlightChanged;
+  final ValueChanged<CodexSlashCommand> onSelectSlashSuggestion;
+  final ValueChanged<ComposerMentionSuggestion> onSelectMentionSuggestion;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.codexColors;
+    final bottom = composerHeight + CodexMSpacing.xs;
+    if (!visible) {
+      return Positioned(
+        left: 0,
+        right: 0,
+        bottom: bottom,
+        child: const SizedBox.shrink(),
+      );
+    }
+
+    return Positioned(
+      left: switch (context.adaptiveWidthClass) {
+        AdaptiveWidthClass.compact => _SessionUiSpecs.compactHorizontalPadding,
+        AdaptiveWidthClass.medium => _SessionUiSpecs.mediumHorizontalPadding,
+        AdaptiveWidthClass.expanded =>
+          _SessionUiSpecs.expandedHorizontalPadding,
+      },
+      right: switch (context.adaptiveWidthClass) {
+        AdaptiveWidthClass.compact => _SessionUiSpecs.compactHorizontalPadding,
+        AdaptiveWidthClass.medium => _SessionUiSpecs.mediumHorizontalPadding,
+        AdaptiveWidthClass.expanded =>
+          _SessionUiSpecs.expandedHorizontalPadding,
+      },
+      bottom: bottom,
+      child: AnimatedSlide(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        offset: Offset.zero,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 160),
+          opacity: 1,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final availableHeight = MediaQuery.sizeOf(context).height;
+              final maxHeight = (availableHeight * 0.45).clamp(160.0, 360.0);
+              return ConstrainedBox(
+                key: const ValueKey('composer-suggestions-overlay'),
+                constraints: BoxConstraints(maxHeight: maxHeight),
+                child: Material(
+                  color: colors.surfaceElevated,
+                  elevation: 10,
+                  shadowColor: Theme.of(
+                    context,
+                  ).colorScheme.shadow.withValues(alpha: 0.14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(CodexMRadii.lg),
+                    side: BorderSide(color: colors.border),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: _ComposerSuggestionsPanel(
+                    slashSuggestions: slashSuggestions,
+                    mentionLoading: mentionLoading,
+                    mentionSuggestions: mentionSuggestions,
+                    highlightedIndex: highlightedIndex,
+                    onHighlightChanged: onHighlightChanged,
+                    onSelectSlashSuggestion: onSelectSlashSuggestion,
+                    onSelectMentionSuggestion: onSelectMentionSuggestion,
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
@@ -757,6 +989,8 @@ class _ComposerSuggestionsPanel extends StatelessWidget {
     required this.slashSuggestions,
     required this.mentionLoading,
     required this.mentionSuggestions,
+    required this.highlightedIndex,
+    required this.onHighlightChanged,
     required this.onSelectSlashSuggestion,
     required this.onSelectMentionSuggestion,
   });
@@ -764,70 +998,284 @@ class _ComposerSuggestionsPanel extends StatelessWidget {
   final List<CodexSlashCommand> slashSuggestions;
   final bool mentionLoading;
   final List<ComposerMentionSuggestion> mentionSuggestions;
+  final int highlightedIndex;
+  final ValueChanged<int> onHighlightChanged;
   final ValueChanged<CodexSlashCommand> onSelectSlashSuggestion;
   final ValueChanged<ComposerMentionSuggestion> onSelectMentionSuggestion;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    if (slashSuggestions.isNotEmpty) {
+      final visible = slashSuggestions.take(8).toList(growable: false);
+      return ListView.builder(
+        key: const ValueKey('composer-slash-suggestions'),
+        shrinkWrap: true,
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        itemCount: visible.length,
+        itemBuilder: (context, index) {
+          final suggestion = visible[index];
+          return _SlashSuggestionRow(
+            suggestion: suggestion,
+            highlighted: index == highlightedIndex,
+            onHover: () => onHighlightChanged(index),
+            onTap: () => onSelectSlashSuggestion(suggestion),
+          );
+        },
+      );
+    }
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
-        ),
-      ),
-      child: slashSuggestions.isNotEmpty
-          ? Column(
-              children: [
-                for (final suggestion in slashSuggestions.take(8))
-                  ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.code_outlined),
-                    title: Text(suggestion.command),
-                    subtitle: Text(suggestion.purpose),
-                    onTap: () => onSelectSlashSuggestion(suggestion),
-                  ),
-              ],
-            )
-          : mentionLoading
-          ? const Padding(
-              padding: EdgeInsets.all(12),
+    if (mentionLoading) {
+      return _SuggestionStateRow(
+        key: const ValueKey('composer-mention-loading'),
+        icon: Icons.search,
+        text: AppLocalizations.of(context).sessionComposerMentionLoading,
+        loading: true,
+      );
+    }
+
+    if (mentionSuggestions.isEmpty) {
+      return _SuggestionStateRow(
+        key: const ValueKey('composer-mention-empty'),
+        icon: Icons.search_off_outlined,
+        text: AppLocalizations.of(context).sessionComposerMentionEmpty,
+      );
+    }
+
+    return ListView.builder(
+      key: const ValueKey('composer-mention-suggestions'),
+      shrinkWrap: true,
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      itemCount: mentionSuggestions.length,
+      itemBuilder: (context, index) {
+        final suggestion = mentionSuggestions[index];
+        return _MentionSuggestionRow(
+          suggestion: suggestion,
+          highlighted: index == highlightedIndex,
+          onHover: () => onHighlightChanged(index),
+          onTap: () => onSelectMentionSuggestion(suggestion),
+        );
+      },
+    );
+  }
+}
+
+class _SlashSuggestionRow extends StatelessWidget {
+  const _SlashSuggestionRow({
+    required this.suggestion,
+    required this.highlighted,
+    required this.onHover,
+    required this.onTap,
+  });
+
+  final CodexSlashCommand suggestion;
+  final bool highlighted;
+  final VoidCallback onHover;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = context.codexColors;
+    return MouseRegion(
+      onEnter: (_) => onHover(),
+      child: Material(
+        color: highlighted ? colors.primarySoft : Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 58),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: colors.surfaceMuted,
+                      borderRadius: BorderRadius.circular(CodexMRadii.sm),
+                    ),
+                    child: Icon(Icons.code_outlined, color: colors.primary),
                   ),
-                  SizedBox(width: 10),
-                  Text('正在查找文件与提交...'),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          suggestion.command,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontFamily: 'monospace',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: colors.textStrong,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          suggestion.purpose,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Icon(
+                    Icons.keyboard_return,
+                    size: 18,
+                    color: colors.textMuted,
+                  ),
                 ],
               ),
-            )
-          : mentionSuggestions.isEmpty
-          ? const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text('没有匹配的文件或提交。'),
-            )
-          : Column(
-              children: [
-                for (final suggestion in mentionSuggestions)
-                  ListTile(
-                    dense: true,
-                    leading: Icon(
-                      suggestion.kind == ComposerMentionKind.file
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MentionSuggestionRow extends StatelessWidget {
+  const _MentionSuggestionRow({
+    required this.suggestion,
+    required this.highlighted,
+    required this.onHover,
+    required this.onTap,
+  });
+
+  final ComposerMentionSuggestion suggestion;
+  final bool highlighted;
+  final VoidCallback onHover;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = context.codexColors;
+    final l10n = AppLocalizations.of(context);
+    final isFile = suggestion.kind == ComposerMentionKind.file;
+    return MouseRegion(
+      onEnter: (_) => onHover(),
+      child: Material(
+        color: highlighted ? colors.primarySoft : Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 60),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: colors.surfaceMuted,
+                      borderRadius: BorderRadius.circular(CodexMRadii.sm),
+                    ),
+                    child: Icon(
+                      isFile
                           ? Icons.insert_drive_file_outlined
                           : Icons.account_tree_outlined,
+                      color: colors.primary,
                     ),
-                    title: Text(suggestion.label),
-                    subtitle: Text(suggestion.description),
-                    onTap: () => onSelectMentionSuggestion(suggestion),
                   ),
-              ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          suggestion.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: colors.textStrong,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          suggestion.description,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  CodexStatusChip(
+                    label: isFile
+                        ? l10n.sessionComposerMentionFile
+                        : l10n.sessionComposerMentionCommit,
+                    tone: CodexStatusTone.neutral,
+                    compact: true,
+                    icon: isFile
+                        ? Icons.insert_drive_file_outlined
+                        : Icons.commit_outlined,
+                  ),
+                ],
+              ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SuggestionStateRow extends StatelessWidget {
+  const _SuggestionStateRow({
+    super.key,
+    required this.icon,
+    required this.text,
+    this.loading = false,
+  });
+
+  final IconData icon;
+  final String text;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = context.codexColors;
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          if (loading)
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: colors.primary,
+              ),
+            )
+          else
+            Icon(icon, size: 18, color: colors.textMuted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colors.textMuted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -879,5 +1327,35 @@ class _ChatEmptyState extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _MeasureSize extends StatefulWidget {
+  const _MeasureSize({required this.child, required this.onChange});
+
+  final Widget child;
+  final ValueChanged<Size> onChange;
+
+  @override
+  State<_MeasureSize> createState() => _MeasureSizeState();
+}
+
+class _MeasureSizeState extends State<_MeasureSize> {
+  Size? _oldSize;
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final size = context.size;
+      if (size == null || size == _oldSize) {
+        return;
+      }
+      _oldSize = size;
+      widget.onChange(size);
+    });
+    return widget.child;
   }
 }

@@ -348,6 +348,7 @@ extension _SessionsPageActions on _SessionsPageState {
       text: next,
       selection: TextSelection.collapsed(offset: next.length),
     );
+    _composerFocusNode.requestFocus();
   }
 
   void _applyMentionSuggestion(ComposerMentionSuggestion suggestion) {
@@ -382,6 +383,7 @@ extension _SessionsPageActions on _SessionsPageState {
       text: text,
       selection: TextSelection.collapsed(offset: text.length),
     );
+    _composerFocusNode.requestFocus();
   }
 
   void _removePendingMention(ComposerPendingMention mention) {

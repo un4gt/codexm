@@ -129,6 +129,84 @@ abstract class AppLocalizations {
   /// **'Settings'**
   String get navSettings;
 
+  /// No description provided for @commonCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get commonCopy;
+
+  /// No description provided for @commonCopiedToClipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied to clipboard.'**
+  String get commonCopiedToClipboard;
+
+  /// No description provided for @commonExpand.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand'**
+  String get commonExpand;
+
+  /// No description provided for @commonCollapse.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse'**
+  String get commonCollapse;
+
+  /// No description provided for @statusRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Running'**
+  String get statusRunning;
+
+  /// No description provided for @statusCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get statusCompleted;
+
+  /// No description provided for @statusFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get statusFailed;
+
+  /// No description provided for @statusDeclined.
+  ///
+  /// In en, this message translates to:
+  /// **'Declined'**
+  String get statusDeclined;
+
+  /// No description provided for @statusWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting'**
+  String get statusWaiting;
+
+  /// No description provided for @sessionComposerMentionLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching files and commits...'**
+  String get sessionComposerMentionLoading;
+
+  /// No description provided for @sessionComposerMentionEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching files or commits.'**
+  String get sessionComposerMentionEmpty;
+
+  /// No description provided for @sessionComposerMentionFile.
+  ///
+  /// In en, this message translates to:
+  /// **'File'**
+  String get sessionComposerMentionFile;
+
+  /// No description provided for @sessionComposerMentionCommit.
+  ///
+  /// In en, this message translates to:
+  /// **'Commit'**
+  String get sessionComposerMentionCommit;
+
   /// No description provided for @settingsPageTitle.
   ///
   /// In en, this message translates to:

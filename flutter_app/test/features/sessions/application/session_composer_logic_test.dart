@@ -13,6 +13,11 @@ void main() {
     );
     expect(filterSlashCommands('/review repo').isEmpty, isTrue);
     expect(filterSlashCommands('plain text').isEmpty, isTrue);
+    expect(filterSlashCommands('open https://example.com').isEmpty, isTrue);
+    expect(
+      filterSlashCommands('ask /re').any((item) => item.command == '/review'),
+      isTrue,
+    );
   });
 
   test('filters mention suggestions across files and commits', () {

@@ -24,6 +24,45 @@ class AppLocalizationsZh extends AppLocalizations {
   String get navSettings => '设置';
 
   @override
+  String get commonCopy => '复制';
+
+  @override
+  String get commonCopiedToClipboard => '已复制到剪贴板。';
+
+  @override
+  String get commonExpand => '展开';
+
+  @override
+  String get commonCollapse => '折叠';
+
+  @override
+  String get statusRunning => '进行中';
+
+  @override
+  String get statusCompleted => '完成';
+
+  @override
+  String get statusFailed => '失败';
+
+  @override
+  String get statusDeclined => '已拒绝';
+
+  @override
+  String get statusWaiting => '等待';
+
+  @override
+  String get sessionComposerMentionLoading => '正在查找文件与提交...';
+
+  @override
+  String get sessionComposerMentionEmpty => '没有匹配的文件或提交。';
+
+  @override
+  String get sessionComposerMentionFile => '文件';
+
+  @override
+  String get sessionComposerMentionCommit => '提交';
+
+  @override
   String get settingsPageTitle => '设置';
 
   @override
@@ -238,6 +277,45 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get navSettings => '设置';
+
+  @override
+  String get commonCopy => '复制';
+
+  @override
+  String get commonCopiedToClipboard => '已复制到剪贴板。';
+
+  @override
+  String get commonExpand => '展开';
+
+  @override
+  String get commonCollapse => '折叠';
+
+  @override
+  String get statusRunning => '进行中';
+
+  @override
+  String get statusCompleted => '完成';
+
+  @override
+  String get statusFailed => '失败';
+
+  @override
+  String get statusDeclined => '已拒绝';
+
+  @override
+  String get statusWaiting => '等待';
+
+  @override
+  String get sessionComposerMentionLoading => '正在查找文件与提交...';
+
+  @override
+  String get sessionComposerMentionEmpty => '没有匹配的文件或提交。';
+
+  @override
+  String get sessionComposerMentionFile => '文件';
+
+  @override
+  String get sessionComposerMentionCommit => '提交';
 
   @override
   String get settingsPageTitle => '设置';

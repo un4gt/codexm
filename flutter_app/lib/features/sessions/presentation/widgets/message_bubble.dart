@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../../app/theme/app_theme.dart';
+import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/adaptive_breakpoints.dart';
+import '../../../../shared/widgets/codex_ui.dart';
 import '../../application/session_models.dart';
 import 'simple_markdown_view.dart';
 
@@ -23,6 +26,7 @@ class MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = context.codexColors;
     final widthClass = context.adaptiveWidthClass;
 
     if (role == 'system' || role == 'error') {
@@ -33,12 +37,11 @@ class MessageBubble extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           constraints: const BoxConstraints(maxWidth: 500),
           decoration: BoxDecoration(
-            color: role == 'error'
-                ? theme.colorScheme.errorContainer.withValues(alpha: 0.4)
-                : theme.colorScheme.surfaceContainerHighest.withValues(
-                    alpha: 0.3,
-                  ),
-            borderRadius: BorderRadius.circular(8),
+            color: role == 'error' ? colors.errorSoft : colors.surfaceMuted,
+            borderRadius: BorderRadius.circular(CodexMRadii.pill),
+            border: Border.all(
+              color: role == 'error' ? colors.errorSoft : colors.divider,
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -47,9 +50,7 @@ class MessageBubble extends StatelessWidget {
               Icon(
                 role == 'error' ? Icons.error_outline : Icons.info_outline,
                 size: 16,
-                color: role == 'error'
-                    ? theme.colorScheme.error
-                    : theme.colorScheme.onSurfaceVariant,
+                color: role == 'error' ? colors.error : colors.textMuted,
               ),
               const SizedBox(width: 8),
               Flexible(
@@ -66,7 +67,7 @@ class MessageBubble extends StatelessWidget {
 
     final spec = _messageStyle(theme, role);
     final maxBubbleWidth = switch (widthClass) {
-      AdaptiveWidthClass.compact => 560.0,
+      AdaptiveWidthClass.compact => 520.0,
       AdaptiveWidthClass.medium => 680.0,
       AdaptiveWidthClass.expanded => 760.0,
     };
@@ -101,6 +102,7 @@ class MessageBubble extends StatelessWidget {
           decoration: BoxDecoration(
             color: spec.backgroundColor,
             borderRadius: BorderRadius.circular(spec.borderRadius),
+            border: role == 'user' ? null : Border.all(color: colors.divider),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -154,28 +156,28 @@ class MessageBubble extends StatelessWidget {
   }
 
   _MessageSpec _messageStyle(ThemeData theme, String role) {
-    final scheme = theme.colorScheme;
+    final colors = theme.extension<CodexMColors>() ?? CodexMColors.light;
     if (role == 'user') {
       return _MessageSpec(
         label: '你',
         icon: Icons.person_outline,
         alignment: Alignment.centerRight,
-        backgroundColor: scheme.primaryContainer.withValues(alpha: 0.92),
-        borderRadius: 16,
-        iconColor: scheme.primary,
-        labelColor: scheme.onPrimaryContainer,
-        timeColor: scheme.onPrimaryContainer.withValues(alpha: 0.72),
+        backgroundColor: colors.primarySoft,
+        borderRadius: CodexMRadii.lg,
+        iconColor: colors.primary,
+        labelColor: colors.textStrong,
+        timeColor: colors.textMuted,
       );
     }
     return _MessageSpec(
       label: 'Codex',
       icon: Icons.auto_awesome_outlined,
       alignment: Alignment.centerLeft,
-      backgroundColor: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
-      borderRadius: 14,
-      iconColor: scheme.onSurfaceVariant,
-      labelColor: scheme.onSurface,
-      timeColor: scheme.onSurfaceVariant,
+      backgroundColor: colors.surface,
+      borderRadius: CodexMRadii.lg,
+      iconColor: colors.textMuted,
+      labelColor: colors.textStrong,
+      timeColor: colors.textMuted,
     );
   }
 }
@@ -255,7 +257,7 @@ class _StructuredAssistantMessage extends StatelessWidget {
                 ),
               ),
               for (final part in visibleParts)
-                _MessagePartCard(
+                TimelinePartCard(
                   key: ValueKey('${part.id}:${part.kind}'),
                   part: part,
                   showThinking: showThinking,
@@ -268,8 +270,8 @@ class _StructuredAssistantMessage extends StatelessWidget {
   }
 }
 
-class _MessagePartCard extends StatefulWidget {
-  const _MessagePartCard({
+class TimelinePartCard extends StatefulWidget {
+  const TimelinePartCard({
     super.key,
     required this.part,
     required this.showThinking,
@@ -279,32 +281,39 @@ class _MessagePartCard extends StatefulWidget {
   final bool showThinking;
 
   @override
-  State<_MessagePartCard> createState() => _MessagePartCardState();
+  State<TimelinePartCard> createState() => _TimelinePartCardState();
 }
 
-class _MessagePartCardState extends State<_MessagePartCard> {
+class _TimelinePartCardState extends State<TimelinePartCard> {
   late bool _expanded;
 
   ChatMessagePart get part => widget.part;
 
-  bool get _isCollapsible =>
-      (part.kind == 'command' || part.kind == 'toolCall') &&
-      part.content.trim().isNotEmpty;
+  bool get _isCollapsible {
+    if (part.content.trim().isEmpty) {
+      return false;
+    }
+    return part.kind == 'command' ||
+        part.kind == 'toolCall' ||
+        part.kind == 'reasoning' ||
+        part.kind == 'plan' ||
+        part.kind == 'fileChange';
+  }
 
   @override
   void initState() {
     super.initState();
-    _expanded = !_isCollapsible || part.status == 'inProgress';
+    _expanded = _defaultExpanded(part);
   }
 
   @override
-  void didUpdateWidget(covariant _MessagePartCard oldWidget) {
+  void didUpdateWidget(covariant TimelinePartCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!_isCollapsible) {
       _expanded = true;
       return;
     }
-    if (oldWidget.part.status != 'inProgress' && part.status == 'inProgress') {
+    if (!_isRunning(oldWidget.part.status) && _isRunning(part.status)) {
       _expanded = true;
     }
   }
@@ -312,104 +321,150 @@ class _MessagePartCardState extends State<_MessagePartCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final spec = _partSpec(colorScheme, part.kind);
+    final colors = context.codexColors;
+    final l10n = AppLocalizations.of(context);
+    final spec = _partSpec(context, part.kind);
     final content = part.content.trimRight();
     final summary = _summaryFor(content);
     final showContent = content.isNotEmpty && (!_isCollapsible || _expanded);
+    final isTextPart = part.kind == 'agentText';
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(top: 6),
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      margin: const EdgeInsets.only(top: 8),
       decoration: BoxDecoration(
         color: spec.backgroundColor,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(CodexMRadii.md),
         border: Border.all(color: spec.borderColor),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          InkWell(
-            onTap: _isCollapsible
-                ? () {
-                    setState(() {
-                      _expanded = !_expanded;
-                    });
-                  }
-                : null,
-            borderRadius: BorderRadius.circular(8),
-            child: Semantics(
-              button: _isCollapsible,
-              label: _isCollapsible
-                  ? (_expanded ? '折叠${part.title}' : '展开${part.title}')
-                  : null,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 4,
+              decoration: BoxDecoration(
+                color: spec.lineColor,
+                borderRadius: const BorderRadius.horizontal(
+                  left: Radius.circular(CodexMRadii.md),
+                ),
+              ),
+            ),
+            Expanded(
               child: Padding(
-                padding: EdgeInsets.only(bottom: _isCollapsible ? 2 : 0),
-                child: Row(
+                padding: EdgeInsets.fromLTRB(isTextPart ? 12 : 10, 10, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(spec.icon, size: 16, color: spec.iconColor),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        part.title,
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: colorScheme.onSurface,
+                    InkWell(
+                      onTap: _isCollapsible
+                          ? () {
+                              setState(() {
+                                _expanded = !_expanded;
+                              });
+                            }
+                          : null,
+                      borderRadius: BorderRadius.circular(CodexMRadii.sm),
+                      child: Semantics(
+                        button: _isCollapsible,
+                        label: _isCollapsible
+                            ? (_expanded
+                                  ? '${l10n.commonCollapse}${part.title}'
+                                  : '${l10n.commonExpand}${part.title}')
+                            : null,
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            bottom: _isCollapsible ? 2 : 0,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(spec.icon, size: 17, color: spec.iconColor),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  part.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelLarge?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    color: colors.textStrong,
+                                  ),
+                                ),
+                              ),
+                              if (part.status != null)
+                                _PartStatusChip(status: part.status!),
+                              if (_isCollapsible) ...[
+                                const SizedBox(width: 4),
+                                Tooltip(
+                                  message: _expanded
+                                      ? l10n.commonCollapse
+                                      : l10n.commonExpand,
+                                  child: Icon(
+                                    _expanded
+                                        ? Icons.expand_less
+                                        : Icons.expand_more,
+                                    size: 22,
+                                    color: colors.textMuted,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                    if (part.status != null)
-                      _PartStatusChip(status: part.status!),
-                    if (_isCollapsible) ...[
-                      const SizedBox(width: 4),
-                      Tooltip(
-                        message: _expanded ? '折叠内容' : '展开内容',
-                        child: Icon(
-                          _expanded ? Icons.expand_less : Icons.expand_more,
-                          size: 20,
-                          color: colorScheme.onSurfaceVariant,
+                    if (_isCollapsible && !_expanded && summary.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        summary,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colors.textMuted,
+                          fontFamily: _usesMonospace(part.kind)
+                              ? 'monospace'
+                              : null,
+                          height: 1.35,
                         ),
                       ),
+                    ],
+                    if (showContent) ...[
+                      const SizedBox(height: 8),
+                      if (_usesMonospace(part.kind))
+                        CodexCodeBlock(content: content, maxHeight: 240)
+                      else
+                        SimpleMarkdownView(
+                          content: content,
+                          showThinking: widget.showThinking,
+                        ),
                     ],
                   ],
                 ),
               ),
             ),
-          ),
-          if (_isCollapsible && !_expanded && summary.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              summary,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                fontFamily: _usesMonospace(part.kind) ? 'monospace' : null,
-                height: 1.35,
-              ),
-            ),
           ],
-          if (showContent) ...[
-            const SizedBox(height: 8),
-            if (_usesMonospace(part.kind))
-              SelectableText(
-                content,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurface,
-                  fontFamily: 'monospace',
-                  height: 1.35,
-                ),
-              )
-            else
-              SimpleMarkdownView(
-                content: content,
-                showThinking: widget.showThinking,
-              ),
-          ],
-        ],
+        ),
       ),
     );
+  }
+
+  bool _defaultExpanded(ChatMessagePart part) {
+    if (!_isCollapsible) {
+      return true;
+    }
+    if (_isRunning(part.status) || _isFailed(part.status)) {
+      return true;
+    }
+    if (part.kind == 'reasoning') {
+      return false;
+    }
+    if (part.kind == 'command' || part.kind == 'toolCall') {
+      return false;
+    }
+    if (part.kind == 'plan') {
+      return false;
+    }
+    return true;
   }
 
   String _summaryFor(String content) {
@@ -420,58 +475,70 @@ class _MessagePartCardState extends State<_MessagePartCard> {
   }
 
   bool _usesMonospace(String kind) {
-    return kind == 'command' || kind == 'fileChange';
+    return kind == 'command' || kind == 'toolCall' || kind == 'fileChange';
   }
 
-  _PartVisualSpec _partSpec(ColorScheme colorScheme, String kind) {
+  bool _isRunning(String? status) {
+    final value = status?.trim();
+    return value == 'inProgress' || value == 'running';
+  }
+
+  bool _isFailed(String? status) {
+    final value = status?.trim();
+    return value == 'failed' || value == 'error';
+  }
+
+  _PartVisualSpec _partSpec(BuildContext context, String kind) {
+    final colors = context.codexColors;
     return switch (kind) {
       'reasoning' => _PartVisualSpec(
         icon: Icons.lightbulb_outline,
-        iconColor: colorScheme.tertiary,
-        backgroundColor: colorScheme.tertiaryContainer.withValues(alpha: 0.22),
-        borderColor: colorScheme.tertiary.withValues(alpha: 0.22),
+        iconColor: colors.warning,
+        lineColor: colors.warning,
+        backgroundColor: colors.warningSoft.withValues(alpha: 0.42),
+        borderColor: colors.warning.withValues(alpha: 0.18),
       ),
       'command' => _PartVisualSpec(
         icon: Icons.terminal,
-        iconColor: colorScheme.primary,
-        backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.18),
-        borderColor: colorScheme.primary.withValues(alpha: 0.2),
+        iconColor: colors.primary,
+        lineColor: colors.primary,
+        backgroundColor: colors.surface,
+        borderColor: colors.divider,
       ),
       'toolCall' => _PartVisualSpec(
         icon: Icons.build_circle_outlined,
-        iconColor: colorScheme.primary,
-        backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.16),
-        borderColor: colorScheme.primary.withValues(alpha: 0.2),
+        iconColor: colors.primary,
+        lineColor: colors.info,
+        backgroundColor: colors.surface,
+        borderColor: colors.divider,
       ),
       'fileChange' => _PartVisualSpec(
         icon: Icons.description_outlined,
-        iconColor: colorScheme.secondary,
-        backgroundColor: colorScheme.secondaryContainer.withValues(alpha: 0.18),
-        borderColor: colorScheme.secondary.withValues(alpha: 0.22),
+        iconColor: colors.success,
+        lineColor: colors.success,
+        backgroundColor: colors.surface,
+        borderColor: colors.divider,
       ),
       'plan' => _PartVisualSpec(
         icon: Icons.checklist_outlined,
-        iconColor: colorScheme.primary,
-        backgroundColor: colorScheme.surfaceContainerHigh.withValues(
-          alpha: 0.8,
-        ),
-        borderColor: colorScheme.outlineVariant,
+        iconColor: colors.primary,
+        lineColor: colors.primaryMuted,
+        backgroundColor: colors.surfaceMuted,
+        borderColor: colors.divider,
       ),
       'agentText' => _PartVisualSpec(
         icon: Icons.chat_bubble_outline,
-        iconColor: colorScheme.onSurfaceVariant,
-        backgroundColor: colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.3,
-        ),
-        borderColor: colorScheme.outlineVariant.withValues(alpha: 0.45),
+        iconColor: colors.textMuted,
+        lineColor: colors.divider,
+        backgroundColor: colors.surface,
+        borderColor: colors.divider,
       ),
       _ => _PartVisualSpec(
         icon: Icons.build_outlined,
-        iconColor: colorScheme.onSurfaceVariant,
-        backgroundColor: colorScheme.surfaceContainerHigh.withValues(
-          alpha: 0.6,
-        ),
-        borderColor: colorScheme.outlineVariant,
+        iconColor: colors.textMuted,
+        lineColor: colors.textSubtle,
+        backgroundColor: colors.surfaceMuted,
+        borderColor: colors.divider,
       ),
     };
   }
@@ -485,34 +552,35 @@ class _PartStatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final l10n = AppLocalizations.of(context);
     final normalized = status.trim();
-    final failed = normalized == 'failed';
-    final inProgress = normalized == 'inProgress';
+    final failed = normalized == 'failed' || normalized == 'error';
+    final inProgress = normalized == 'inProgress' || normalized == 'running';
     final label = switch (normalized) {
-      'inProgress' => '进行中',
-      'completed' => '完成',
-      'failed' => '失败',
-      'declined' => '已拒绝',
+      'inProgress' => l10n.statusRunning,
+      'running' => l10n.statusRunning,
+      'completed' => l10n.statusCompleted,
+      'failed' => l10n.statusFailed,
+      'error' => l10n.statusFailed,
+      'declined' => l10n.statusDeclined,
+      'waiting' => l10n.statusWaiting,
       _ => normalized,
     };
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: failed
-            ? colorScheme.errorContainer.withValues(alpha: 0.65)
+    return DefaultTextStyle.merge(
+      style: theme.textTheme.labelSmall,
+      child: CodexStatusChip(
+        label: label,
+        compact: true,
+        tone: failed
+            ? CodexStatusTone.error
             : inProgress
-            ? colorScheme.primaryContainer.withValues(alpha: 0.5)
-            : colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: failed ? colorScheme.onErrorContainer : colorScheme.onSurface,
-          fontWeight: FontWeight.w600,
-        ),
+            ? CodexStatusTone.running
+            : normalized == 'declined' || normalized == 'waiting'
+            ? CodexStatusTone.warning
+            : normalized == 'completed'
+            ? CodexStatusTone.success
+            : CodexStatusTone.neutral,
       ),
     );
   }
@@ -522,12 +590,14 @@ class _PartVisualSpec {
   const _PartVisualSpec({
     required this.icon,
     required this.iconColor,
+    required this.lineColor,
     required this.backgroundColor,
     required this.borderColor,
   });
 
   final IconData icon;
   final Color iconColor;
+  final Color lineColor;
   final Color backgroundColor;
   final Color borderColor;
 }

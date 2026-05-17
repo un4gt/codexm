@@ -36,14 +36,15 @@ class ComposerMentionSuggestion {
 }
 
 String? extractSlashToken(String input) {
-  final trimmed = input.trimLeft();
-  if (!trimmed.startsWith('/')) {
+  final match = RegExp(r'(^|\s)(/[^\s]*)$').firstMatch(input);
+  if (match == null) {
     return null;
   }
-  if (RegExp(r'\s').hasMatch(trimmed)) {
+  final token = match.group(2) ?? '';
+  if (token.startsWith('//')) {
     return null;
   }
-  return trimmed;
+  return token;
 }
 
 String? extractMentionToken(String input) {
@@ -55,16 +56,13 @@ String? extractMentionToken(String input) {
 }
 
 String replaceActiveSlashToken(String input, String command) {
-  final leadingWhitespace = RegExp(r'^\s*').firstMatch(input)?.group(0) ?? '';
-  final trimmed = input.substring(leadingWhitespace.length);
-  if (!trimmed.startsWith('/')) {
-    return '$leadingWhitespace$command ';
+  final match = RegExp(r'(^|\s)(/[^\s]*)$').firstMatch(input);
+  if (match == null) {
+    return '$input$command ';
   }
-  final firstWhitespace = trimmed.indexOf(RegExp(r'\s'));
-  if (firstWhitespace == -1) {
-    return '$leadingWhitespace$command ';
-  }
-  return '$leadingWhitespace$command${trimmed.substring(firstWhitespace)}';
+  final prefixLength = (match.group(1) ?? '').length;
+  final start = match.start + prefixLength;
+  return '${input.substring(0, start)}$command ';
 }
 
 String clearActiveMentionToken(String input) {
