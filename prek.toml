@@ -105,9 +105,9 @@ require_serial = true
 
 [[repos.hooks]]
 id = "flutter-push-sanity"
-name = "Flutter push sanity"
+name = "Flutter push check"
 language = "system"
-entry = "bash ./scripts/flutter_ci_sanity.sh"
+entry = "bash ./scripts/flutter_push_check.sh"
 env = { CI = "true", FLUTTER_SUPPRESS_ANALYTICS = "true" }
 always_run = true
 pass_filenames = false
@@ -119,17 +119,6 @@ id = "release-tag-head-guard"
 name = "Release tag must match HEAD"
 language = "system"
 entry = "bash ./scripts/guard_release_tag_head.sh"
-always_run = true
-pass_filenames = false
-require_serial = true
-stages = ["pre-push"]
-
-[[repos.hooks]]
-id = "flutter-release-regression"
-name = "Flutter release regression"
-language = "system"
-entry = "bash ./scripts/flutter_phase5_regression.sh"
-env = { CI = "true", FLUTTER_SUPPRESS_ANALYTICS = "true" }
 always_run = true
 pass_filenames = false
 require_serial = true

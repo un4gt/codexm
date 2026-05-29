@@ -40,6 +40,7 @@ from typing import Iterable, Optional
 GITHUB_API_BASE = 'https://api.github.com'
 USER_AGENT = 'codexm-fetch-android-codex-deps'
 TERMUX_MAIN_REPO_BASE = 'https://packages.termux.dev/apt/termux-main'
+DEFAULT_CODEX_TERMUX_TAG = '0.134.1'
 
 _TERMUX_INDEX_CACHE: dict[tuple[str, str], dict[str, dict[str, str]]] = {}
 
@@ -771,9 +772,13 @@ def main(argv: list[str]) -> int:
     default=(
       os.environ.get('CODEX_TERMUX_TAG')
       or os.environ.get('CODEX_TERMUX_VERSION')
-      or 'latest'
+      or DEFAULT_CODEX_TERMUX_TAG
     ),
-    help='GitHub release tag（默认：CODEX_TERMUX_TAG / CODEX_TERMUX_VERSION / latest；支持 0.112.0-termux 或 v0.112.0-termux）',
+    help=(
+      'GitHub release tag'
+      f'（默认：CODEX_TERMUX_TAG / CODEX_TERMUX_VERSION / {DEFAULT_CODEX_TERMUX_TAG}；'
+      '支持 0.112.0-termux 或 v0.112.0-termux）'
+    ),
   )
 
   parser.add_argument(
