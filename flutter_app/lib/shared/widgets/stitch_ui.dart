@@ -253,19 +253,24 @@ class StitchListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final tokens = context.appTokens;
 
     final backgroundColor = highlighted
         ? colorScheme.primary.withValues(alpha: 0.08)
-        : colorScheme.surface;
+        : colorScheme.surfaceContainerLowest;
 
     return Material(
       color: backgroundColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: tokens.elevationLow,
+      shadowColor: colorScheme.shadow.withValues(alpha: 0.06),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(tokens.cardRadius),
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(tokens.cardRadius),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

@@ -235,6 +235,62 @@ void main() {
 
     expect((await settingsStore.getSettings()).updateCheckOnLaunch, isFalse);
   });
+
+  test('loads appearance defaults and normalizes invalid persisted values', () {
+    final defaults = CodexSettings.fromMap(const <String, Object?>{});
+    expect(defaults.themeModePreference, CodexThemeModePreference.system);
+    expect(defaults.themePaletteSource, CodexThemePaletteSource.fixed);
+    expect(defaults.accentColorValue, isNull);
+    expect(
+      defaults.lightCodeThemePreference,
+      CodexLightCodeThemePreference.vscodeLight,
+    );
+    expect(
+      defaults.darkCodeThemePreference,
+      CodexDarkCodeThemePreference.vscodeDarkPlus,
+    );
+
+    final normalized = CodexSettings.fromMap(const <String, Object?>{
+      'themeModePreference': 'neon',
+      'themePaletteSource': 'wallpaper',
+      'accentColorValue': -1,
+      'lightCodeThemePreference': 'solarized',
+      'darkCodeThemePreference': 'black',
+    });
+    expect(normalized.themeModePreference, CodexThemeModePreference.system);
+    expect(normalized.themePaletteSource, CodexThemePaletteSource.fixed);
+    expect(normalized.accentColorValue, isNull);
+    expect(
+      normalized.lightCodeThemePreference,
+      CodexLightCodeThemePreference.vscodeLight,
+    );
+    expect(
+      normalized.darkCodeThemePreference,
+      CodexDarkCodeThemePreference.vscodeDarkPlus,
+    );
+  });
+
+  test('keeps appearance preferences out of generated Codex config', () {
+    final settingsStore = CodexSettingsStore(
+      authStore: AuthStore(secureStore: _MemorySecureStore()),
+    );
+    final config = settingsStore.generateCodexConfigToml(
+      const CodexSettings(
+        model: 'gpt-test',
+        themeModePreference: CodexThemeModePreference.dark,
+        themePaletteSource: CodexThemePaletteSource.customAccent,
+        accentColorValue: 0xFFDB2777,
+        lightCodeThemePreference: CodexLightCodeThemePreference.githubLight,
+        darkCodeThemePreference: CodexDarkCodeThemePreference.dracula,
+      ),
+    );
+
+    expect(config, contains('model = "gpt-test"'));
+    expect(config, isNot(contains('theme')));
+    expect(config, isNot(contains('palette')));
+    expect(config, isNot(contains('accent')));
+    expect(config, isNot(contains('codeTheme')));
+  });
 }
 
 class _MemorySecureStore implements SecureKeyValueStore {

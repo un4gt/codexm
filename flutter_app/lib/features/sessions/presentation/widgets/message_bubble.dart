@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import '../../../../shared/widgets/adaptive_breakpoints.dart';
+import '../../../../app/theme/app_theme.dart';
 import '../../application/session_models.dart';
 import 'simple_markdown_view.dart';
 
@@ -23,67 +24,49 @@ class MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final widthClass = context.adaptiveWidthClass;
 
     if (role == 'system' || role == 'error') {
-      return Align(
-        alignment: Alignment.center,
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          constraints: const BoxConstraints(maxWidth: 500),
-          decoration: BoxDecoration(
-            color: role == 'error'
-                ? theme.colorScheme.errorContainer.withValues(alpha: 0.4)
-                : theme.colorScheme.surfaceContainerHighest.withValues(
-                    alpha: 0.3,
-                  ),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                role == 'error' ? Icons.error_outline : Icons.info_outline,
-                size: 16,
-                color: role == 'error'
-                    ? theme.colorScheme.error
-                    : theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: SimpleMarkdownView(
-                  content: content,
-                  showThinking: false,
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: _ChatWidthRow(
+          alignment: Alignment.center,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: role == 'error'
+                  ? theme.colorScheme.errorContainer.withValues(alpha: 0.4)
+                  : theme.colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.3,
+                    ),
+              borderRadius: BorderRadius.circular(context.appTokens.cardRadius),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  role == 'error' ? Icons.error_outline : Icons.info_outline,
+                  size: 16,
+                  color: role == 'error'
+                      ? theme.colorScheme.error
+                      : theme.colorScheme.onSurfaceVariant,
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Flexible(
+                  child: SimpleMarkdownView(
+                    content: content,
+                    showThinking: false,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
     }
 
     final spec = _messageStyle(theme, role);
-    final maxBubbleWidth = switch (widthClass) {
-      AdaptiveWidthClass.compact => 560.0,
-      AdaptiveWidthClass.medium => 680.0,
-      AdaptiveWidthClass.expanded => 760.0,
-    };
-
     final hasStructuredParts = parts.any((part) => part.kind != 'agentText');
-    if (role != 'user' && hasStructuredParts) {
-      return _StructuredAssistantMessage(
-        spec: spec,
-        content: content,
-        parts: parts,
-        createdAt: createdAt,
-        showThinking: showThinking,
-        maxWidth: maxBubbleWidth,
-        formatTime: _formatTime,
-      );
-    }
-
     final plainContent = content.trim().isNotEmpty
         ? content
         : parts
@@ -91,56 +74,54 @@ class MessageBubble extends StatelessWidget {
               .map((part) => part.content)
               .join();
 
-    return Align(
+    if (role != 'user' && hasStructuredParts) {
+      return _StructuredAssistantMessage(
+        cardKey: _cardKeyFor(key),
+        spec: spec,
+        content: content,
+        parts: parts,
+        createdAt: createdAt,
+        showThinking: showThinking,
+        formatTime: _formatTime,
+      );
+    }
+
+    return _ChatWidthRow(
       alignment: spec.alignment,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-          decoration: BoxDecoration(
-            color: spec.backgroundColor,
-            borderRadius: BorderRadius.circular(spec.borderRadius),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: Icon(spec.icon, size: 14, color: spec.iconColor),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      spec.label,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: spec.labelColor,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    _formatTime(createdAt),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color:
-                          spec.timeColor ?? theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              SimpleMarkdownView(
-                content: plainContent,
-                showThinking: showThinking,
-              ),
-            ],
-          ),
+      child: _MessageCard(
+        key: _cardKeyFor(key),
+        spec: spec,
+        createdAt: createdAt,
+        formatTime: _formatTime,
+        onLongPress: () => _copyMessage(context, plainContent),
+        child: SimpleMarkdownView(
+          content: plainContent,
+          showThinking: showThinking,
+          textAlign: role == 'user' ? TextAlign.right : TextAlign.left,
         ),
       ),
     );
+  }
+
+  Key? _cardKeyFor(Key? sourceKey) {
+    if (sourceKey is ValueKey<String>) {
+      return ValueKey<String>('${sourceKey.value}-card');
+    }
+    return null;
+  }
+
+  Future<void> _copyMessage(BuildContext context, String value) async {
+    final text = value.trim();
+    if (text.isEmpty) {
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
   }
 
   String _formatTime(int millis) {
@@ -165,43 +146,158 @@ class MessageBubble extends StatelessWidget {
         iconColor: scheme.primary,
         labelColor: scheme.onPrimaryContainer,
         timeColor: scheme.onPrimaryContainer.withValues(alpha: 0.72),
+        avatarBackground: scheme.primary,
+        avatarForeground: scheme.onPrimary,
       );
     }
     return _MessageSpec(
-      label: 'Codex',
+      label: 'CodexM',
       icon: Icons.auto_awesome_outlined,
       alignment: Alignment.centerLeft,
-      backgroundColor: scheme.surfaceContainerHighest.withValues(alpha: 0.3),
-      borderRadius: 14,
-      iconColor: scheme.onSurfaceVariant,
+      backgroundColor: scheme.surfaceContainerLow,
+      borderRadius: 16,
+      iconColor: scheme.primary,
       labelColor: scheme.onSurface,
       timeColor: scheme.onSurfaceVariant,
+      avatarBackground: scheme.secondaryContainer,
+      avatarForeground: scheme.onSecondaryContainer,
+    );
+  }
+}
+
+class _ChatWidthRow extends StatelessWidget {
+  const _ChatWidthRow({required this.alignment, required this.child});
+
+  final Alignment alignment;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.appTokens;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : MediaQuery.sizeOf(context).width;
+        final gutter = width * tokens.chatHorizontalGutterFactor;
+        final bubbleWidth = width * tokens.chatMessageWidthFactor;
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: gutter, vertical: 6),
+          child: Align(
+            alignment: alignment,
+            child: SizedBox(width: bubbleWidth, child: child),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _MessageCard extends StatelessWidget {
+  const _MessageCard({
+    super.key,
+    required this.spec,
+    required this.createdAt,
+    required this.formatTime,
+    required this.child,
+    this.onLongPress,
+  });
+
+  final _MessageSpec spec;
+  final int createdAt;
+  final String Function(int millis) formatTime;
+  final Widget child;
+  final VoidCallback? onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isUser = spec.alignment == Alignment.centerRight;
+
+    final header = Row(
+      children: [
+        if (!isUser) ...[_MessageAvatar(spec: spec), const SizedBox(width: 8)],
+        Expanded(
+          child: Text(
+            spec.label,
+            textAlign: isUser ? TextAlign.right : TextAlign.left,
+            style: theme.textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: spec.labelColor,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          formatTime(createdAt),
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: spec.timeColor ?? theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        if (isUser) ...[const SizedBox(width: 8), _MessageAvatar(spec: spec)],
+      ],
+    );
+
+    return Material(
+      color: spec.backgroundColor,
+      elevation: context.appTokens.elevationLow,
+      shadowColor: theme.colorScheme.shadow.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(spec.borderRadius),
+      child: InkWell(
+        onLongPress: onLongPress,
+        borderRadius: BorderRadius.circular(spec.borderRadius),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 72),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [header, const SizedBox(height: 8), child],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MessageAvatar extends StatelessWidget {
+  const _MessageAvatar({required this.spec});
+
+  final _MessageSpec spec;
+
+  @override
+  Widget build(BuildContext context) {
+    return CircleAvatar(
+      radius: 14,
+      backgroundColor: spec.avatarBackground,
+      foregroundColor: spec.avatarForeground,
+      child: Icon(spec.icon, size: 16),
     );
   }
 }
 
 class _StructuredAssistantMessage extends StatelessWidget {
   const _StructuredAssistantMessage({
+    required this.cardKey,
     required this.spec,
     required this.content,
     required this.parts,
     required this.createdAt,
     required this.showThinking,
-    required this.maxWidth,
     required this.formatTime,
   });
 
+  final Key? cardKey;
   final _MessageSpec spec;
   final String content;
   final List<ChatMessagePart> parts;
   final int createdAt;
   final bool showThinking;
-  final double maxWidth;
   final String Function(int millis) formatTime;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final hasOrderedText = parts.any(
       (part) => part.kind == 'agentText' && part.content.trim().isNotEmpty,
     );
@@ -219,49 +315,34 @@ class _StructuredAssistantMessage extends StatelessWidget {
       ),
     ];
 
-    return Align(
+    return _ChatWidthRow(
       alignment: spec.alignment,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 0, 4, 2),
-                child: Row(
-                  children: [
-                    Icon(spec.icon, size: 14, color: spec.iconColor),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        spec.label,
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: spec.labelColor,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      formatTime(createdAt),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color:
-                            spec.timeColor ??
-                            theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
+      child: _MessageCard(
+        key: cardKey,
+        spec: spec,
+        createdAt: createdAt,
+        formatTime: formatTime,
+        onLongPress: () {
+          final text = visibleParts.map((part) => part.content).join('\n');
+          Clipboard.setData(ClipboardData(text: text.trim()));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var index = 0; index < visibleParts.length; index += 1) ...[
+              if (index > 0) const SizedBox(height: 8),
+              _MessagePartCard(
+                key: ValueKey(
+                  '${visibleParts[index].id}:${visibleParts[index].kind}',
                 ),
+                part: visibleParts[index],
+                showThinking: showThinking,
               ),
-              for (final part in visibleParts)
-                _MessagePartCard(
-                  key: ValueKey('${part.id}:${part.kind}'),
-                  part: part,
-                  showThinking: showThinking,
-                ),
             ],
-          ),
+          ],
         ),
       ),
     );
@@ -318,96 +399,94 @@ class _MessagePartCardState extends State<_MessagePartCard> {
     final summary = _summaryFor(content);
     final showContent = content.isNotEmpty && (!_isCollapsible || _expanded);
 
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(top: 6),
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-      decoration: BoxDecoration(
-        color: spec.backgroundColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: spec.borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          InkWell(
-            onTap: _isCollapsible
-                ? () {
-                    setState(() {
-                      _expanded = !_expanded;
-                    });
-                  }
-                : null,
-            borderRadius: BorderRadius.circular(8),
-            child: Semantics(
-              button: _isCollapsible,
-              label: _isCollapsible
-                  ? (_expanded ? '折叠${part.title}' : '展开${part.title}')
+    return Material(
+      color: spec.backgroundColor,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: spec.borderColor),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InkWell(
+              onTap: _isCollapsible
+                  ? () {
+                      setState(() {
+                        _expanded = !_expanded;
+                      });
+                    }
                   : null,
-              child: Padding(
-                padding: EdgeInsets.only(bottom: _isCollapsible ? 2 : 0),
-                child: Row(
-                  children: [
-                    Icon(spec.icon, size: 16, color: spec.iconColor),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        part.title,
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: colorScheme.onSurface,
+              borderRadius: BorderRadius.circular(8),
+              child: Semantics(
+                button: _isCollapsible,
+                label: _isCollapsible
+                    ? (_expanded ? '折叠${part.title}' : '展开${part.title}')
+                    : null,
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: _isCollapsible ? 2 : 0),
+                  child: Row(
+                    children: [
+                      Icon(spec.icon, size: 16, color: spec.iconColor),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          part.title,
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: colorScheme.onSurface,
+                          ),
                         ),
                       ),
-                    ),
-                    if (part.status != null)
-                      _PartStatusChip(status: part.status!),
-                    if (_isCollapsible) ...[
-                      const SizedBox(width: 4),
-                      Tooltip(
-                        message: _expanded ? '折叠内容' : '展开内容',
-                        child: Icon(
-                          _expanded ? Icons.expand_less : Icons.expand_more,
-                          size: 20,
-                          color: colorScheme.onSurfaceVariant,
+                      if (part.status != null)
+                        _PartStatusChip(status: part.status!),
+                      if (_isCollapsible) ...[
+                        const SizedBox(width: 4),
+                        Tooltip(
+                          message: _expanded ? '折叠内容' : '展开内容',
+                          child: Icon(
+                            _expanded ? Icons.expand_less : Icons.expand_more,
+                            size: 20,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-          if (_isCollapsible && !_expanded && summary.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              summary,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                fontFamily: _usesMonospace(part.kind) ? 'monospace' : null,
-                height: 1.35,
-              ),
-            ),
-          ],
-          if (showContent) ...[
-            const SizedBox(height: 8),
-            if (_usesMonospace(part.kind))
-              SelectableText(
-                content,
+            if (_isCollapsible && !_expanded && summary.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                summary,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurface,
-                  fontFamily: 'monospace',
+                  color: colorScheme.onSurfaceVariant,
+                  fontFamily: _usesMonospace(part.kind) ? 'monospace' : null,
                   height: 1.35,
                 ),
-              )
-            else
-              SimpleMarkdownView(
-                content: content,
-                showThinking: widget.showThinking,
               ),
+            ],
+            if (showContent) ...[
+              const SizedBox(height: 8),
+              if (_usesMonospace(part.kind))
+                SimpleCodeBlock(
+                  content: content,
+                  language: part.kind == 'command' ? 'shell' : 'diff',
+                )
+              else
+                SimpleMarkdownView(
+                  content: content,
+                  showThinking: widget.showThinking,
+                ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -460,10 +539,8 @@ class _MessagePartCardState extends State<_MessagePartCard> {
       'agentText' => _PartVisualSpec(
         icon: Icons.chat_bubble_outline,
         iconColor: colorScheme.onSurfaceVariant,
-        backgroundColor: colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.3,
-        ),
-        borderColor: colorScheme.outlineVariant.withValues(alpha: 0.45),
+        backgroundColor: Colors.transparent,
+        borderColor: Colors.transparent,
       ),
       _ => _PartVisualSpec(
         icon: Icons.build_outlined,
@@ -507,12 +584,30 @@ class _PartStatusChip extends StatelessWidget {
             : colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(
-        label,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: failed ? colorScheme.onErrorContainer : colorScheme.onSurface,
-          fontWeight: FontWeight.w600,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (inProgress) ...[
+            SizedBox(
+              width: 10,
+              height: 10,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.6,
+                color: colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: failed
+                  ? colorScheme.onErrorContainer
+                  : colorScheme.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -541,6 +636,8 @@ class _MessageSpec {
     required this.borderRadius,
     required this.iconColor,
     required this.labelColor,
+    required this.avatarBackground,
+    required this.avatarForeground,
     this.timeColor,
   });
 
@@ -551,5 +648,7 @@ class _MessageSpec {
   final double borderRadius;
   final Color iconColor;
   final Color labelColor;
+  final Color avatarBackground;
+  final Color avatarForeground;
   final Color? timeColor;
 }

@@ -11,9 +11,14 @@ import '../../application/codex_settings_store.dart';
 part 'settings_page_sections.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key, this.onLocalePreferenceChanged});
+  const SettingsPage({
+    super.key,
+    this.onLocalePreferenceChanged,
+    this.onSettingsChanged,
+  });
 
   final ValueChanged<Locale?>? onLocalePreferenceChanged;
+  final ValueChanged<CodexSettings>? onSettingsChanged;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -302,6 +307,7 @@ class _SettingsPageState extends State<SettingsPage> {
             _settings = saved;
           });
         }
+        widget.onSettingsChanged?.call(saved);
         return status;
       },
     );
@@ -316,6 +322,7 @@ class _SettingsPageState extends State<SettingsPage> {
       widget.onLocalePreferenceChanged?.call(
         CodexLocalePreference.toLocale(saved.appLocalePreference),
       );
+      widget.onSettingsChanged?.call(saved);
       if (mounted) {
         setState(() {
           _settings = saved;
@@ -433,6 +440,11 @@ class _SettingsPageState extends State<SettingsPage> {
           extraConfigValidationError: _extraConfigValidationError,
           onSaveExtraConfigToml: _saveExtraConfigTomlDraft,
           onClearExtraConfigToml: _clearExtraConfigTomlDraft,
+        ),
+        _AppearanceSection(
+          settings: _settings,
+          busy: _busy,
+          onUpdatePreference: _updatePreference,
         ),
         _PreferenceSection(
           settings: _settings,

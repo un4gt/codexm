@@ -4,14 +4,21 @@ enum _SessionAction { rename, delete }
 
 enum _HeaderMenuAction { newSession, renameSession, deleteSession }
 
+class _ChatSearchMatch {
+  const _ChatSearchMatch({required this.messageIndex});
+
+  final int messageIndex;
+}
+
 class _SessionUiSpecs {
   const _SessionUiSpecs._();
 
   static const double maxContentWidth = 920;
-  static const double compactHorizontalPadding = 14;
-  static const double mediumHorizontalPadding = 18;
-  static const double expandedHorizontalPadding = 20;
+  static const double compactHorizontalPadding = 0;
+  static const double mediumHorizontalPadding = 0;
+  static const double expandedHorizontalPadding = 0;
   static const double minTapTarget = 48;
+  static const double estimatedMessageExtent = 148;
 }
 
 class _WorkspaceEmptyState extends StatelessWidget {
@@ -71,6 +78,11 @@ class _ChatPanel extends StatelessWidget {
     required this.selectedSession,
     required this.messages,
     required this.showThinking,
+    required this.settings,
+    required this.chatSearchVisible,
+    required this.chatSearchController,
+    required this.chatSearchMatches,
+    required this.activeChatSearchMatch,
     required this.settingsEnabled,
     required this.hasApiKey,
     required this.running,
@@ -96,6 +108,11 @@ class _ChatPanel extends StatelessWidget {
     required this.onDeleteSession,
     required this.canSend,
     required this.canEditComposer,
+    required this.onToggleChatSearch,
+    required this.onChatSearchChanged,
+    required this.onMoveChatSearchMatch,
+    required this.onOpenSettingsRequested,
+    required this.onEditModelRequested,
   });
 
   final Workspace workspace;
@@ -103,6 +120,11 @@ class _ChatPanel extends StatelessWidget {
   final Session? selectedSession;
   final List<ChatMessage> messages;
   final bool showThinking;
+  final CodexSettings settings;
+  final bool chatSearchVisible;
+  final TextEditingController chatSearchController;
+  final List<_ChatSearchMatch> chatSearchMatches;
+  final int activeChatSearchMatch;
   final bool settingsEnabled;
   final bool hasApiKey;
   final bool running;
@@ -128,6 +150,11 @@ class _ChatPanel extends StatelessWidget {
   final ValueChanged<Session> onDeleteSession;
   final bool canSend;
   final bool canEditComposer;
+  final VoidCallback onToggleChatSearch;
+  final ValueChanged<String> onChatSearchChanged;
+  final ValueChanged<int> onMoveChatSearchMatch;
+  final VoidCallback? onOpenSettingsRequested;
+  final VoidCallback onEditModelRequested;
 
   @override
   Widget build(BuildContext context) {
@@ -152,7 +179,17 @@ class _ChatPanel extends StatelessWidget {
               sessionCount: sessions.length,
               status: status,
               settingsReady: settingsEnabled && hasApiKey,
+              settings: settings,
+              chatSearchVisible: chatSearchVisible,
+              chatSearchController: chatSearchController,
+              chatSearchMatches: chatSearchMatches,
+              activeChatSearchMatch: activeChatSearchMatch,
               onOpenSessionSwitcher: onOpenSessionSwitcher,
+              onToggleChatSearch: onToggleChatSearch,
+              onChatSearchChanged: onChatSearchChanged,
+              onMoveChatSearchMatch: onMoveChatSearchMatch,
+              onOpenSettingsRequested: onOpenSettingsRequested,
+              onEditModelRequested: onEditModelRequested,
               onMenuAction: (action) {
                 switch (action) {
                   case _HeaderMenuAction.newSession:
@@ -219,7 +256,17 @@ class _SessionHeader extends StatelessWidget {
     required this.sessionCount,
     required this.status,
     required this.settingsReady,
+    required this.settings,
+    required this.chatSearchVisible,
+    required this.chatSearchController,
+    required this.chatSearchMatches,
+    required this.activeChatSearchMatch,
     required this.onOpenSessionSwitcher,
+    required this.onToggleChatSearch,
+    required this.onChatSearchChanged,
+    required this.onMoveChatSearchMatch,
+    required this.onOpenSettingsRequested,
+    required this.onEditModelRequested,
     required this.onMenuAction,
   });
 
@@ -228,24 +275,36 @@ class _SessionHeader extends StatelessWidget {
   final int sessionCount;
   final String status;
   final bool settingsReady;
+  final CodexSettings settings;
+  final bool chatSearchVisible;
+  final TextEditingController chatSearchController;
+  final List<_ChatSearchMatch> chatSearchMatches;
+  final int activeChatSearchMatch;
   final VoidCallback onOpenSessionSwitcher;
+  final VoidCallback onToggleChatSearch;
+  final ValueChanged<String> onChatSearchChanged;
+  final ValueChanged<int> onMoveChatSearchMatch;
+  final VoidCallback? onOpenSettingsRequested;
+  final VoidCallback onEditModelRequested;
   final ValueChanged<_HeaderMenuAction> onMenuAction;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final widthClass = context.adaptiveWidthClass;
-    final horizontalPadding = switch (widthClass) {
-      AdaptiveWidthClass.compact => _SessionUiSpecs.compactHorizontalPadding,
-      AdaptiveWidthClass.medium => _SessionUiSpecs.mediumHorizontalPadding,
-      AdaptiveWidthClass.expanded => _SessionUiSpecs.expandedHorizontalPadding,
-    };
+    final tokens = context.appTokens;
+    final modelLabel = settings.model?.trim().isNotEmpty == true
+        ? settings.model!.trim()
+        : '默认模型';
     final trimmedStatus = status.trim();
     final shouldShowStatus =
         trimmedStatus.isNotEmpty &&
         (trimmedStatus.contains('失败') ||
             trimmedStatus.contains('请先') ||
             trimmedStatus.contains('未连接'));
+    final searchCount = chatSearchMatches.length;
+    final activeSearchLabel = searchCount == 0
+        ? '0/0'
+        : '${activeChatSearchMatch + 1}/$searchCount';
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -257,23 +316,28 @@ class _SessionHeader extends StatelessWidget {
         ),
       ),
       child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          horizontalPadding,
-          10,
-          horizontalPadding,
-          10,
-        ),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: theme.colorScheme.primaryContainer,
+                  child: Icon(
+                    Icons.auto_awesome_outlined,
+                    size: 18,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        selectedSession?.title ?? '主会话',
+                        'CodexM',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleLarge?.copyWith(
@@ -281,39 +345,43 @@ class _SessionHeader extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          if (widthClass.isExpanded) ...[
-                            _ConnectionStatusChip(connected: settingsReady),
-                            const SizedBox(width: 8),
-                          ] else if (widthClass.isMedium) ...[
-                            Icon(
-                              settingsReady
-                                  ? Icons.check_circle_outline
-                                  : Icons.vpn_key_outlined,
-                              size: 14,
-                              color: settingsReady
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurfaceVariant,
-                            ),
-                            const SizedBox(width: 4),
-                          ],
-                          Expanded(
-                            child: Text(
-                              workspace.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                        ],
+                      Text(
+                        'On-device Codex client',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(width: 8),
+                Tooltip(
+                  message: '搜索当前会话',
+                  child: IconButton(
+                    onPressed: onToggleChatSearch,
+                    icon: Icon(
+                      chatSearchVisible
+                          ? Icons.search_off_outlined
+                          : Icons.search_outlined,
+                    ),
+                  ),
+                ),
+                Tooltip(
+                  message: '模型：$modelLabel',
+                  child: IconButton(
+                    onPressed: onEditModelRequested,
+                    icon: const Icon(Icons.smart_toy_outlined),
+                  ),
+                ),
+                Tooltip(
+                  message: '连接设置',
+                  child: IconButton(
+                    onPressed: onOpenSettingsRequested,
+                    icon: const Icon(Icons.settings_outlined),
+                  ),
+                ),
                 SizedBox(
                   width: _SessionUiSpecs.minTapTarget,
                   height: _SessionUiSpecs.minTapTarget,
@@ -350,6 +418,64 @@ class _SessionHeader extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _ConnectionStatusChip(connected: settingsReady),
+                Chip(
+                  visualDensity: VisualDensity.compact,
+                  avatar: const Icon(Icons.folder_outlined, size: 16),
+                  label: Text(
+                    workspace.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Chip(
+                  visualDensity: VisualDensity.compact,
+                  avatar: const Icon(Icons.forum_outlined, size: 16),
+                  label: Text(selectedSession?.title ?? '主会话'),
+                ),
+              ],
+            ),
+            if (chatSearchVisible) ...[
+              SizedBox(height: tokens.compactSpacing),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: chatSearchController,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        hintText: '搜索当前会话',
+                        prefixIcon: Icon(Icons.search_outlined),
+                        isDense: true,
+                      ),
+                      onChanged: onChatSearchChanged,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(activeSearchLabel, style: theme.textTheme.labelMedium),
+                  IconButton(
+                    tooltip: '上一个匹配',
+                    onPressed: searchCount == 0
+                        ? null
+                        : () => onMoveChatSearchMatch(-1),
+                    icon: const Icon(Icons.keyboard_arrow_up),
+                  ),
+                  IconButton(
+                    tooltip: '下一个匹配',
+                    onPressed: searchCount == 0
+                        ? null
+                        : () => onMoveChatSearchMatch(1),
+                    icon: const Icon(Icons.keyboard_arrow_down),
+                  ),
+                ],
+              ),
+            ],
             if (shouldShowStatus) ...[
               const SizedBox(height: 8),
               Text(
@@ -447,12 +573,6 @@ class _MessageList extends StatelessWidget {
     final hasStreaming =
         pendingAssistantText.trim().isNotEmpty ||
         pendingAssistantParts.isNotEmpty;
-    final widthClass = context.adaptiveWidthClass;
-    final horizontalPadding = switch (widthClass) {
-      AdaptiveWidthClass.compact => _SessionUiSpecs.compactHorizontalPadding,
-      AdaptiveWidthClass.medium => _SessionUiSpecs.mediumHorizontalPadding,
-      AdaptiveWidthClass.expanded => _SessionUiSpecs.expandedHorizontalPadding,
-    };
 
     if (messages.isEmpty && !hasStreaming) {
       return _ChatEmptyState(
@@ -468,12 +588,7 @@ class _MessageList extends StatelessWidget {
       child: ListView.builder(
         controller: scrollController,
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: EdgeInsets.fromLTRB(
-          horizontalPadding,
-          12,
-          horizontalPadding,
-          12,
-        ),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         itemCount: totalCount,
         itemBuilder: (context, index) {
           if (index < messages.length) {

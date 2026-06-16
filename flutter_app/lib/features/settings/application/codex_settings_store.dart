@@ -37,6 +37,77 @@ class CodexLocalePreference {
   }
 }
 
+class CodexThemeModePreference {
+  const CodexThemeModePreference._();
+
+  static const system = 'system';
+  static const light = 'light';
+  static const dark = 'dark';
+
+  static const values = <String>[system, light, dark];
+
+  static String normalize(String? value) {
+    final normalized = value?.trim();
+    if (normalized == light || normalized == dark) {
+      return normalized!;
+    }
+    return system;
+  }
+}
+
+class CodexThemePaletteSource {
+  const CodexThemePaletteSource._();
+
+  static const fixed = 'fixed';
+  static const dynamic = 'dynamic';
+  static const customAccent = 'customAccent';
+
+  static const values = <String>[fixed, dynamic, customAccent];
+
+  static String normalize(String? value) {
+    final normalized = value?.trim();
+    if (normalized == dynamic || normalized == customAccent) {
+      return normalized!;
+    }
+    return fixed;
+  }
+}
+
+class CodexLightCodeThemePreference {
+  const CodexLightCodeThemePreference._();
+
+  static const vscodeLight = 'vscodeLight';
+  static const githubLight = 'githubLight';
+
+  static const values = <String>[vscodeLight, githubLight];
+
+  static String normalize(String? value) {
+    final normalized = value?.trim();
+    if (normalized == githubLight) {
+      return normalized!;
+    }
+    return vscodeLight;
+  }
+}
+
+class CodexDarkCodeThemePreference {
+  const CodexDarkCodeThemePreference._();
+
+  static const vscodeDarkPlus = 'vscodeDarkPlus';
+  static const dracula = 'dracula';
+  static const oneDarkPro = 'oneDarkPro';
+
+  static const values = <String>[vscodeDarkPlus, dracula, oneDarkPro];
+
+  static String normalize(String? value) {
+    final normalized = value?.trim();
+    if (normalized == dracula || normalized == oneDarkPro) {
+      return normalized!;
+    }
+    return vscodeDarkPlus;
+  }
+}
+
 class CodexSettings {
   const CodexSettings({
     this.version = 1,
@@ -52,6 +123,11 @@ class CodexSettings {
     this.debugLogRetentionDays = 7,
     this.updateCheckOnLaunch = true,
     this.appLocalePreference = CodexLocalePreference.system,
+    this.themeModePreference = CodexThemeModePreference.system,
+    this.themePaletteSource = CodexThemePaletteSource.fixed,
+    this.accentColorValue,
+    this.lightCodeThemePreference = CodexLightCodeThemePreference.vscodeLight,
+    this.darkCodeThemePreference = CodexDarkCodeThemePreference.vscodeDarkPlus,
     this.enabledGlobalMcpServerIds = const <String>[],
     this.extraConfigToml,
   });
@@ -69,6 +145,11 @@ class CodexSettings {
   final int debugLogRetentionDays;
   final bool updateCheckOnLaunch;
   final String appLocalePreference;
+  final String themeModePreference;
+  final String themePaletteSource;
+  final int? accentColorValue;
+  final String lightCodeThemePreference;
+  final String darkCodeThemePreference;
   final List<String> enabledGlobalMcpServerIds;
   final String? extraConfigToml;
 
@@ -85,10 +166,16 @@ class CodexSettings {
     int? debugLogRetentionDays,
     bool? updateCheckOnLaunch,
     String? appLocalePreference,
+    String? themeModePreference,
+    String? themePaletteSource,
+    int? accentColorValue,
+    String? lightCodeThemePreference,
+    String? darkCodeThemePreference,
     List<String>? enabledGlobalMcpServerIds,
     String? extraConfigToml,
     bool clearAuthRef = false,
     bool clearOpenaiBaseUrl = false,
+    bool clearAccentColorValue = false,
   }) {
     return CodexSettings(
       version: 1,
@@ -108,6 +195,21 @@ class CodexSettings {
       updateCheckOnLaunch: updateCheckOnLaunch ?? this.updateCheckOnLaunch,
       appLocalePreference: CodexLocalePreference.normalize(
         appLocalePreference ?? this.appLocalePreference,
+      ),
+      themeModePreference: CodexThemeModePreference.normalize(
+        themeModePreference ?? this.themeModePreference,
+      ),
+      themePaletteSource: CodexThemePaletteSource.normalize(
+        themePaletteSource ?? this.themePaletteSource,
+      ),
+      accentColorValue: clearAccentColorValue
+          ? null
+          : (accentColorValue ?? this.accentColorValue),
+      lightCodeThemePreference: CodexLightCodeThemePreference.normalize(
+        lightCodeThemePreference ?? this.lightCodeThemePreference,
+      ),
+      darkCodeThemePreference: CodexDarkCodeThemePreference.normalize(
+        darkCodeThemePreference ?? this.darkCodeThemePreference,
       ),
       enabledGlobalMcpServerIds:
           enabledGlobalMcpServerIds ?? this.enabledGlobalMcpServerIds,
@@ -130,6 +232,11 @@ class CodexSettings {
       'debugLogRetentionDays': debugLogRetentionDays,
       'updateCheckOnLaunch': updateCheckOnLaunch,
       'appLocalePreference': appLocalePreference,
+      'themeModePreference': themeModePreference,
+      'themePaletteSource': themePaletteSource,
+      'accentColorValue': accentColorValue,
+      'lightCodeThemePreference': lightCodeThemePreference,
+      'darkCodeThemePreference': darkCodeThemePreference,
       'enabledGlobalMcpServerIds': enabledGlobalMcpServerIds,
       'extraConfigToml': extraConfigToml,
     };
@@ -152,6 +259,19 @@ class CodexSettings {
       updateCheckOnLaunch: map['updateCheckOnLaunch'] as bool? ?? true,
       appLocalePreference: CodexLocalePreference.normalize(
         map['appLocalePreference']?.toString(),
+      ),
+      themeModePreference: CodexThemeModePreference.normalize(
+        map['themeModePreference']?.toString(),
+      ),
+      themePaletteSource: CodexThemePaletteSource.normalize(
+        map['themePaletteSource']?.toString(),
+      ),
+      accentColorValue: _normalizeArgbColorValue(map['accentColorValue']),
+      lightCodeThemePreference: CodexLightCodeThemePreference.normalize(
+        map['lightCodeThemePreference']?.toString(),
+      ),
+      darkCodeThemePreference: CodexDarkCodeThemePreference.normalize(
+        map['darkCodeThemePreference']?.toString(),
       ),
       enabledGlobalMcpServerIds: _normalizeStringList(
         map['enabledGlobalMcpServerIds'],
@@ -569,6 +689,17 @@ List<String> _normalizeStringList(Object? raw) {
     out.add(value);
   }
   return out;
+}
+
+int? _normalizeArgbColorValue(Object? raw) {
+  final value = raw is num ? raw.toInt() : int.tryParse(raw?.toString() ?? '');
+  if (value == null || value < 0 || value > 0xFFFFFFFF) {
+    return null;
+  }
+  if ((value & 0xFF000000) == 0) {
+    return value | 0xFF000000;
+  }
+  return value;
 }
 
 class _ComposedToml {

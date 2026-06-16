@@ -35,6 +35,8 @@ dependencies:
   codexm_native:
     path: packages/codexm_native
   flutter_secure_storage: ^9.2.4
+  dynamic_color: ^1.7.0
+  flutter_highlight: ^0.7.0
   intl: any
   path_provider: ^2.1.5
   uuid: ^4.5.1

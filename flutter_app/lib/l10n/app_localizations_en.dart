@@ -192,6 +192,60 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsExtraConfigCleared => 'Extra config cleared.';
 
   @override
+  String get settingsAppearanceSection => 'Appearance';
+
+  @override
+  String get settingsThemeModeTitle => 'Theme mode';
+
+  @override
+  String get settingsThemeModeSystem => 'Follow system';
+
+  @override
+  String get settingsThemeModeLight => 'Light';
+
+  @override
+  String get settingsThemeModeDark => 'Dark';
+
+  @override
+  String get settingsPaletteTitle => 'Palette source';
+
+  @override
+  String get settingsPaletteFixed => 'CodexM fixed palette';
+
+  @override
+  String get settingsPaletteDynamic => 'Material You';
+
+  @override
+  String get settingsPaletteCustomAccent => 'Custom accent';
+
+  @override
+  String get settingsAccentColor => 'Accent color';
+
+  @override
+  String get settingsLightCodeTheme => 'Light code theme';
+
+  @override
+  String get settingsDarkCodeTheme => 'Dark code theme';
+
+  @override
+  String get settingsCodeThemeVscodeLight => 'VSCode Light';
+
+  @override
+  String get settingsCodeThemeGithubLight => 'GitHub Light';
+
+  @override
+  String get settingsCodeThemeVscodeDarkPlus => 'VSCode Dark+';
+
+  @override
+  String get settingsCodeThemeDracula => 'Dracula';
+
+  @override
+  String get settingsCodeThemeOneDarkPro => 'One Dark Pro';
+
+  @override
+  String get settingsAppearanceUpdated => 'Appearance preference updated.';
+
+  @override
   String get settingsInteractionPreferences => 'Interaction preferences';
 
   @override

@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../app/theme/app_theme.dart';
 import '../../../../shared/widgets/adaptive_breakpoints.dart';
 import '../../../../shared/widgets/stitch_ui.dart';
 import '../../../codex/application/codex_skills_store.dart';

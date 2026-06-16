@@ -423,6 +423,114 @@ abstract class AppLocalizations {
   /// **'Extra config cleared.'**
   String get settingsExtraConfigCleared;
 
+  /// No description provided for @settingsAppearanceSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get settingsAppearanceSection;
+
+  /// No description provided for @settingsThemeModeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme mode'**
+  String get settingsThemeModeTitle;
+
+  /// No description provided for @settingsThemeModeSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow system'**
+  String get settingsThemeModeSystem;
+
+  /// No description provided for @settingsThemeModeLight.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get settingsThemeModeLight;
+
+  /// No description provided for @settingsThemeModeDark.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get settingsThemeModeDark;
+
+  /// No description provided for @settingsPaletteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Palette source'**
+  String get settingsPaletteTitle;
+
+  /// No description provided for @settingsPaletteFixed.
+  ///
+  /// In en, this message translates to:
+  /// **'CodexM fixed palette'**
+  String get settingsPaletteFixed;
+
+  /// No description provided for @settingsPaletteDynamic.
+  ///
+  /// In en, this message translates to:
+  /// **'Material You'**
+  String get settingsPaletteDynamic;
+
+  /// No description provided for @settingsPaletteCustomAccent.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom accent'**
+  String get settingsPaletteCustomAccent;
+
+  /// No description provided for @settingsAccentColor.
+  ///
+  /// In en, this message translates to:
+  /// **'Accent color'**
+  String get settingsAccentColor;
+
+  /// No description provided for @settingsLightCodeTheme.
+  ///
+  /// In en, this message translates to:
+  /// **'Light code theme'**
+  String get settingsLightCodeTheme;
+
+  /// No description provided for @settingsDarkCodeTheme.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark code theme'**
+  String get settingsDarkCodeTheme;
+
+  /// No description provided for @settingsCodeThemeVscodeLight.
+  ///
+  /// In en, this message translates to:
+  /// **'VSCode Light'**
+  String get settingsCodeThemeVscodeLight;
+
+  /// No description provided for @settingsCodeThemeGithubLight.
+  ///
+  /// In en, this message translates to:
+  /// **'GitHub Light'**
+  String get settingsCodeThemeGithubLight;
+
+  /// No description provided for @settingsCodeThemeVscodeDarkPlus.
+  ///
+  /// In en, this message translates to:
+  /// **'VSCode Dark+'**
+  String get settingsCodeThemeVscodeDarkPlus;
+
+  /// No description provided for @settingsCodeThemeDracula.
+  ///
+  /// In en, this message translates to:
+  /// **'Dracula'**
+  String get settingsCodeThemeDracula;
+
+  /// No description provided for @settingsCodeThemeOneDarkPro.
+  ///
+  /// In en, this message translates to:
+  /// **'One Dark Pro'**
+  String get settingsCodeThemeOneDarkPro;
+
+  /// No description provided for @settingsAppearanceUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance preference updated.'**
+  String get settingsAppearanceUpdated;
+
   /// No description provided for @settingsInteractionPreferences.
   ///
   /// In en, this message translates to:

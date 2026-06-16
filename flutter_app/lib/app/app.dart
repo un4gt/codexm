@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 
 import '../features/mcp/presentation/pages/mcp_page.dart';
@@ -26,6 +27,7 @@ class _CodexmFlutterAppState extends State<CodexmFlutterApp> {
   final _settingsStore = CodexSettingsStore();
 
   Locale? _locale;
+  CodexSettings _settings = const CodexSettings();
 
   @override
   void initState() {
@@ -40,6 +42,7 @@ class _CodexmFlutterAppState extends State<CodexmFlutterApp> {
         return;
       }
       setState(() {
+        _settings = settings;
         _locale = CodexLocalePreference.toLocale(settings.appLocalePreference);
       });
     } catch (_) {
@@ -58,26 +61,68 @@ class _CodexmFlutterAppState extends State<CodexmFlutterApp> {
     });
   }
 
+  void _handleSettingsChanged(CodexSettings settings) {
+    setState(() {
+      _settings = settings;
+      _locale = CodexLocalePreference.toLocale(settings.appLocalePreference);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
-      debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(),
-      locale: _locale,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: _AppShell(
-        onLocalePreferenceChanged: _handleLocalePreferenceChanged,
-      ),
+    final useDynamicPalette =
+        CodexThemePaletteSource.normalize(_settings.themePaletteSource) ==
+        CodexThemePaletteSource.dynamic;
+    final useCustomAccent =
+        CodexThemePaletteSource.normalize(_settings.themePaletteSource) ==
+        CodexThemePaletteSource.customAccent;
+    final accentColor = useCustomAccent && _settings.accentColorValue != null
+        ? Color(_settings.accentColorValue!)
+        : null;
+
+    return DynamicColorBuilder(
+      builder: (lightDynamic, darkDynamic) {
+        return MaterialApp(
+          onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
+          debugShowCheckedModeBanner: false,
+          themeAnimationDuration: const Duration(milliseconds: 240),
+          themeAnimationCurve: Curves.easeOutCubic,
+          themeMode: codexThemeModeFromPreference(
+            _settings.themeModePreference,
+          ),
+          theme: buildLightAppTheme(
+            dynamicColorScheme: useDynamicPalette ? lightDynamic : null,
+            accentColor: accentColor,
+            lightCodeThemePreference: _settings.lightCodeThemePreference,
+            darkCodeThemePreference: _settings.darkCodeThemePreference,
+          ),
+          darkTheme: buildDarkAppTheme(
+            dynamicColorScheme: useDynamicPalette ? darkDynamic : null,
+            accentColor: accentColor,
+            lightCodeThemePreference: _settings.lightCodeThemePreference,
+            darkCodeThemePreference: _settings.darkCodeThemePreference,
+          ),
+          locale: _locale,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: _AppShell(
+            onLocalePreferenceChanged: _handleLocalePreferenceChanged,
+            onSettingsChanged: _handleSettingsChanged,
+          ),
+        );
+      },
     );
   }
 }
 
 class _AppShell extends StatefulWidget {
-  const _AppShell({required this.onLocalePreferenceChanged});
+  const _AppShell({
+    required this.onLocalePreferenceChanged,
+    required this.onSettingsChanged,
+  });
 
   final ValueChanged<Locale?> onLocalePreferenceChanged;
+  final ValueChanged<CodexSettings> onSettingsChanged;
 
   @override
   State<_AppShell> createState() => _AppShellState();
@@ -151,9 +196,17 @@ class _AppShellState extends State<_AppShell> {
             _selectedIndex = 0;
           });
         },
+        onOpenSettingsRequested: () {
+          setState(() {
+            _selectedIndex = 3;
+          });
+        },
       ),
       const McpPage(),
-      SettingsPage(onLocalePreferenceChanged: widget.onLocalePreferenceChanged),
+      SettingsPage(
+        onLocalePreferenceChanged: widget.onLocalePreferenceChanged,
+        onSettingsChanged: widget.onSettingsChanged,
+      ),
     ];
   }
 

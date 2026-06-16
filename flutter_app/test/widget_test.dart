@@ -88,7 +88,7 @@ void main() {
     );
     expect(find.text('交互偏好'), findsOneWidget);
     expect(find.text('应用语言'), findsOneWidget);
-    expect(find.text('跟随系统'), findsOneWidget);
+    expect(find.text('跟随系统'), findsAtLeastNWidgets(1));
     expect(find.text('Android Smoke 验证'), findsNothing);
     expect(find.text('配置预览'), findsNothing);
     expect(find.text('连接与模型'), findsNothing);

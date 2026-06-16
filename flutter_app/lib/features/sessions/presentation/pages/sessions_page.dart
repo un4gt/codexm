@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:codexm_native/codexm_native.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../app/theme/app_theme.dart';
 import '../../../../shared/widgets/adaptive_breakpoints.dart';
 import '../../../codex/application/codex_models.dart';
 import '../../../codex/application/codex_session_runner.dart';
@@ -17,6 +18,7 @@ import '../../../workspaces/application/workspace_store.dart';
 import '../../application/assistant_part_accumulator.dart';
 import '../../application/session_composer_logic.dart';
 import '../../application/session_models.dart';
+import '../../application/session_search.dart';
 import '../../application/session_store.dart';
 import '../widgets/message_bubble.dart';
 
@@ -31,6 +33,7 @@ class SessionsPage extends StatefulWidget {
     this.onActiveWorkspaceChanged,
     this.onSessionSelected,
     this.onOpenWorkspacesRequested,
+    this.onOpenSettingsRequested,
   });
 
   final WorkspaceId? activeWorkspaceId;
@@ -38,6 +41,7 @@ class SessionsPage extends StatefulWidget {
   final ValueChanged<Workspace?>? onActiveWorkspaceChanged;
   final ValueChanged<Session?>? onSessionSelected;
   final VoidCallback? onOpenWorkspacesRequested;
+  final VoidCallback? onOpenSettingsRequested;
 
   @override
   State<SessionsPage> createState() => _SessionsPageState();
@@ -54,6 +58,7 @@ class _SessionsPageState extends State<SessionsPage> {
   final _runner = CodexSessionRunner();
   final _composerController = TextEditingController();
   final _messagesScrollController = ScrollController();
+  final _chatSearchController = TextEditingController();
 
   Workspace? _activeWorkspace;
   List<Session> _sessions = const <Session>[];
@@ -81,6 +86,9 @@ class _SessionsPageState extends State<SessionsPage> {
   Map<String, String> _commitDetails = const <String, String>{};
   bool _mentionLoading = false;
   String? _activeMentionQuery;
+  bool _chatSearchVisible = false;
+  List<_ChatSearchMatch> _chatSearchMatches = const <_ChatSearchMatch>[];
+  int _activeChatSearchMatch = -1;
 
   @override
   void initState() {
@@ -93,6 +101,7 @@ class _SessionsPageState extends State<SessionsPage> {
   void dispose() {
     _composerController.removeListener(_handleComposerChanged);
     _composerController.dispose();
+    _chatSearchController.dispose();
     _messagesScrollController.dispose();
     super.dispose();
   }
@@ -253,6 +262,134 @@ class _SessionsPageState extends State<SessionsPage> {
     });
   }
 
+  void _toggleChatSearch() {
+    setState(() {
+      _chatSearchVisible = !_chatSearchVisible;
+      if (!_chatSearchVisible) {
+        _chatSearchController.clear();
+        _chatSearchMatches = const <_ChatSearchMatch>[];
+        _activeChatSearchMatch = -1;
+      }
+    });
+  }
+
+  void _handleChatSearchChanged(String query) {
+    final matches = _findChatSearchMatches(query);
+    setState(() {
+      _chatSearchMatches = matches;
+      _activeChatSearchMatch = matches.isEmpty ? -1 : 0;
+    });
+    _jumpToActiveSearchMatch();
+  }
+
+  void _moveChatSearchMatch(int delta) {
+    if (_chatSearchMatches.isEmpty) {
+      return;
+    }
+    setState(() {
+      _activeChatSearchMatch =
+          (_activeChatSearchMatch + delta) % _chatSearchMatches.length;
+      if (_activeChatSearchMatch < 0) {
+        _activeChatSearchMatch += _chatSearchMatches.length;
+      }
+    });
+    _jumpToActiveSearchMatch();
+  }
+
+  List<_ChatSearchMatch> _findChatSearchMatches(String rawQuery) {
+    final query = rawQuery.trim().toLowerCase();
+    if (query.isEmpty) {
+      return const <_ChatSearchMatch>[];
+    }
+    return findLocalChatSearchMessageIndexes(
+      messages: _messages,
+      query: query,
+    ).map((index) => _ChatSearchMatch(messageIndex: index)).toList();
+  }
+
+  void _jumpToActiveSearchMatch() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_messagesScrollController.hasClients ||
+          _activeChatSearchMatch < 0 ||
+          _activeChatSearchMatch >= _chatSearchMatches.length) {
+        return;
+      }
+      final index = _chatSearchMatches[_activeChatSearchMatch].messageIndex;
+      final position = _messagesScrollController.position;
+      final target = (index * _SessionUiSpecs.estimatedMessageExtent).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      _messagesScrollController.animateTo(
+        target.toDouble(),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  Future<void> _editModelFromHeader() async {
+    final controller = TextEditingController(text: _settings.model ?? '');
+    final model = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('模型'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: '模型名称',
+              hintText: 'gpt-4.1',
+            ),
+            textInputAction: TextInputAction.done,
+            onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(context).pop(controller.text.trim()),
+              child: const Text('保存'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+    if (model == null) {
+      return;
+    }
+    final normalized = model.trim();
+    if (normalized.isEmpty || normalized == _settings.model) {
+      return;
+    }
+    try {
+      final saved = await _settingsStore.updateSettings(
+        (current) => current.copyWith(model: normalized),
+      );
+      final mcpServers = await _mcpStore.listServers();
+      await _settingsStore.materializeCodexConfigFiles(mcpServers: mcpServers);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _settings = saved;
+        _status = '已更新模型为：$normalized';
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _status = '更新模型失败：$error';
+      });
+    }
+  }
+
   void _handleComposerChanged() {
     final input = _composerController.text;
     final slashSuggestions = filterSlashCommands(input);
@@ -398,6 +535,11 @@ class _SessionsPageState extends State<SessionsPage> {
             selectedSession: selectedSession,
             messages: _messages,
             showThinking: _settings.uiShowThinking,
+            settings: _settings,
+            chatSearchVisible: _chatSearchVisible,
+            chatSearchController: _chatSearchController,
+            chatSearchMatches: _chatSearchMatches,
+            activeChatSearchMatch: _activeChatSearchMatch,
             settingsEnabled: _settings.enabled,
             hasApiKey: _hasApiKey,
             running: _running,
@@ -423,6 +565,11 @@ class _SessionsPageState extends State<SessionsPage> {
             onDeleteSession: _deleteSession,
             canSend: canSend,
             canEditComposer: canEditComposer,
+            onToggleChatSearch: _toggleChatSearch,
+            onChatSearchChanged: _handleChatSearchChanged,
+            onMoveChatSearchMatch: _moveChatSearchMatch,
+            onOpenSettingsRequested: widget.onOpenSettingsRequested,
+            onEditModelRequested: _editModelFromHeader,
           );
 
     return SafeArea(

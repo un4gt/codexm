@@ -380,6 +380,252 @@ class _ReadonlyConfigPreview extends StatelessWidget {
   }
 }
 
+class _AppearanceSection extends StatelessWidget {
+  const _AppearanceSection({
+    required this.settings,
+    required this.busy,
+    required this.onUpdatePreference,
+  });
+
+  final CodexSettings settings;
+  final bool busy;
+  final Future<void> Function(
+    CodexSettings Function(CodexSettings current) update, {
+    required String status,
+  })
+  onUpdatePreference;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final themeMode = CodexThemeModePreference.normalize(
+      settings.themeModePreference,
+    );
+    final paletteSource = CodexThemePaletteSource.normalize(
+      settings.themePaletteSource,
+    );
+    final lightCodeTheme = CodexLightCodeThemePreference.normalize(
+      settings.lightCodeThemePreference,
+    );
+    final darkCodeTheme = CodexDarkCodeThemePreference.normalize(
+      settings.darkCodeThemePreference,
+    );
+    final selectedAccent =
+        settings.accentColorValue ?? CodexMThemePalette.lightPrimary.toARGB32();
+
+    final themeModeLabels = <String, String>{
+      CodexThemeModePreference.system: l10n.settingsThemeModeSystem,
+      CodexThemeModePreference.light: l10n.settingsThemeModeLight,
+      CodexThemeModePreference.dark: l10n.settingsThemeModeDark,
+    };
+    final paletteLabels = <String, String>{
+      CodexThemePaletteSource.fixed: l10n.settingsPaletteFixed,
+      CodexThemePaletteSource.dynamic: l10n.settingsPaletteDynamic,
+      CodexThemePaletteSource.customAccent: l10n.settingsPaletteCustomAccent,
+    };
+    final lightCodeThemeLabels = <String, String>{
+      CodexLightCodeThemePreference.vscodeLight:
+          l10n.settingsCodeThemeVscodeLight,
+      CodexLightCodeThemePreference.githubLight:
+          l10n.settingsCodeThemeGithubLight,
+    };
+    final darkCodeThemeLabels = <String, String>{
+      CodexDarkCodeThemePreference.vscodeDarkPlus:
+          l10n.settingsCodeThemeVscodeDarkPlus,
+      CodexDarkCodeThemePreference.dracula: l10n.settingsCodeThemeDracula,
+      CodexDarkCodeThemePreference.oneDarkPro: l10n.settingsCodeThemeOneDarkPro,
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        StitchSectionHeader(title: l10n.settingsAppearanceSection),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          initialValue: themeMode,
+          decoration: InputDecoration(labelText: l10n.settingsThemeModeTitle),
+          items: [
+            for (final value in CodexThemeModePreference.values)
+              DropdownMenuItem<String>(
+                value: value,
+                child: Text(themeModeLabels[value] ?? value),
+              ),
+          ],
+          onChanged: busy
+              ? null
+              : (value) {
+                  if (value == null || value == themeMode) {
+                    return;
+                  }
+                  onUpdatePreference(
+                    (current) => current.copyWith(themeModePreference: value),
+                    status: l10n.settingsAppearanceUpdated,
+                  );
+                },
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          initialValue: paletteSource,
+          decoration: InputDecoration(labelText: l10n.settingsPaletteTitle),
+          items: [
+            for (final value in CodexThemePaletteSource.values)
+              DropdownMenuItem<String>(
+                value: value,
+                child: Text(paletteLabels[value] ?? value),
+              ),
+          ],
+          onChanged: busy
+              ? null
+              : (value) {
+                  if (value == null || value == paletteSource) {
+                    return;
+                  }
+                  onUpdatePreference(
+                    (current) => current.copyWith(themePaletteSource: value),
+                    status: l10n.settingsAppearanceUpdated,
+                  );
+                },
+        ),
+        if (paletteSource == CodexThemePaletteSource.customAccent) ...[
+          const SizedBox(height: 12),
+          _AccentPicker(
+            selectedValue: selectedAccent,
+            enabled: !busy,
+            onSelected: (color) {
+              onUpdatePreference(
+                (current) => current.copyWith(
+                  themePaletteSource: CodexThemePaletteSource.customAccent,
+                  accentColorValue: color.toARGB32(),
+                ),
+                status: l10n.settingsAppearanceUpdated,
+              );
+            },
+          ),
+        ],
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          initialValue: lightCodeTheme,
+          decoration: InputDecoration(labelText: l10n.settingsLightCodeTheme),
+          items: [
+            for (final value in CodexLightCodeThemePreference.values)
+              DropdownMenuItem<String>(
+                value: value,
+                child: Text(lightCodeThemeLabels[value] ?? value),
+              ),
+          ],
+          onChanged: busy
+              ? null
+              : (value) {
+                  if (value == null || value == lightCodeTheme) {
+                    return;
+                  }
+                  onUpdatePreference(
+                    (current) =>
+                        current.copyWith(lightCodeThemePreference: value),
+                    status: l10n.settingsAppearanceUpdated,
+                  );
+                },
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          initialValue: darkCodeTheme,
+          decoration: InputDecoration(labelText: l10n.settingsDarkCodeTheme),
+          items: [
+            for (final value in CodexDarkCodeThemePreference.values)
+              DropdownMenuItem<String>(
+                value: value,
+                child: Text(darkCodeThemeLabels[value] ?? value),
+              ),
+          ],
+          onChanged: busy
+              ? null
+              : (value) {
+                  if (value == null || value == darkCodeTheme) {
+                    return;
+                  }
+                  onUpdatePreference(
+                    (current) =>
+                        current.copyWith(darkCodeThemePreference: value),
+                    status: l10n.settingsAppearanceUpdated,
+                  );
+                },
+        ),
+      ],
+    );
+  }
+}
+
+class _AccentPicker extends StatelessWidget {
+  const _AccentPicker({
+    required this.selectedValue,
+    required this.enabled,
+    required this.onSelected,
+  });
+
+  final int selectedValue;
+  final bool enabled;
+  final ValueChanged<Color> onSelected;
+
+  static const _colors = <Color>[
+    Color(0xFF4F46E5),
+    Color(0xFF0891B2),
+    Color(0xFF059669),
+    Color(0xFFDB2777),
+    Color(0xFFDC2626),
+    Color(0xFF7C3AED),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(l10n.settingsAccentColor, style: theme.textTheme.labelLarge),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            for (final color in _colors)
+              Tooltip(
+                message: l10n.settingsAccentColor,
+                child: InkResponse(
+                  onTap: enabled ? () => onSelected(color) : null,
+                  radius: 24,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: selectedValue == color.toARGB32()
+                            ? theme.colorScheme.onSurface
+                            : theme.colorScheme.outlineVariant,
+                        width: selectedValue == color.toARGB32() ? 2 : 1,
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(3),
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class _PreferenceSection extends StatelessWidget {
   const _PreferenceSection({
     required this.settings,

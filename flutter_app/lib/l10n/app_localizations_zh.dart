@@ -188,6 +188,60 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsExtraConfigCleared => '已清空补充配置。';
 
   @override
+  String get settingsAppearanceSection => '外观';
+
+  @override
+  String get settingsThemeModeTitle => '主题模式';
+
+  @override
+  String get settingsThemeModeSystem => '跟随系统';
+
+  @override
+  String get settingsThemeModeLight => '浅色';
+
+  @override
+  String get settingsThemeModeDark => '深色';
+
+  @override
+  String get settingsPaletteTitle => '调色板来源';
+
+  @override
+  String get settingsPaletteFixed => 'CodexM 固定调色板';
+
+  @override
+  String get settingsPaletteDynamic => 'Material You';
+
+  @override
+  String get settingsPaletteCustomAccent => '自定义强调色';
+
+  @override
+  String get settingsAccentColor => '强调色';
+
+  @override
+  String get settingsLightCodeTheme => '浅色代码主题';
+
+  @override
+  String get settingsDarkCodeTheme => '深色代码主题';
+
+  @override
+  String get settingsCodeThemeVscodeLight => 'VSCode Light';
+
+  @override
+  String get settingsCodeThemeGithubLight => 'GitHub Light';
+
+  @override
+  String get settingsCodeThemeVscodeDarkPlus => 'VSCode Dark+';
+
+  @override
+  String get settingsCodeThemeDracula => 'Dracula';
+
+  @override
+  String get settingsCodeThemeOneDarkPro => 'One Dark Pro';
+
+  @override
+  String get settingsAppearanceUpdated => '已更新外观偏好。';
+
+  @override
   String get settingsInteractionPreferences => '交互偏好';
 
   @override
@@ -402,6 +456,60 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get settingsExtraConfigCleared => '已清空补充配置。';
+
+  @override
+  String get settingsAppearanceSection => '外观';
+
+  @override
+  String get settingsThemeModeTitle => '主题模式';
+
+  @override
+  String get settingsThemeModeSystem => '跟随系统';
+
+  @override
+  String get settingsThemeModeLight => '浅色';
+
+  @override
+  String get settingsThemeModeDark => '深色';
+
+  @override
+  String get settingsPaletteTitle => '调色板来源';
+
+  @override
+  String get settingsPaletteFixed => 'CodexM 固定调色板';
+
+  @override
+  String get settingsPaletteDynamic => 'Material You';
+
+  @override
+  String get settingsPaletteCustomAccent => '自定义强调色';
+
+  @override
+  String get settingsAccentColor => '强调色';
+
+  @override
+  String get settingsLightCodeTheme => '浅色代码主题';
+
+  @override
+  String get settingsDarkCodeTheme => '深色代码主题';
+
+  @override
+  String get settingsCodeThemeVscodeLight => 'VSCode Light';
+
+  @override
+  String get settingsCodeThemeGithubLight => 'GitHub Light';
+
+  @override
+  String get settingsCodeThemeVscodeDarkPlus => 'VSCode Dark+';
+
+  @override
+  String get settingsCodeThemeDracula => 'Dracula';
+
+  @override
+  String get settingsCodeThemeOneDarkPro => 'One Dark Pro';
+
+  @override
+  String get settingsAppearanceUpdated => '已更新外观偏好。';
 
   @override
   String get settingsInteractionPreferences => '交互偏好';

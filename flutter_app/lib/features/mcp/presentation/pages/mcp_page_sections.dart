@@ -147,6 +147,7 @@ class _SkillsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tokens = context.appTokens;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -194,13 +195,11 @@ class _SkillsSection extends StatelessWidget {
             description: '新建后即可在会话里直接调用。',
           )
         else
-          Container(
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest.withValues(
-                alpha: 0.3,
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
+          Material(
+            color: theme.colorScheme.surfaceContainerLowest,
+            elevation: tokens.elevationLow,
+            shadowColor: theme.colorScheme.shadow.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(tokens.cardRadius),
             child: Column(
               children: [
                 for (
@@ -428,6 +427,7 @@ class _ServerStitchCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final tokens = context.appTokens;
 
     final transportLabel = server.transport == 'url'
         ? 'Streamable HTTP'
@@ -440,13 +440,13 @@ class _ServerStitchCard extends StatelessWidget {
               ? server.command!.trim()
               : '未填写可执行文件');
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(12),
-      ),
+    return Material(
+      color: colorScheme.surfaceContainerLowest,
+      elevation: tokens.elevationLow,
+      shadowColor: colorScheme.shadow.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(tokens.cardRadius),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(tokens.spacingSmall),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

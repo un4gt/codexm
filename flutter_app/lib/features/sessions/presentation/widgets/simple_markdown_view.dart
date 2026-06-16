@@ -1,15 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_highlight/flutter_highlight.dart';
+import 'package:flutter_highlight/themes/atom-one-dark.dart';
+import 'package:flutter_highlight/themes/dracula.dart';
+import 'package:flutter_highlight/themes/github.dart';
+import 'package:flutter_highlight/themes/vs.dart';
+import 'package:flutter_highlight/themes/vs2015.dart';
+
+import '../../../../app/theme/app_theme.dart';
+import '../../../settings/application/codex_settings_store.dart';
 
 class SimpleMarkdownView extends StatelessWidget {
   const SimpleMarkdownView({
     super.key,
     required this.content,
     this.showThinking = false,
+    this.textAlign = TextAlign.left,
   });
 
   final String content;
   final bool showThinking;
+  final TextAlign textAlign;
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +36,7 @@ class SimpleMarkdownView extends StatelessWidget {
         continue;
       }
       visibleCount += 1;
-      widgets.add(_MarkdownBlockView(block: block));
+      widgets.add(_MarkdownBlockView(block: block, textAlign: textAlign));
     }
 
     if (visibleCount == 0) {
@@ -36,7 +47,7 @@ class SimpleMarkdownView extends StatelessWidget {
     }
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var index = 0; index < widgets.length; index += 1) ...[
           if (index > 0) const SizedBox(height: 12),
@@ -105,9 +116,6 @@ List<_MarkdownBlock> _parseBlocks(String content) {
   }
 
   void flushFence() {
-    if (fenced.isEmpty) {
-      return;
-    }
     blocks.add(
       _MarkdownBlock(
         type: fenceLanguage == 'thinking'
@@ -208,15 +216,18 @@ List<_MarkdownBlock> _parseBlocks(String content) {
   flushParagraph();
   flushQuote();
   flushList();
-  flushFence();
+  if (inFence) {
+    flushFence();
+  }
   flushThinkingTag();
   return blocks;
 }
 
 class _MarkdownBlockView extends StatelessWidget {
-  const _MarkdownBlockView({required this.block});
+  const _MarkdownBlockView({required this.block, required this.textAlign});
 
   final _MarkdownBlock block;
+  final TextAlign textAlign;
 
   @override
   Widget build(BuildContext context) {
@@ -224,6 +235,7 @@ class _MarkdownBlockView extends StatelessWidget {
       case _MarkdownBlockType.paragraph:
         return SelectableText.rich(
           TextSpan(children: _inlineSpans(context, block.text)),
+          textAlign: textAlign,
         );
       case _MarkdownBlockType.quote:
         return Container(
@@ -241,7 +253,7 @@ class _MarkdownBlockView extends StatelessWidget {
               ),
             ),
           ),
-          child: SelectableText(block.text),
+          child: SelectableText(block.text, textAlign: textAlign),
         );
       case _MarkdownBlockType.unorderedList:
         final items = block.items.isNotEmpty
@@ -274,7 +286,13 @@ class _MarkdownBlockView extends StatelessWidget {
         );
       case _MarkdownBlockType.code:
       case _MarkdownBlockType.thinking:
-        return _CodeLikeBlockView(block: block);
+        return SimpleCodeBlock(
+          content: block.text,
+          language: block.type == _MarkdownBlockType.thinking
+              ? 'thinking'
+              : block.language,
+          thinking: block.type == _MarkdownBlockType.thinking,
+        );
     }
   }
 
@@ -288,11 +306,12 @@ class _MarkdownBlockView extends StatelessWidget {
     }
 
     var cursor = 0;
-    final codeStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+    final theme = Theme.of(context);
+    final codeStyle = theme.textTheme.bodyMedium?.copyWith(
       fontFamily: 'monospace',
-      backgroundColor: Theme.of(
-        context,
-      ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+      backgroundColor: context.appTokens.codeBackground,
+      color: theme.colorScheme.onSurface,
+      height: 1.35,
     );
 
     for (final match in matches) {
@@ -310,46 +329,77 @@ class _MarkdownBlockView extends StatelessWidget {
   }
 }
 
-class _CodeLikeBlockView extends StatelessWidget {
-  const _CodeLikeBlockView({required this.block});
+class SimpleCodeBlock extends StatelessWidget {
+  const SimpleCodeBlock({
+    super.key,
+    required this.content,
+    this.language,
+    this.thinking = false,
+  });
 
-  final _MarkdownBlock block;
+  final String content;
+  final String? language;
+  final bool thinking;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isThinking = block.type == _MarkdownBlockType.thinking;
-    final label = isThinking
+    final tokens = context.appTokens;
+    final label = thinking
         ? '思考片段'
-        : (block.language?.trim().isNotEmpty == true
-              ? block.language!.trim()
-              : '代码片段');
+        : (language?.trim().isNotEmpty == true ? language!.trim() : '代码片段');
+    final normalizedLanguage = _normalizeHighlightLanguage(language);
+    final highlightTheme = _highlightThemeFor(theme.brightness, tokens);
+    highlightTheme['root'] = (highlightTheme['root'] ?? const TextStyle())
+        .copyWith(
+          backgroundColor: Colors.transparent,
+          color: theme.colorScheme.onSurface,
+          fontFamily: 'monospace',
+          fontSize: theme.textTheme.bodyMedium?.fontSize,
+          height: 1.45,
+        );
 
     return Container(
+      key: const ValueKey('simple-code-block'),
       width: double.infinity,
       decoration: BoxDecoration(
-        color: isThinking
+        color: thinking
             ? theme.colorScheme.secondaryContainer.withValues(alpha: 0.55)
-            : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(18),
+            : tokens.codeBackground,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.55),
+        ),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 8, 4),
+          Container(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: theme.brightness == Brightness.dark ? 0.18 : 0.38,
+            ),
+            padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
             child: Row(
               children: [
                 Icon(
-                  isThinking ? Icons.psychology_outlined : Icons.code_outlined,
+                  thinking ? Icons.psychology_outlined : Icons.code_outlined,
                   size: 18,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 8),
-                Expanded(child: Text(label, style: theme.textTheme.labelLarge)),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelLarge,
+                  ),
+                ),
                 IconButton(
                   tooltip: '复制内容',
                   onPressed: () {
-                    Clipboard.setData(ClipboardData(text: block.text));
+                    Clipboard.setData(ClipboardData(text: content));
                     ScaffoldMessenger.of(
                       context,
                     ).showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
@@ -359,19 +409,77 @@ class _CodeLikeBlockView extends StatelessWidget {
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            child: SelectableText(
-              block.text,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontFamily: 'monospace',
-                height: 1.45,
-              ),
-            ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: tokens.codePadding,
+            child: normalizedLanguage == null
+                ? SelectableText(
+                    content,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontFamily: 'monospace',
+                      height: 1.45,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  )
+                : HighlightView(
+                    content,
+                    language: normalizedLanguage,
+                    theme: highlightTheme,
+                    padding: EdgeInsets.zero,
+                    textStyle: theme.textTheme.bodyMedium?.copyWith(
+                      fontFamily: 'monospace',
+                      height: 1.45,
+                    ),
+                  ),
           ),
         ],
       ),
     );
+  }
+
+  String? _normalizeHighlightLanguage(String? raw) {
+    final language = raw?.trim().toLowerCase();
+    if (language == null || language.isEmpty || language == '代码片段') {
+      return null;
+    }
+    return switch (language) {
+      'sh' || 'bash' || 'shell' => 'bash',
+      'js' || 'javascript' => 'javascript',
+      'ts' || 'typescript' => 'typescript',
+      'py' || 'python' => 'python',
+      'dart' => 'dart',
+      'json' => 'json',
+      'yaml' || 'yml' => 'yaml',
+      'diff' => 'diff',
+      'html' => 'xml',
+      'xml' => 'xml',
+      'css' => 'css',
+      'java' => 'java',
+      'kt' || 'kotlin' => 'kotlin',
+      'thinking' => null,
+      _ => null,
+    };
+  }
+
+  Map<String, TextStyle> _highlightThemeFor(
+    Brightness brightness,
+    AppThemeTokens tokens,
+  ) {
+    final source = brightness == Brightness.dark
+        ? switch (CodexDarkCodeThemePreference.normalize(
+            tokens.darkCodeThemePreference,
+          )) {
+            CodexDarkCodeThemePreference.dracula => draculaTheme,
+            CodexDarkCodeThemePreference.oneDarkPro => atomOneDarkTheme,
+            _ => vs2015Theme,
+          }
+        : switch (CodexLightCodeThemePreference.normalize(
+            tokens.lightCodeThemePreference,
+          )) {
+            CodexLightCodeThemePreference.githubLight => githubTheme,
+            _ => vsTheme,
+          };
+    return Map<String, TextStyle>.from(source);
   }
 }
 
