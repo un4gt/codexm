@@ -59,7 +59,7 @@ void main() {
     );
     expect(dynamic.colorScheme.primary, isNotNull);
     expect(dynamic.appTokens.chatHorizontalGutterFactor, 0.04);
-    expect(dynamic.appTokens.chatMessageWidthFactor, 0.92);
+    expect(dynamic.appTokens.chatMessageWidthFactor, 0.82);
   });
 }
 

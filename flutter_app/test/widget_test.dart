@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:codexm_flutter/app/app.dart';
+import 'package:codexm_flutter/app/theme/app_theme.dart';
 import 'package:codexm_flutter/features/settings/presentation/pages/settings_page.dart';
 import 'package:codexm_flutter/l10n/app_localizations.dart';
 
@@ -55,7 +56,54 @@ void main() {
     expect(find.text('会话'), findsOneWidget);
   });
 
-  testWidgets('renders user-facing settings sections', (
+  testWidgets('keeps bottom navigation on a landscape phone', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 360);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.reset());
+
+    await tester.pumpWidget(const CodexmFlutterApp());
+
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byType(NavigationRail), findsNothing);
+  });
+
+  testWidgets('settings support dark mode and large text on a small phone', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(375, 812);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.reset());
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildDarkAppTheme(),
+        builder: (context, child) {
+          return MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(2)),
+            child: child!,
+          );
+        },
+        locale: const Locale.fromSubtags(
+          languageCode: 'zh',
+          scriptCode: 'Hans',
+        ),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const SettingsPage(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('设置'), findsOneWidget);
+    expect(find.text('连接与模型'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('uses a settings list with focused detail pages', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -69,28 +117,23 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('应用更新'), findsOneWidget);
-    expect(find.text('连接'), findsOneWidget);
+    expect(find.text('连接与模型'), findsOneWidget);
     expect(find.text('设置状态'), findsNothing);
-    expect(find.text('默认模型'), findsOneWidget);
-
-    await tester.scrollUntilVisible(
-      find.text('生效预览'),
-      180,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.text('生效预览'), findsOneWidget);
-    expect(find.text('附加配置'), findsOneWidget);
-
-    await tester.scrollUntilVisible(
-      find.text('交互偏好'),
-      240,
-      scrollable: find.byType(Scrollable).first,
-    );
+    expect(find.text('默认'), findsOneWidget);
     expect(find.text('交互偏好'), findsOneWidget);
-    expect(find.text('应用语言'), findsOneWidget);
-    expect(find.text('跟随系统'), findsAtLeastNWidgets(1));
-    expect(find.text('Android Smoke 验证'), findsNothing);
-    expect(find.text('配置预览'), findsNothing);
-    expect(find.text('连接与模型'), findsNothing);
+    expect(find.text('外观'), findsOneWidget);
+    expect(find.text('高级配置'), findsOneWidget);
+
+    await tester.tap(find.text('连接与模型'));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('返回设置'), findsOneWidget);
+    expect(find.text('API Key'), findsAtLeastNWidgets(1));
+    expect(find.text('Base URL（可选）'), findsAtLeastNWidgets(1));
+    expect(find.text('应用更新'), findsNothing);
+
+    await tester.tap(find.byTooltip('返回设置'));
+    await tester.pumpAndSettle();
+    expect(find.text('应用更新'), findsOneWidget);
   });
 }

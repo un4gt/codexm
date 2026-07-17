@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_theme.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/adaptive_breakpoints.dart';
+import '../../../../shared/widgets/app_ui.dart';
 import '../../../../shared/widgets/stitch_ui.dart';
 import '../../../mcp/application/mcp_models.dart';
 import '../../../mcp/application/mcp_store.dart';
@@ -10,13 +11,17 @@ import '../../../update/presentation/update_page.dart';
 import '../../application/codex_settings_store.dart';
 part 'settings_page_sections.dart';
 
+enum _SettingsDestination { connection, appearance, interaction, advanced }
+
 class SettingsPage extends StatefulWidget {
   const SettingsPage({
     super.key,
+    this.isActive = true,
     this.onLocalePreferenceChanged,
     this.onSettingsChanged,
   });
 
+  final bool isActive;
   final ValueChanged<Locale?>? onLocalePreferenceChanged;
   final ValueChanged<CodexSettings>? onSettingsChanged;
 
@@ -45,6 +50,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String? _extraConfigValidationError;
   List<McpServer> _mcpServers = const <McpServer>[];
   bool _suspendConfigDraftListeners = false;
+  _SettingsDestination? _selectedDestination;
 
   @override
   void initState() {
@@ -375,85 +381,263 @@ class _SettingsPageState extends State<SettingsPage> {
     ).push<void>(MaterialPageRoute<void>(builder: (_) => const UpdatePage()));
   }
 
+  String _destinationTitle(
+    AppLocalizations l10n,
+    _SettingsDestination destination,
+  ) {
+    return switch (destination) {
+      _SettingsDestination.connection => '连接与模型',
+      _SettingsDestination.appearance => l10n.settingsAppearanceSection,
+      _SettingsDestination.interaction => l10n.settingsInteractionPreferences,
+      _SettingsDestination.advanced => l10n.settingsAdvancedConfig,
+    };
+  }
+
+  Widget _buildSettingsRoot(
+    BuildContext context, {
+    _SettingsDestination? selected,
+  }) {
+    final l10n = AppLocalizations.of(context);
+    final model = _settings.model?.trim().isNotEmpty == true
+        ? _settings.model!.trim()
+        : l10n.settingsDefaultValue;
+    final themeMode = switch (CodexThemeModePreference.normalize(
+      _settings.themeModePreference,
+    )) {
+      CodexThemeModePreference.light => l10n.settingsThemeModeLight,
+      CodexThemeModePreference.dark => l10n.settingsThemeModeDark,
+      _ => l10n.settingsThemeModeSystem,
+    };
+    final locale = switch (CodexLocalePreference.normalize(
+      _settings.appLocalePreference,
+    )) {
+      CodexLocalePreference.english => l10n.settingsLanguageEnglish,
+      CodexLocalePreference.simplifiedChinese =>
+        l10n.settingsLanguageChineseSimplified,
+      _ => l10n.settingsLanguageSystem,
+    };
+
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 24),
+      children: [
+        AppListSection(
+          title: 'Codex',
+          children: [
+            AppListTile(
+              title: '连接与模型',
+              subtitle: model,
+              leading: const Icon(Icons.link_outlined),
+              selected: selected == _SettingsDestination.connection,
+              onTap: () => setState(() {
+                _selectedDestination = _SettingsDestination.connection;
+              }),
+            ),
+            AppListTile(
+              title: l10n.settingsInteractionPreferences,
+              subtitle: '${l10n.settingsLanguageTitle}：$locale',
+              leading: const Icon(Icons.tune_outlined),
+              selected: selected == _SettingsDestination.interaction,
+              onTap: () => setState(() {
+                _selectedDestination = _SettingsDestination.interaction;
+              }),
+            ),
+          ],
+        ),
+        AppListSection(
+          title: '应用',
+          children: [
+            AppListTile(
+              title: l10n.settingsAppearanceSection,
+              subtitle: themeMode,
+              leading: const Icon(Icons.palette_outlined),
+              selected: selected == _SettingsDestination.appearance,
+              onTap: () => setState(() {
+                _selectedDestination = _SettingsDestination.appearance;
+              }),
+            ),
+            AppListTile(
+              title: l10n.settingsAdvancedConfig,
+              subtitle: _settings.extraConfigToml?.trim().isNotEmpty == true
+                  ? '已添加附加配置'
+                  : '使用默认配置',
+              leading: const Icon(Icons.code_outlined),
+              selected: selected == _SettingsDestination.advanced,
+              onTap: () => setState(() {
+                _selectedDestination = _SettingsDestination.advanced;
+              }),
+            ),
+            AppListTile(
+              title: l10n.settingsAppUpdates,
+              leading: const Icon(Icons.system_update_alt_outlined),
+              onTap: _busy ? null : _openUpdatePage,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSettingsDetail(
+    BuildContext context,
+    _SettingsDestination destination, {
+    required bool showPaneHeader,
+  }) {
+    final l10n = AppLocalizations.of(context);
+    final Widget section = switch (destination) {
+      _SettingsDestination.connection => _ConnectionSection(
+        apiKeyController: _apiKeyController,
+        apiKeyVisible: _apiKeyVisible,
+        baseUrlController: _baseUrlController,
+        busy: _busy,
+        modelsLoading: _modelsLoading,
+        availableModels: _availableModels,
+        selectedModel: _settings.model,
+        onToggleApiKeyVisible: () {
+          if (_busy) {
+            return;
+          }
+          setState(() {
+            _apiKeyVisible = !_apiKeyVisible;
+          });
+        },
+        onSaveConnection: _saveConnectionDrafts,
+        onSelectModel: (value) {
+          if (_busy) {
+            return;
+          }
+          _updatePreference(
+            (current) => current.copyWith(model: value),
+            status: l10n.settingsModelUpdated(value),
+            syncRuntimeConfig: true,
+          );
+        },
+      ),
+      _SettingsDestination.appearance => _AppearanceSection(
+        settings: _settings,
+        busy: _busy,
+        onUpdatePreference: _updatePreference,
+      ),
+      _SettingsDestination.interaction => _PreferenceSection(
+        settings: _settings,
+        busy: _busy,
+        onUpdatePreference: _updatePreference,
+        onUpdateLocalePreference: _updateLocalePreference,
+      ),
+      _SettingsDestination.advanced => _ConfigTomlSection(
+        busy: _busy,
+        previewConfigToml: _configPreviewToml,
+        extraConfigTomlController: _extraConfigTomlController,
+        warnings: _configWarnings,
+        previewValidationError: _configPreviewValidationError,
+        extraConfigValidationError: _extraConfigValidationError,
+        onSaveExtraConfigToml: _saveExtraConfigTomlDraft,
+        onClearExtraConfigToml: _clearExtraConfigTomlDraft,
+      ),
+    };
+
+    final body = Column(
+      children: [
+        if (showPaneHeader)
+          Container(
+            constraints: const BoxConstraints(minHeight: 64),
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              border: Border(
+                bottom: BorderSide(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+            ),
+            child: Text(
+              _destinationTitle(l10n, destination),
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+          ),
+        if (_busy) const LinearProgressIndicator(minHeight: 2),
+        if (_status.trim().isNotEmpty)
+          AppStatusNotice(
+            message: _status,
+            tone: _status.contains('失败')
+                ? AppNoticeTone.error
+                : AppNoticeTone.info,
+          ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            children: [section],
+          ),
+        ),
+      ],
+    );
+    return body;
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return StitchPageScaffold(
-      pageTitle: l10n.settingsPageTitle,
-      brandIcon: Icons.settings_outlined,
-      kickerText: l10n.settingsKicker,
-      topActions: [
-        IconButton.filledTonal(
-          onPressed: _busy ? null : _refreshModels,
-          tooltip: l10n.settingsRefreshModelsTooltip,
-          icon: _modelsLoading
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.refresh_outlined),
-        ),
-      ],
-      children: [
-        if (_status.trim().isNotEmpty)
-          StitchInfoBanner(
-            icon: Icons.info_outline,
-            title: l10n.settingsStatusTitle,
-            subtitle: _status,
+    final layout = context.adaptiveLayoutInfo;
+    final selected =
+        _selectedDestination ??
+        (layout.useMasterDetail ? _SettingsDestination.connection : null);
+    final actions = selected == _SettingsDestination.connection
+        ? <Widget>[
+            IconButton(
+              onPressed: _busy ? null : _refreshModels,
+              tooltip: l10n.settingsRefreshModelsTooltip,
+              icon: _modelsLoading
+                  ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh_outlined),
+            ),
+          ]
+        : const <Widget>[];
+
+    if (layout.useMasterDetail) {
+      return AppPageScaffold(
+        title: l10n.settingsPageTitle,
+        body: AdaptiveMasterDetail(
+          master: _buildSettingsRoot(context, selected: selected),
+          detail: _buildSettingsDetail(
+            context,
+            selected!,
+            showPaneHeader: true,
           ),
-        _UpdateEntrySection(busy: _busy, onOpenUpdatePage: _openUpdatePage),
-        _ConnectionSection(
-          apiKeyController: _apiKeyController,
-          apiKeyVisible: _apiKeyVisible,
-          baseUrlController: _baseUrlController,
-          busy: _busy,
-          modelsLoading: _modelsLoading,
-          availableModels: _availableModels,
-          selectedModel: _settings.model,
-          onToggleApiKeyVisible: () {
-            if (_busy) {
-              return;
-            }
-            setState(() {
-              _apiKeyVisible = !_apiKeyVisible;
-            });
-          },
-          onSaveConnection: _saveConnectionDrafts,
-          onSelectModel: (value) {
-            if (_busy) {
-              return;
-            }
-            _updatePreference(
-              (current) => current.copyWith(model: value),
-              status: l10n.settingsModelUpdated(value),
-              syncRuntimeConfig: true,
-            );
-          },
         ),
-        _ConfigTomlSection(
-          busy: _busy,
-          previewConfigToml: _configPreviewToml,
-          extraConfigTomlController: _extraConfigTomlController,
-          warnings: _configWarnings,
-          previewValidationError: _configPreviewValidationError,
-          extraConfigValidationError: _extraConfigValidationError,
-          onSaveExtraConfigToml: _saveExtraConfigTomlDraft,
-          onClearExtraConfigToml: _clearExtraConfigTomlDraft,
+      );
+    }
+
+    if (selected == null) {
+      return AppPageScaffold(
+        title: l10n.settingsPageTitle,
+        body: _buildSettingsRoot(context),
+      );
+    }
+
+    return PopScope(
+      canPop: !widget.isActive,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && widget.isActive) {
+          setState(() {
+            _selectedDestination = null;
+          });
+        }
+      },
+      child: AppPageScaffold(
+        title: _destinationTitle(l10n, selected),
+        leading: IconButton(
+          tooltip: '返回设置',
+          onPressed: () => setState(() {
+            _selectedDestination = null;
+          }),
+          icon: const Icon(Icons.arrow_back),
         ),
-        _AppearanceSection(
-          settings: _settings,
-          busy: _busy,
-          onUpdatePreference: _updatePreference,
-        ),
-        _PreferenceSection(
-          settings: _settings,
-          busy: _busy,
-          onUpdatePreference: _updatePreference,
-          onUpdateLocalePreference: _updateLocalePreference,
-        ),
-        if (_busy) const _BusySettingsCard(),
-      ],
+        actions: actions,
+        body: _buildSettingsDetail(context, selected, showPaneHeader: false),
+      ),
     );
   }
 }

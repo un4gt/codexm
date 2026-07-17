@@ -2,7 +2,14 @@ part of 'sessions_page.dart';
 
 enum _SessionAction { rename, delete }
 
-enum _HeaderMenuAction { newSession, renameSession, deleteSession }
+enum _HeaderMenuAction {
+  newSession,
+  switchSession,
+  editModel,
+  connectionSettings,
+  renameSession,
+  deleteSession,
+}
 
 class _ChatSearchMatch {
   const _ChatSearchMatch({required this.messageIndex});
@@ -14,9 +21,9 @@ class _SessionUiSpecs {
   const _SessionUiSpecs._();
 
   static const double maxContentWidth = 920;
-  static const double compactHorizontalPadding = 0;
-  static const double mediumHorizontalPadding = 0;
-  static const double expandedHorizontalPadding = 0;
+  static const double compactHorizontalPadding = 12;
+  static const double mediumHorizontalPadding = 16;
+  static const double expandedHorizontalPadding = 20;
   static const double minTapTarget = 48;
   static const double estimatedMessageExtent = 148;
 }
@@ -28,46 +35,186 @@ class _WorkspaceEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.chat_bubble_outline,
-                size: 36,
-                color: theme.colorScheme.primary,
-              ),
-              const SizedBox(height: 14),
-              Text(
-                '先准备一个工作区',
-                style: theme.textTheme.titleLarge,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '会话围绕当前工作区展开。准备好后，这里会显示连续消息流和底部输入栏。',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 18),
-              FilledButton.icon(
-                onPressed: onOpenWorkspacesRequested,
-                icon: const Icon(Icons.folder_open_outlined),
-                label: const Text('前往工作区'),
-              ),
-            ],
-          ),
-        ),
+    return AppEmptyState(
+      icon: Icons.chat_bubble_outline,
+      title: '先准备一个工作区',
+      message: '会话围绕当前工作区展开。准备好后即可创建会话并开始发送消息。',
+      action: FilledButton.icon(
+        onPressed: onOpenWorkspacesRequested,
+        icon: const Icon(Icons.folder_open_outlined),
+        label: const Text('前往工作区'),
       ),
     );
+  }
+}
+
+class _SessionsOverview extends StatelessWidget {
+  const _SessionsOverview({
+    required this.workspace,
+    required this.sessions,
+    required this.selectedSessionId,
+    required this.runningSessionId,
+    required this.busy,
+    required this.onOpenWorkspaces,
+    required this.onOpenSession,
+    required this.onCreateSession,
+    required this.onRenameSession,
+    required this.onDeleteSession,
+  });
+
+  final Workspace? workspace;
+  final List<Session> sessions;
+  final SessionId? selectedSessionId;
+  final SessionId? runningSessionId;
+  final bool busy;
+  final VoidCallback? onOpenWorkspaces;
+  final ValueChanged<Session> onOpenSession;
+  final VoidCallback onCreateSession;
+  final ValueChanged<Session> onRenameSession;
+  final ValueChanged<Session> onDeleteSession;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        Material(
+          color: theme.colorScheme.surface,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 64),
+            padding: const EdgeInsets.only(left: 16, right: 8),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('会话', style: theme.textTheme.titleLarge),
+                      if (workspace != null)
+                        Text(
+                          workspace!.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: '切换工作区',
+                  onPressed: onOpenWorkspaces,
+                  icon: const Icon(Icons.folder_open_outlined),
+                ),
+                IconButton(
+                  tooltip: '新建会话',
+                  onPressed: workspace == null || busy ? null : onCreateSession,
+                  icon: const Icon(Icons.add_comment_outlined),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          child: workspace == null
+              ? _WorkspaceEmptyState(
+                  onOpenWorkspacesRequested: onOpenWorkspaces,
+                )
+              : sessions.isEmpty
+              ? AppEmptyState(
+                  icon: Icons.forum_outlined,
+                  title: '还没有会话',
+                  message: '创建一个会话，开始处理当前工作区中的任务。',
+                  action: FilledButton.icon(
+                    onPressed: busy ? null : onCreateSession,
+                    icon: const Icon(Icons.add),
+                    label: const Text('新建会话'),
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: sessions.length,
+                  separatorBuilder: (context, index) => Divider(
+                    height: 1,
+                    indent: 72,
+                    color: theme.colorScheme.outlineVariant.withValues(
+                      alpha: 0.65,
+                    ),
+                  ),
+                  itemBuilder: (context, index) {
+                    final session = sessions[index];
+                    final running = session.id == runningSessionId;
+                    return AppListTile(
+                      title: session.title,
+                      subtitle: running
+                          ? '正在生成回复...'
+                          : _formatUpdatedAt(session.updatedAt),
+                      selected: session.id == selectedSessionId,
+                      enabled: !busy,
+                      leading: running
+                          ? const SizedBox.square(
+                              dimension: 24,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.chat_bubble_outline),
+                      trailing: PopupMenuButton<_SessionAction>(
+                        tooltip: '会话操作',
+                        enabled: !busy && runningSessionId == null,
+                        onSelected: (action) {
+                          switch (action) {
+                            case _SessionAction.rename:
+                              onRenameSession(session);
+                            case _SessionAction.delete:
+                              onDeleteSession(session);
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: _SessionAction.rename,
+                            child: Text('重命名'),
+                          ),
+                          PopupMenuItem(
+                            value: _SessionAction.delete,
+                            child: Text('删除'),
+                          ),
+                        ],
+                      ),
+                      onTap: () => onOpenSession(session),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  String _formatUpdatedAt(int millis) {
+    if (millis <= 0) {
+      return '尚未开始';
+    }
+    final value = DateTime.fromMillisecondsSinceEpoch(millis);
+    final now = DateTime.now();
+    final difference = now.difference(value);
+    if (difference.inMinutes < 1) {
+      return '刚刚更新';
+    }
+    if (difference.inHours < 1) {
+      return '${difference.inMinutes} 分钟前';
+    }
+    if (difference.inDays < 1) {
+      return '${difference.inHours} 小时前';
+    }
+    if (difference.inDays < 7) {
+      return '${difference.inDays} 天前';
+    }
+    return '${value.month} 月 ${value.day} 日';
   }
 }
 
@@ -93,6 +240,8 @@ class _ChatPanel extends StatelessWidget {
     required this.pendingAssistantParts,
     required this.pendingStartedAt,
     required this.scrollController,
+    required this.showScrollToBottom,
+    required this.onScrollToBottom,
     required this.composerController,
     required this.pendingMentions,
     required this.slashSuggestions,
@@ -113,6 +262,7 @@ class _ChatPanel extends StatelessWidget {
     required this.onMoveChatSearchMatch,
     required this.onOpenSettingsRequested,
     required this.onEditModelRequested,
+    required this.onBack,
   });
 
   final Workspace workspace;
@@ -135,6 +285,8 @@ class _ChatPanel extends StatelessWidget {
   final List<ChatMessagePart> pendingAssistantParts;
   final int pendingStartedAt;
   final ScrollController scrollController;
+  final bool showScrollToBottom;
+  final VoidCallback onScrollToBottom;
   final TextEditingController composerController;
   final List<ComposerPendingMention> pendingMentions;
   final List<CodexSlashCommand> slashSuggestions;
@@ -155,15 +307,12 @@ class _ChatPanel extends StatelessWidget {
   final ValueChanged<int> onMoveChatSearchMatch;
   final VoidCallback? onOpenSettingsRequested;
   final VoidCallback onEditModelRequested;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
-    final mentionToken = extractMentionToken(composerController.text);
     final showSuggestions =
-        slashSuggestions.isNotEmpty ||
-        mentionLoading ||
-        mentionSuggestions.isNotEmpty ||
-        mentionToken != null;
+        findComposerTrigger(composerController.value) != null;
 
     return Align(
       alignment: Alignment.topCenter,
@@ -190,10 +339,20 @@ class _ChatPanel extends StatelessWidget {
               onMoveChatSearchMatch: onMoveChatSearchMatch,
               onOpenSettingsRequested: onOpenSettingsRequested,
               onEditModelRequested: onEditModelRequested,
+              onBack: onBack,
               onMenuAction: (action) {
                 switch (action) {
                   case _HeaderMenuAction.newSession:
                     onCreateSession();
+                    break;
+                  case _HeaderMenuAction.switchSession:
+                    onOpenSessionSwitcher();
+                    break;
+                  case _HeaderMenuAction.editModel:
+                    onEditModelRequested();
+                    break;
+                  case _HeaderMenuAction.connectionSettings:
+                    onOpenSettingsRequested?.call();
                     break;
                   case _HeaderMenuAction.renameSession:
                     final session = selectedSession;
@@ -211,15 +370,32 @@ class _ChatPanel extends StatelessWidget {
               },
             ),
             Expanded(
-              child: _MessageList(
-                messages: messages,
-                showThinking: showThinking,
-                pendingAssistantText: pendingAssistantText,
-                pendingAssistantParts: pendingAssistantParts,
-                pendingStartedAt: pendingStartedAt,
-                scrollController: scrollController,
-                workspaceName: workspace.name,
-                canDirectChat: settingsEnabled && hasApiKey,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: _MessageList(
+                      messages: messages,
+                      showThinking: showThinking,
+                      pendingAssistantText: pendingAssistantText,
+                      pendingAssistantParts: pendingAssistantParts,
+                      pendingStartedAt: pendingStartedAt,
+                      scrollController: scrollController,
+                      workspaceName: workspace.name,
+                      canDirectChat: settingsEnabled && hasApiKey,
+                    ),
+                  ),
+                  if (showScrollToBottom)
+                    Positioned(
+                      right: 16,
+                      bottom: 12,
+                      child: IconButton.filledTonal(
+                        key: const ValueKey('scroll-to-bottom-button'),
+                        onPressed: onScrollToBottom,
+                        tooltip: '回到最新消息',
+                        icon: const Icon(Icons.arrow_downward_rounded),
+                      ),
+                    ),
+                ],
               ),
             ),
             _SessionInputBar(
@@ -267,6 +443,7 @@ class _SessionHeader extends StatelessWidget {
     required this.onMoveChatSearchMatch,
     required this.onOpenSettingsRequested,
     required this.onEditModelRequested,
+    required this.onBack,
     required this.onMenuAction,
   });
 
@@ -286,21 +463,15 @@ class _SessionHeader extends StatelessWidget {
   final ValueChanged<int> onMoveChatSearchMatch;
   final VoidCallback? onOpenSettingsRequested;
   final VoidCallback onEditModelRequested;
+  final VoidCallback? onBack;
   final ValueChanged<_HeaderMenuAction> onMenuAction;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tokens = context.appTokens;
     final modelLabel = settings.model?.trim().isNotEmpty == true
         ? settings.model!.trim()
         : '默认模型';
-    final trimmedStatus = status.trim();
-    final shouldShowStatus =
-        trimmedStatus.isNotEmpty &&
-        (trimmedStatus.contains('失败') ||
-            trimmedStatus.contains('请先') ||
-            trimmedStatus.contains('未连接'));
     final searchCount = chatSearchMatches.length;
     final activeSearchLabel = searchCount == 0
         ? '0/0'
@@ -316,148 +487,28 @@ class _SessionHeader extends StatelessWidget {
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: theme.colorScheme.primaryContainer,
-                  child: Icon(
-                    Icons.auto_awesome_outlined,
-                    size: 18,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'CodexM',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'On-device Codex client',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Tooltip(
-                  message: '搜索当前会话',
-                  child: IconButton(
-                    onPressed: onToggleChatSearch,
-                    icon: Icon(
-                      chatSearchVisible
-                          ? Icons.search_off_outlined
-                          : Icons.search_outlined,
-                    ),
-                  ),
-                ),
-                Tooltip(
-                  message: '模型：$modelLabel',
-                  child: IconButton(
-                    onPressed: onEditModelRequested,
-                    icon: const Icon(Icons.smart_toy_outlined),
-                  ),
-                ),
-                Tooltip(
-                  message: '连接设置',
-                  child: IconButton(
-                    onPressed: onOpenSettingsRequested,
-                    icon: const Icon(Icons.settings_outlined),
-                  ),
-                ),
-                SizedBox(
-                  width: _SessionUiSpecs.minTapTarget,
-                  height: _SessionUiSpecs.minTapTarget,
-                  child: IconButton(
-                    tooltip: '切换会话（$sessionCount）',
-                    onPressed: onOpenSessionSwitcher,
-                    icon: const Icon(Icons.swap_horiz_outlined),
-                  ),
-                ),
-                SizedBox(
-                  width: _SessionUiSpecs.minTapTarget,
-                  height: _SessionUiSpecs.minTapTarget,
-                  child: PopupMenuButton<_HeaderMenuAction>(
-                    tooltip: '更多会话操作',
-                    icon: const Icon(Icons.more_horiz),
-                    onSelected: onMenuAction,
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: _HeaderMenuAction.newSession,
-                        child: Text('新建会话'),
-                      ),
-                      PopupMenuItem(
-                        value: _HeaderMenuAction.renameSession,
-                        enabled: selectedSession != null,
-                        child: const Text('重命名当前会话'),
-                      ),
-                      PopupMenuItem(
-                        value: _HeaderMenuAction.deleteSession,
-                        enabled: selectedSession != null,
-                        child: const Text('删除当前会话'),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _ConnectionStatusChip(connected: settingsReady),
-                Chip(
-                  visualDensity: VisualDensity.compact,
-                  avatar: const Icon(Icons.folder_outlined, size: 16),
-                  label: Text(
-                    workspace.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Chip(
-                  visualDensity: VisualDensity.compact,
-                  avatar: const Icon(Icons.forum_outlined, size: 16),
-                  label: Text(selectedSession?.title ?? '主会话'),
-                ),
-              ],
-            ),
-            if (chatSearchVisible) ...[
-              SizedBox(height: tokens.compactSpacing),
-              Row(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: chatSearchVisible
+            ? Row(
                 children: [
+                  IconButton(
+                    tooltip: '关闭搜索',
+                    onPressed: onToggleChatSearch,
+                    icon: const Icon(Icons.arrow_back),
+                  ),
                   Expanded(
                     child: TextField(
                       controller: chatSearchController,
                       autofocus: true,
                       decoration: const InputDecoration(
                         hintText: '搜索当前会话',
-                        prefixIcon: Icon(Icons.search_outlined),
                         isDense: true,
+                        border: InputBorder.none,
+                        filled: false,
                       ),
                       onChanged: onChatSearchChanged,
                     ),
                   ),
-                  const SizedBox(width: 8),
                   Text(activeSearchLabel, style: theme.textTheme.labelMedium),
                   IconButton(
                     tooltip: '上一个匹配',
@@ -474,74 +525,97 @@ class _SessionHeader extends StatelessWidget {
                     icon: const Icon(Icons.keyboard_arrow_down),
                   ),
                 ],
+              )
+            : Row(
+                children: [
+                  if (onBack != null)
+                    IconButton(
+                      tooltip: '返回会话列表',
+                      onPressed: onBack,
+                      icon: const Icon(Icons.arrow_back),
+                    ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          selectedSession?.title ?? '主会话',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        Row(
+                          children: [
+                            Semantics(
+                              label: settingsReady ? '已连接' : '未连接',
+                              child: Icon(
+                                settingsReady
+                                    ? Icons.circle
+                                    : Icons.circle_outlined,
+                                size: 9,
+                                color: settingsReady
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                workspace.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '搜索当前会话',
+                    onPressed: onToggleChatSearch,
+                    icon: const Icon(Icons.search_outlined),
+                  ),
+                  PopupMenuButton<_HeaderMenuAction>(
+                    tooltip: '更多会话操作',
+                    onSelected: onMenuAction,
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: _HeaderMenuAction.newSession,
+                        child: Text('新建会话'),
+                      ),
+                      PopupMenuItem(
+                        value: _HeaderMenuAction.switchSession,
+                        child: Text('切换会话（$sessionCount）'),
+                      ),
+                      PopupMenuItem(
+                        value: _HeaderMenuAction.editModel,
+                        child: Text('模型：$modelLabel'),
+                      ),
+                      const PopupMenuItem(
+                        value: _HeaderMenuAction.connectionSettings,
+                        child: Text('连接设置'),
+                      ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: _HeaderMenuAction.renameSession,
+                        enabled: selectedSession != null,
+                        child: const Text('重命名当前会话'),
+                      ),
+                      PopupMenuItem(
+                        value: _HeaderMenuAction.deleteSession,
+                        enabled: selectedSession != null,
+                        child: const Text('删除当前会话'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-            if (shouldShowStatus) ...[
-              const SizedBox(height: 8),
-              Text(
-                trimmedStatus,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ConnectionStatusChip extends StatelessWidget {
-  const _ConnectionStatusChip({required this.connected});
-
-  final bool connected;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final icon = connected
-        ? Icons.check_circle_outline
-        : Icons.vpn_key_outlined;
-    final label = connected ? '已连接，可直接发送' : '未连接，请先完成设置';
-
-    return MergeSemantics(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: connected
-              ? colorScheme.primary.withValues(alpha: 0.14)
-              : colorScheme.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: connected
-                ? colorScheme.primary.withValues(alpha: 0.24)
-                : colorScheme.outlineVariant,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: connected
-                  ? colorScheme.primary
-                  : colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: colorScheme.onSurface,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -614,7 +688,7 @@ class _MessageList extends StatelessWidget {
   }
 }
 
-class _SessionInputBar extends StatelessWidget {
+class _SessionInputBar extends StatefulWidget {
   const _SessionInputBar({
     required this.settingsEnabled,
     required this.hasApiKey,
@@ -656,6 +730,161 @@ class _SessionInputBar extends StatelessWidget {
   final bool showSuggestions;
 
   @override
+  State<_SessionInputBar> createState() => _SessionInputBarState();
+}
+
+class _SessionInputBarState extends State<_SessionInputBar> {
+  final _layerLink = LayerLink();
+  final _anchorKey = GlobalKey();
+  final _overlayController = OverlayPortalController();
+  final _focusNode = FocusNode();
+  final _suggestionsScrollController = ScrollController();
+  final _tapRegionGroup = Object();
+
+  double _anchorWidth = 0;
+  double _maxOverlayHeight = 320;
+  bool _temporarilyDismissed = false;
+  String _lastText = '';
+  int _highlightedSuggestion = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _lastText = widget.composerController.text;
+    _scheduleOverlaySync();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SessionInputBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final text = widget.composerController.text;
+    if (text != _lastText) {
+      _lastText = text;
+      _temporarilyDismissed = false;
+      _highlightedSuggestion = 0;
+    }
+    _scheduleOverlaySync();
+  }
+
+  @override
+  void dispose() {
+    if (_overlayController.isShowing) {
+      _overlayController.hide();
+    }
+    _focusNode.dispose();
+    _suggestionsScrollController.dispose();
+    super.dispose();
+  }
+
+  void _scheduleOverlaySync() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _updateOverlayGeometry();
+      final shouldShow = widget.showSuggestions && !_temporarilyDismissed;
+      if (shouldShow && !_overlayController.isShowing) {
+        _overlayController.show();
+      } else if (!shouldShow && _overlayController.isShowing) {
+        _overlayController.hide();
+      }
+    });
+  }
+
+  void _updateOverlayGeometry() {
+    final renderObject = _anchorKey.currentContext?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      return;
+    }
+    final top = renderObject.localToGlobal(Offset.zero).dy;
+    final safeTop = MediaQuery.paddingOf(context).top;
+    final availableAbove = (top - safeTop - 16).clamp(48.0, 320.0);
+    final width = renderObject.size.width;
+    if ((width - _anchorWidth).abs() < 0.5 &&
+        (availableAbove - _maxOverlayHeight).abs() < 0.5) {
+      return;
+    }
+    setState(() {
+      _anchorWidth = width;
+      _maxOverlayHeight = availableAbove;
+    });
+  }
+
+  void _dismissSuggestions() {
+    _temporarilyDismissed = true;
+    if (_overlayController.isShowing) {
+      _overlayController.hide();
+    }
+  }
+
+  void _selectSlashSuggestion(CodexSlashCommand suggestion) {
+    widget.onSelectSlashSuggestion(suggestion);
+    _focusNode.requestFocus();
+  }
+
+  void _selectMentionSuggestion(ComposerMentionSuggestion suggestion) {
+    widget.onSelectMentionSuggestion(suggestion);
+    _focusNode.requestFocus();
+  }
+
+  int get _suggestionCount {
+    final trigger = findComposerTrigger(widget.composerController.value);
+    return switch (trigger?.kind) {
+      ComposerTriggerKind.slash => widget.slashSuggestions.length,
+      ComposerTriggerKind.mention => widget.mentionSuggestions.length,
+      null => 0,
+    };
+  }
+
+  void _moveHighlightedSuggestion(int delta) {
+    final count = _suggestionCount;
+    if (count == 0) {
+      return;
+    }
+    setState(() {
+      _highlightedSuggestion = (_highlightedSuggestion + delta) % count;
+      if (_highlightedSuggestion < 0) {
+        _highlightedSuggestion += count;
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_suggestionsScrollController.hasClients) {
+        return;
+      }
+      final position = _suggestionsScrollController.position;
+      final target = (_highlightedSuggestion * 64.0).clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      _suggestionsScrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
+  void _selectHighlightedSuggestion() {
+    final trigger = findComposerTrigger(widget.composerController.value);
+    switch (trigger?.kind) {
+      case ComposerTriggerKind.slash:
+        if (_highlightedSuggestion < widget.slashSuggestions.length) {
+          _selectSlashSuggestion(
+            widget.slashSuggestions[_highlightedSuggestion],
+          );
+        }
+      case ComposerTriggerKind.mention:
+        if (_highlightedSuggestion < widget.mentionSuggestions.length) {
+          _selectMentionSuggestion(
+            widget.mentionSuggestions[_highlightedSuggestion],
+          );
+        }
+      case null:
+        return;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final widthClass = context.adaptiveWidthClass;
@@ -670,26 +899,26 @@ class _SessionInputBar extends StatelessWidget {
     };
 
     String? helperText;
-    final trimmedRuntimeStatus = runtimeStatus?.trim() ?? '';
-    if (!settingsEnabled) {
+    final trimmedRuntimeStatus = widget.runtimeStatus?.trim() ?? '';
+    if (!widget.settingsEnabled) {
       helperText = '当前对话能力已关闭，请先在设置中启用。';
-    } else if (!hasApiKey) {
+    } else if (!widget.hasApiKey) {
       helperText = '请先配置 API Key。';
     } else if (trimmedRuntimeStatus.isNotEmpty) {
       helperText = trimmedRuntimeStatus;
     } else {
-      final trimmedStatus = status.trim();
+      final trimmedStatus = widget.status.trim();
       if (trimmedStatus.contains('失败') || trimmedStatus.contains('请先')) {
         helperText = trimmedStatus;
       }
     }
 
-    final sendButtonTooltip = running
+    final sendButtonTooltip = widget.running
         ? '正在等待 Codex 回复'
-        : (canSend ? '发送消息' : '请输入内容后发送');
-    final sendButtonLabel = running
+        : (widget.canSend ? '发送消息' : '请输入内容后发送');
+    final sendButtonLabel = widget.running
         ? '正在等待 Codex 回复'
-        : (canSend ? '发送消息' : '发送消息（不可用）');
+        : (widget.canSend ? '发送消息' : '发送消息（不可用）');
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -714,7 +943,7 @@ class _SessionInputBar extends StatelessWidget {
           children: [
             if (helperText != null) ...[
               _InlineNotice(
-                icon: runtimeStatusIsRetrying
+                icon: widget.runtimeStatusIsRetrying
                     ? Icons.sync
                     : helperText.contains('失败')
                     ? Icons.error_outline
@@ -723,103 +952,193 @@ class _SessionInputBar extends StatelessWidget {
               ),
               const SizedBox(height: 10),
             ],
-            if (pendingMentions.isNotEmpty) ...[
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final mention in pendingMentions)
-                    InputChip(
-                      label: Text('@${mention.label}'),
-                      avatar: Icon(
-                        mention.kind == ComposerMentionKind.file
-                            ? Icons.insert_drive_file_outlined
-                            : Icons.account_tree_outlined,
-                        size: 18,
+            if (widget.pendingMentions.isNotEmpty) ...[
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final mention in widget.pendingMentions) ...[
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 220),
+                        child: InputChip(
+                          label: Text(
+                            '@${mention.label}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          avatar: Icon(
+                            mention.kind == ComposerMentionKind.file
+                                ? Icons.insert_drive_file_outlined
+                                : Icons.account_tree_outlined,
+                            size: 18,
+                          ),
+                          onDeleted: () =>
+                              widget.onRemovePendingMention(mention),
+                        ),
                       ),
-                      onDeleted: () => onRemovePendingMention(mention),
-                    ),
-                ],
+                      const SizedBox(width: 8),
+                    ],
+                  ],
+                ),
               ),
               const SizedBox(height: 10),
             ],
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Semantics(
-                    textField: true,
-                    label: '消息输入框',
-                    child: TextField(
-                      controller: composerController,
-                      enabled: canEditComposer,
-                      minLines: 1,
-                      maxLines: 6,
-                      textInputAction: TextInputAction.newline,
-                      decoration: const InputDecoration(
-                        hintText: '在这里输入消息...',
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        isDense: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(24)),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Semantics(
-                  button: true,
-                  enabled: canSend,
-                  label: sendButtonLabel,
-                  child: IconButton.filled(
-                    tooltip: sendButtonTooltip,
-                    onPressed: canSend ? onSendMessage : null,
-                    icon: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
-                      switchInCurve: Curves.easeOut,
-                      switchOutCurve: Curves.easeIn,
-                      child: running
-                          ? SizedBox(
-                              key: const ValueKey('send-loading'),
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.4,
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            )
-                          : const Icon(
-                              Icons.arrow_upward_rounded,
-                              key: ValueKey('send-icon'),
+            TapRegion(
+              groupId: _tapRegionGroup,
+              onTapOutside: (_) {
+                _dismissSuggestions();
+                _focusNode.unfocus();
+              },
+              child: OverlayPortal(
+                controller: _overlayController,
+                overlayChildBuilder: (overlayContext) {
+                  final trigger = findComposerTrigger(
+                    widget.composerController.value,
+                  );
+                  return UnconstrainedBox(
+                    alignment: Alignment.topLeft,
+                    child: CompositedTransformFollower(
+                      link: _layerLink,
+                      showWhenUnlinked: false,
+                      targetAnchor: Alignment.topLeft,
+                      followerAnchor: Alignment.bottomLeft,
+                      offset: const Offset(0, -8),
+                      child: TapRegion(
+                        groupId: _tapRegionGroup,
+                        child: SizedBox(
+                          width: _anchorWidth,
+                          child: ConstrainedBox(
+                            key: const ValueKey('composer-suggestions-panel'),
+                            constraints: BoxConstraints(
+                              maxHeight: _maxOverlayHeight,
                             ),
-                    ),
-                    style: IconButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(
-                        _SessionUiSpecs.minTapTarget,
-                        _SessionUiSpecs.minTapTarget,
+                            child: _ComposerSuggestionsPanel(
+                              triggerKind: trigger?.kind,
+                              slashSuggestions: widget.slashSuggestions,
+                              mentionLoading: widget.mentionLoading,
+                              mentionSuggestions: widget.mentionSuggestions,
+                              highlightedIndex: _highlightedSuggestion,
+                              scrollController: _suggestionsScrollController,
+                              onSelectSlashSuggestion: _selectSlashSuggestion,
+                              onSelectMentionSuggestion:
+                                  _selectMentionSuggestion,
+                            ),
+                          ),
+                        ),
                       ),
+                    ),
+                  );
+                },
+                child: CompositedTransformTarget(
+                  link: _layerLink,
+                  child: KeyedSubtree(
+                    key: _anchorKey,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Semantics(
+                            textField: true,
+                            label: '消息输入框',
+                            child: CallbackShortcuts(
+                              bindings:
+                                  widget.showSuggestions &&
+                                      _suggestionCount > 0 &&
+                                      !_temporarilyDismissed
+                                  ? <ShortcutActivator, VoidCallback>{
+                                      const SingleActivator(
+                                        LogicalKeyboardKey.arrowDown,
+                                      ): () =>
+                                          _moveHighlightedSuggestion(1),
+                                      const SingleActivator(
+                                        LogicalKeyboardKey.arrowUp,
+                                      ): () =>
+                                          _moveHighlightedSuggestion(-1),
+                                      const SingleActivator(
+                                        LogicalKeyboardKey.enter,
+                                      ): _selectHighlightedSuggestion,
+                                      const SingleActivator(
+                                        LogicalKeyboardKey.numpadEnter,
+                                      ): _selectHighlightedSuggestion,
+                                      const SingleActivator(
+                                        LogicalKeyboardKey.escape,
+                                      ): _dismissSuggestions,
+                                    }
+                                  : const <ShortcutActivator, VoidCallback>{},
+                              child: TextField(
+                                focusNode: _focusNode,
+                                controller: widget.composerController,
+                                enabled: widget.canEditComposer,
+                                minLines: 1,
+                                maxLines: 6,
+                                textInputAction: TextInputAction.newline,
+                                onTap: () {
+                                  _temporarilyDismissed = false;
+                                  _scheduleOverlaySync();
+                                },
+                                decoration: const InputDecoration(
+                                  hintText: '在这里输入消息...',
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                  isDense: true,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.all(
+                                      Radius.circular(12),
+                                    ),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  filled: true,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Semantics(
+                          button: true,
+                          enabled: widget.canSend,
+                          label: sendButtonLabel,
+                          child: IconButton.filled(
+                            tooltip: sendButtonTooltip,
+                            onPressed: widget.canSend
+                                ? widget.onSendMessage
+                                : null,
+                            icon: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 180),
+                              switchInCurve: Curves.easeOut,
+                              switchOutCurve: Curves.easeIn,
+                              child: widget.running
+                                  ? SizedBox(
+                                      key: const ValueKey('send-loading'),
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.4,
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.arrow_upward_rounded,
+                                      key: ValueKey('send-icon'),
+                                    ),
+                            ),
+                            style: IconButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(
+                                _SessionUiSpecs.minTapTarget,
+                                _SessionUiSpecs.minTapTarget,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ],
-            ),
-            if (showSuggestions) ...[
-              const SizedBox(height: 10),
-              _ComposerSuggestionsPanel(
-                slashSuggestions: slashSuggestions,
-                mentionLoading: mentionLoading,
-                mentionSuggestions: mentionSuggestions,
-                onSelectSlashSuggestion: onSelectSlashSuggestion,
-                onSelectMentionSuggestion: onSelectMentionSuggestion,
               ),
-            ],
+            ),
           ],
         ),
       ),
@@ -869,16 +1188,22 @@ class _InlineNotice extends StatelessWidget {
 
 class _ComposerSuggestionsPanel extends StatelessWidget {
   const _ComposerSuggestionsPanel({
+    required this.triggerKind,
     required this.slashSuggestions,
     required this.mentionLoading,
     required this.mentionSuggestions,
+    required this.highlightedIndex,
+    required this.scrollController,
     required this.onSelectSlashSuggestion,
     required this.onSelectMentionSuggestion,
   });
 
+  final ComposerTriggerKind? triggerKind;
   final List<CodexSlashCommand> slashSuggestions;
   final bool mentionLoading;
   final List<ComposerMentionSuggestion> mentionSuggestions;
+  final int highlightedIndex;
+  final ScrollController scrollController;
   final ValueChanged<CodexSlashCommand> onSelectSlashSuggestion;
   final ValueChanged<ComposerMentionSuggestion> onSelectMentionSuggestion;
 
@@ -886,63 +1211,90 @@ class _ComposerSuggestionsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
-        ),
-      ),
-      child: slashSuggestions.isNotEmpty
-          ? Column(
-              children: [
-                for (final suggestion in slashSuggestions.take(8))
-                  ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.code_outlined),
-                    title: Text(suggestion.command),
-                    subtitle: Text(suggestion.purpose),
-                    onTap: () => onSelectSlashSuggestion(suggestion),
-                  ),
-              ],
-            )
-          : mentionLoading
-          ? const Padding(
-              padding: EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  SizedBox(width: 10),
-                  Text('正在查找文件与提交...'),
-                ],
+    final Widget content;
+    if (triggerKind == ComposerTriggerKind.slash) {
+      if (slashSuggestions.isEmpty) {
+        content = const ListTile(
+          minTileHeight: 48,
+          leading: Icon(Icons.search_off_outlined),
+          title: Text('没有匹配的命令'),
+        );
+      } else {
+        content = ListView.builder(
+          controller: scrollController,
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
+          itemCount: slashSuggestions.length,
+          itemBuilder: (context, index) {
+            final suggestion = slashSuggestions[index];
+            return ListTile(
+              selected: index == highlightedIndex,
+              minTileHeight: 48,
+              leading: const Icon(Icons.code_outlined),
+              title: Text(suggestion.command),
+              subtitle: Text(
+                suggestion.purpose,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            )
-          : mentionSuggestions.isEmpty
-          ? const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text('没有匹配的文件或提交。'),
-            )
-          : Column(
-              children: [
-                for (final suggestion in mentionSuggestions)
-                  ListTile(
-                    dense: true,
-                    leading: Icon(
-                      suggestion.kind == ComposerMentionKind.file
-                          ? Icons.insert_drive_file_outlined
-                          : Icons.account_tree_outlined,
-                    ),
-                    title: Text(suggestion.label),
-                    subtitle: Text(suggestion.description),
-                    onTap: () => onSelectMentionSuggestion(suggestion),
-                  ),
-              ],
+              onTap: () => onSelectSlashSuggestion(suggestion),
+            );
+          },
+        );
+      }
+    } else if (mentionLoading) {
+      content = const ListTile(
+        minTileHeight: 48,
+        leading: SizedBox.square(
+          dimension: 18,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        title: Text('正在查找文件与提交...'),
+      );
+    } else if (mentionSuggestions.isEmpty) {
+      content = const ListTile(
+        minTileHeight: 48,
+        leading: Icon(Icons.search_off_outlined),
+        title: Text('没有匹配的文件或提交'),
+      );
+    } else {
+      content = ListView.builder(
+        controller: scrollController,
+        shrinkWrap: true,
+        padding: EdgeInsets.zero,
+        itemCount: mentionSuggestions.length,
+        itemBuilder: (context, index) {
+          final suggestion = mentionSuggestions[index];
+          return ListTile(
+            selected: index == highlightedIndex,
+            minTileHeight: 48,
+            leading: Icon(
+              suggestion.kind == ComposerMentionKind.file
+                  ? Icons.insert_drive_file_outlined
+                  : Icons.account_tree_outlined,
             ),
+            title: Text(
+              suggestion.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(suggestion.description),
+            onTap: () => onSelectMentionSuggestion(suggestion),
+          );
+        },
+      );
+    }
+
+    return Material(
+      color: theme.colorScheme.surface,
+      elevation: 5,
+      shadowColor: theme.colorScheme.shadow.withValues(alpha: 0.18),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: content,
     );
   }
 }

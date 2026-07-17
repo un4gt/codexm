@@ -65,7 +65,6 @@ class MessageBubble extends StatelessWidget {
       );
     }
 
-    final spec = _messageStyle(theme, role);
     final hasStructuredParts = parts.any((part) => part.kind != 'agentText');
     final plainContent = content.trim().isNotEmpty
         ? content
@@ -77,27 +76,51 @@ class MessageBubble extends StatelessWidget {
     if (role != 'user' && hasStructuredParts) {
       return _StructuredAssistantMessage(
         cardKey: _cardKeyFor(key),
-        spec: spec,
         content: content,
         parts: parts,
-        createdAt: createdAt,
         showThinking: showThinking,
-        formatTime: _formatTime,
+      );
+    }
+
+    if (role == 'user') {
+      return _ChatWidthRow(
+        alignment: Alignment.centerRight,
+        widthFactor: context.appTokens.chatMessageWidthFactor,
+        child: Material(
+          key: _cardKeyFor(key),
+          color: theme.colorScheme.primaryContainer,
+          borderRadius: BorderRadius.circular(16),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onLongPress: () => _copyMessage(context, plainContent),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: SimpleMarkdownView(
+                content: plainContent,
+                showThinking: false,
+                textAlign: TextAlign.left,
+              ),
+            ),
+          ),
+        ),
       );
     }
 
     return _ChatWidthRow(
-      alignment: spec.alignment,
-      child: _MessageCard(
+      alignment: Alignment.centerLeft,
+      child: KeyedSubtree(
         key: _cardKeyFor(key),
-        spec: spec,
-        createdAt: createdAt,
-        formatTime: _formatTime,
-        onLongPress: () => _copyMessage(context, plainContent),
-        child: SimpleMarkdownView(
-          content: plainContent,
-          showThinking: showThinking,
-          textAlign: role == 'user' ? TextAlign.right : TextAlign.left,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onLongPress: () => _copyMessage(context, plainContent),
+            child: SimpleMarkdownView(
+              content: plainContent,
+              showThinking: showThinking,
+              textAlign: TextAlign.left,
+            ),
+          ),
         ),
       ),
     );
@@ -123,53 +146,18 @@ class MessageBubble extends StatelessWidget {
       context,
     ).showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
   }
-
-  String _formatTime(int millis) {
-    if (millis <= 0) {
-      return '--:--';
-    }
-    final value = DateTime.fromMillisecondsSinceEpoch(millis);
-    final hour = value.hour.toString().padLeft(2, '0');
-    final minute = value.minute.toString().padLeft(2, '0');
-    return '$hour:$minute';
-  }
-
-  _MessageSpec _messageStyle(ThemeData theme, String role) {
-    final scheme = theme.colorScheme;
-    if (role == 'user') {
-      return _MessageSpec(
-        label: '你',
-        icon: Icons.person_outline,
-        alignment: Alignment.centerRight,
-        backgroundColor: scheme.primaryContainer.withValues(alpha: 0.92),
-        borderRadius: 16,
-        iconColor: scheme.primary,
-        labelColor: scheme.onPrimaryContainer,
-        timeColor: scheme.onPrimaryContainer.withValues(alpha: 0.72),
-        avatarBackground: scheme.primary,
-        avatarForeground: scheme.onPrimary,
-      );
-    }
-    return _MessageSpec(
-      label: 'CodexM',
-      icon: Icons.auto_awesome_outlined,
-      alignment: Alignment.centerLeft,
-      backgroundColor: scheme.surfaceContainerLow,
-      borderRadius: 16,
-      iconColor: scheme.primary,
-      labelColor: scheme.onSurface,
-      timeColor: scheme.onSurfaceVariant,
-      avatarBackground: scheme.secondaryContainer,
-      avatarForeground: scheme.onSecondaryContainer,
-    );
-  }
 }
 
 class _ChatWidthRow extends StatelessWidget {
-  const _ChatWidthRow({required this.alignment, required this.child});
+  const _ChatWidthRow({
+    required this.alignment,
+    required this.child,
+    this.widthFactor = 1,
+  });
 
   final Alignment alignment;
   final Widget child;
+  final double widthFactor;
 
   @override
   Widget build(BuildContext context) {
@@ -180,7 +168,8 @@ class _ChatWidthRow extends StatelessWidget {
             ? constraints.maxWidth
             : MediaQuery.sizeOf(context).width;
         final gutter = width * tokens.chatHorizontalGutterFactor;
-        final bubbleWidth = width * tokens.chatMessageWidthFactor;
+        final availableWidth = width - gutter * 2;
+        final bubbleWidth = availableWidth * widthFactor;
         return Padding(
           padding: EdgeInsets.symmetric(horizontal: gutter, vertical: 6),
           child: Align(
@@ -193,108 +182,18 @@ class _ChatWidthRow extends StatelessWidget {
   }
 }
 
-class _MessageCard extends StatelessWidget {
-  const _MessageCard({
-    super.key,
-    required this.spec,
-    required this.createdAt,
-    required this.formatTime,
-    required this.child,
-    this.onLongPress,
-  });
-
-  final _MessageSpec spec;
-  final int createdAt;
-  final String Function(int millis) formatTime;
-  final Widget child;
-  final VoidCallback? onLongPress;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isUser = spec.alignment == Alignment.centerRight;
-
-    final header = Row(
-      children: [
-        if (!isUser) ...[_MessageAvatar(spec: spec), const SizedBox(width: 8)],
-        Expanded(
-          child: Text(
-            spec.label,
-            textAlign: isUser ? TextAlign.right : TextAlign.left,
-            style: theme.textTheme.labelMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: spec.labelColor,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          formatTime(createdAt),
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: spec.timeColor ?? theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        if (isUser) ...[const SizedBox(width: 8), _MessageAvatar(spec: spec)],
-      ],
-    );
-
-    return Material(
-      color: spec.backgroundColor,
-      elevation: context.appTokens.elevationLow,
-      shadowColor: theme.colorScheme.shadow.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(spec.borderRadius),
-      child: InkWell(
-        onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(spec.borderRadius),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 72),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [header, const SizedBox(height: 8), child],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MessageAvatar extends StatelessWidget {
-  const _MessageAvatar({required this.spec});
-
-  final _MessageSpec spec;
-
-  @override
-  Widget build(BuildContext context) {
-    return CircleAvatar(
-      radius: 14,
-      backgroundColor: spec.avatarBackground,
-      foregroundColor: spec.avatarForeground,
-      child: Icon(spec.icon, size: 16),
-    );
-  }
-}
-
 class _StructuredAssistantMessage extends StatelessWidget {
   const _StructuredAssistantMessage({
     required this.cardKey,
-    required this.spec,
     required this.content,
     required this.parts,
-    required this.createdAt,
     required this.showThinking,
-    required this.formatTime,
   });
 
   final Key? cardKey;
-  final _MessageSpec spec;
   final String content;
   final List<ChatMessagePart> parts;
-  final int createdAt;
   final bool showThinking;
-  final String Function(int millis) formatTime;
 
   @override
   Widget build(BuildContext context) {
@@ -311,38 +210,47 @@ class _StructuredAssistantMessage extends StatelessWidget {
           status: 'completed',
         ),
       ...parts.where(
-        (part) => part.content.trim().isNotEmpty || part.status != null,
+        (part) =>
+            (part.kind != 'reasoning' || showThinking) &&
+            (part.content.trim().isNotEmpty || part.status != null),
       ),
     ];
 
     return _ChatWidthRow(
-      alignment: spec.alignment,
-      child: _MessageCard(
+      alignment: Alignment.centerLeft,
+      child: KeyedSubtree(
         key: cardKey,
-        spec: spec,
-        createdAt: createdAt,
-        formatTime: formatTime,
-        onLongPress: () {
-          final text = visibleParts.map((part) => part.content).join('\n');
-          Clipboard.setData(ClipboardData(text: text.trim()));
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (var index = 0; index < visibleParts.length; index += 1) ...[
-              if (index > 0) const SizedBox(height: 8),
-              _MessagePartCard(
-                key: ValueKey(
-                  '${visibleParts[index].id}:${visibleParts[index].kind}',
-                ),
-                part: visibleParts[index],
-                showThinking: showThinking,
-              ),
-            ],
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onLongPress: () {
+              final text = visibleParts.map((part) => part.content).join('\n');
+              Clipboard.setData(ClipboardData(text: text.trim()));
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (
+                  var index = 0;
+                  index < visibleParts.length;
+                  index += 1
+                ) ...[
+                  if (index > 0) const SizedBox(height: 10),
+                  _MessagePartCard(
+                    key: ValueKey(
+                      '${visibleParts[index].id}:${visibleParts[index].kind}',
+                    ),
+                    part: visibleParts[index],
+                    showThinking: showThinking,
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -392,6 +300,13 @@ class _MessagePartCardState extends State<_MessagePartCard> {
 
   @override
   Widget build(BuildContext context) {
+    if (part.kind == 'agentText') {
+      return SimpleMarkdownView(
+        content: part.content,
+        showThinking: widget.showThinking,
+      );
+    }
+
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final spec = _partSpec(colorScheme, part.kind);
@@ -401,12 +316,12 @@ class _MessagePartCardState extends State<_MessagePartCard> {
 
     return Material(
       color: spec.backgroundColor,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(8),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(color: spec.borderColor),
         ),
         child: Column(
@@ -625,30 +540,4 @@ class _PartVisualSpec {
   final Color iconColor;
   final Color backgroundColor;
   final Color borderColor;
-}
-
-class _MessageSpec {
-  const _MessageSpec({
-    required this.label,
-    required this.icon,
-    required this.alignment,
-    required this.backgroundColor,
-    required this.borderRadius,
-    required this.iconColor,
-    required this.labelColor,
-    required this.avatarBackground,
-    required this.avatarForeground,
-    this.timeColor,
-  });
-
-  final String label;
-  final IconData icon;
-  final Alignment alignment;
-  final Color backgroundColor;
-  final double borderRadius;
-  final Color iconColor;
-  final Color labelColor;
-  final Color avatarBackground;
-  final Color avatarForeground;
-  final Color? timeColor;
 }

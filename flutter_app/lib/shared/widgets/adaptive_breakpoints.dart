@@ -2,14 +2,54 @@ import 'package:flutter/material.dart';
 
 enum AdaptiveWidthClass { compact, medium, expanded }
 
+enum AdaptiveDeviceClass { phone, tablet }
+
+@immutable
+class AdaptiveLayoutInfo {
+  const AdaptiveLayoutInfo({
+    required this.size,
+    required this.widthClass,
+    required this.deviceClass,
+  });
+
+  final Size size;
+  final AdaptiveWidthClass widthClass;
+  final AdaptiveDeviceClass deviceClass;
+
+  bool get isPhone => deviceClass == AdaptiveDeviceClass.phone;
+  bool get isTablet => deviceClass == AdaptiveDeviceClass.tablet;
+  bool get useBottomNavigation => isPhone;
+  bool get useNavigationRail => isTablet;
+  bool get useMasterDetail =>
+      isTablet && size.width >= AdaptiveBreakpoints.masterDetailMinWidth;
+}
+
 class AdaptiveBreakpoints {
   const AdaptiveBreakpoints._();
 
   static const double compactMaxWidth = 600;
   static const double mediumMaxWidth = 840;
-  static const EdgeInsets compactPagePadding = EdgeInsets.fromLTRB(16, 16, 16, 20);
-  static const EdgeInsets mediumPagePadding = EdgeInsets.fromLTRB(24, 20, 24, 24);
-  static const EdgeInsets expandedPagePadding = EdgeInsets.fromLTRB(32, 24, 32, 28);
+  static const double tabletMinShortestSide = 600;
+  static const double masterDetailMinWidth = 960;
+  static const double masterPaneWidth = 300;
+  static const EdgeInsets compactPagePadding = EdgeInsets.fromLTRB(
+    16,
+    16,
+    16,
+    20,
+  );
+  static const EdgeInsets mediumPagePadding = EdgeInsets.fromLTRB(
+    24,
+    20,
+    24,
+    24,
+  );
+  static const EdgeInsets expandedPagePadding = EdgeInsets.fromLTRB(
+    32,
+    24,
+    32,
+    28,
+  );
   static const EdgeInsets compactHeaderPadding = EdgeInsets.all(20);
   static const EdgeInsets mediumHeaderPadding = EdgeInsets.all(24);
   static const EdgeInsets expandedHeaderPadding = EdgeInsets.all(28);
@@ -22,6 +62,20 @@ class AdaptiveBreakpoints {
       return AdaptiveWidthClass.medium;
     }
     return AdaptiveWidthClass.expanded;
+  }
+
+  static AdaptiveDeviceClass resolveDeviceClass(Size size) {
+    return size.shortestSide < tabletMinShortestSide
+        ? AdaptiveDeviceClass.phone
+        : AdaptiveDeviceClass.tablet;
+  }
+
+  static AdaptiveLayoutInfo resolveLayout(Size size) {
+    return AdaptiveLayoutInfo(
+      size: size,
+      widthClass: resolve(size.width),
+      deviceClass: resolveDeviceClass(size),
+    );
   }
 
   static EdgeInsets resolvePagePadding(AdaptiveWidthClass widthClass) {
@@ -60,6 +114,10 @@ extension AdaptiveBreakpointContextX on BuildContext {
 
   AdaptiveWidthClass get adaptiveWidthClass {
     return AdaptiveBreakpoints.resolve(MediaQuery.sizeOf(this).width);
+  }
+
+  AdaptiveLayoutInfo get adaptiveLayoutInfo {
+    return AdaptiveBreakpoints.resolveLayout(MediaQuery.sizeOf(this));
   }
 
   EdgeInsets get adaptivePagePadding {

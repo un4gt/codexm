@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:codexm_flutter/features/sessions/application/session_composer_logic.dart';
 import 'package:codexm_flutter/features/workspaces/application/workspace_paths.dart';
 import 'package:codexm_native/codexm_native.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -50,6 +51,54 @@ void main() {
       isTrue,
     );
   });
+
+  test('finds slash trigger at the cursor and preserves the suffix', () {
+    const value = TextEditingValue(
+      text: '/rev 后续内容',
+      selection: TextSelection.collapsed(offset: 4),
+    );
+
+    final trigger = findComposerTrigger(value);
+    expect(trigger, isNotNull);
+    expect(trigger!.kind, ComposerTriggerKind.slash);
+    expect(trigger.query, 'rev');
+    expect(trigger.range, const TextRange(start: 0, end: 4));
+
+    final next = applyComposerSuggestion(value, trigger, '/review');
+    expect(next.text, '/review 后续内容');
+    expect(next.selection.baseOffset, 8);
+  });
+
+  test('finds and replaces a mention in the middle of input', () {
+    const value = TextEditingValue(
+      text: '检查 @mai 然后总结',
+      selection: TextSelection.collapsed(offset: 7),
+    );
+
+    final trigger = findComposerTrigger(value);
+    expect(trigger, isNotNull);
+    expect(trigger!.kind, ComposerTriggerKind.mention);
+    expect(trigger.query, 'mai');
+
+    final next = applyComposerSuggestion(value, trigger, '@lib/main.dart');
+    expect(next.text, '检查 @lib/main.dart 然后总结');
+    expect(next.selection.baseOffset, '检查 @lib/main.dart '.length);
+  });
+
+  test(
+    'adds trailing space and places the cursor after a terminal trigger',
+    () {
+      const value = TextEditingValue(
+        text: '/sta',
+        selection: TextSelection.collapsed(offset: 4),
+      );
+      final trigger = findComposerTrigger(value)!;
+
+      final next = applyComposerSuggestion(value, trigger, '/status');
+      expect(next.text, '/status ');
+      expect(next.selection, const TextSelection.collapsed(offset: 8));
+    },
+  );
 
   test('builds user-facing input with pending mentions', () {
     final rendered =

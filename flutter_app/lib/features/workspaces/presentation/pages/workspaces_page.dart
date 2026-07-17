@@ -3,8 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:codexm_native/codexm_native.dart';
 
-import '../../../../app/theme/app_theme.dart';
-import '../../../../shared/widgets/stitch_ui.dart';
+import '../../../../shared/widgets/app_ui.dart';
 import '../../../settings/application/auth_store.dart';
 import '../../../settings/application/auth_types.dart' hide AuthRef;
 import '../../application/workspace_git_error_mapper.dart';
@@ -20,11 +19,13 @@ class WorkspacesPage extends StatefulWidget {
     this.activeWorkspaceId,
     this.onActiveWorkspaceChanged,
     this.onOpenSessionsRequested,
+    this.lockedWorkspaceId,
   });
 
   final WorkspaceId? activeWorkspaceId;
   final ValueChanged<Workspace?>? onActiveWorkspaceChanged;
   final VoidCallback? onOpenSessionsRequested;
+  final WorkspaceId? lockedWorkspaceId;
 
   @override
   State<WorkspacesPage> createState() => _WorkspacesPageState();
@@ -66,6 +67,16 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
   WorkspacePaths? _selectedPaths;
   String _status = '正在加载工作区列表...';
   bool _busy = false;
+
+  bool _blockMutationWhileSessionRuns() {
+    if (widget.lockedWorkspaceId == null) {
+      return false;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('当前会话仍在运行，完成后可修改工作区。')));
+    return true;
+  }
 
   @override
   void initState() {
@@ -255,6 +266,9 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
   }
 
   Future<void> _createWorkspace() async {
+    if (_blockMutationWhileSessionRuns()) {
+      return;
+    }
     final name = await _promptWorkspaceName(
       title: '新建工作区',
       hintText: '例如：Flutter 主线',
@@ -561,6 +575,9 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
   }
 
   Future<void> _cloneWorkspace() async {
+    if (_blockMutationWhileSessionRuns()) {
+      return;
+    }
     final draft = await _promptCloneWorkspaceDraft();
     if (draft == null) {
       return;
@@ -620,6 +637,9 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
   }
 
   Future<void> _syncWorkspaceGit(Workspace workspace) async {
+    if (_blockMutationWhileSessionRuns()) {
+      return;
+    }
     final git = workspace.git;
     final paths =
         _selectedPaths ??
@@ -661,6 +681,9 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
   }
 
   Future<void> _activateWorkspace(Workspace workspace) async {
+    if (_blockMutationWhileSessionRuns()) {
+      return;
+    }
     await _runAction('正在切换工作区...', () async {
       await _workspaceStore.setActiveWorkspaceId(workspace.id);
       widget.onActiveWorkspaceChanged?.call(workspace);
@@ -669,6 +692,9 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
   }
 
   Future<void> _renameWorkspace(Workspace workspace) async {
+    if (_blockMutationWhileSessionRuns()) {
+      return;
+    }
     final name = await _promptWorkspaceName(
       title: '重命名工作区',
       initialValue: workspace.name,
@@ -684,14 +710,19 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
     });
   }
 
-  Future<void> _deleteWorkspace(Workspace workspace) async {
+  Future<bool> _deleteWorkspace(Workspace workspace) async {
+    if (_blockMutationWhileSessionRuns()) {
+      return false;
+    }
     final confirmed = await _confirmDelete(workspace);
     if (!confirmed) {
-      return;
+      return false;
     }
 
+    var deleted = false;
     await _runAction('正在删除工作区...', () async {
       await _workspaceStore.removeWorkspace(workspace.id);
+      deleted = true;
       if (_selectedWorkspaceId == workspace.id) {
         _selectedWorkspaceId = null;
       }
@@ -700,6 +731,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
       }
       return '已删除工作区：${workspace.name}';
     });
+    return deleted;
   }
 
   void _selectWorkspace(Workspace workspace) {
@@ -717,62 +749,218 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
     });
   }
 
+  Future<void> _showWorkspaceAddActions() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: AppListSection(
+            children: [
+              AppListTile(
+                title: '新建空白工作区',
+                subtitle: '创建一个本地工作区',
+                leading: const Icon(Icons.create_new_folder_outlined),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _createWorkspace();
+                },
+              ),
+              AppListTile(
+                title: '克隆 Git 仓库',
+                subtitle: '从远程仓库创建工作区',
+                leading: const Icon(Icons.download_outlined),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _cloneWorkspace();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _openWorkspaceDetails(Workspace workspace) async {
+    _selectWorkspace(workspace);
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (detailContext) => _WorkspaceDetailPage(
+          workspace: workspace,
+          active: workspace.id == _activeWorkspaceId,
+          pathsFuture: _workspaceDirectoryService.pathsFor(workspace.id),
+          repoReadyResolver: _isRepoReady,
+          busy: _busy,
+          onActivate: () => _activateWorkspace(workspace),
+          onSync: () => _syncWorkspaceGit(workspace),
+          onRename: () => _renameWorkspace(workspace),
+          onDelete: () async {
+            final deleted = await _deleteWorkspace(workspace);
+            if (deleted && detailContext.mounted) {
+              Navigator.of(detailContext).pop();
+            }
+            return deleted;
+          },
+          onOpenSessions: () async {
+            if (workspace.id != _activeWorkspaceId) {
+              await _activateWorkspace(workspace);
+            }
+            if (detailContext.mounted) {
+              Navigator.of(detailContext).pop();
+            }
+            widget.onOpenSessionsRequested?.call();
+          },
+        ),
+      ),
+    );
+    if (mounted) {
+      await _refresh();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return StitchPageScaffold(
-      pageTitle: '工作区',
-      brandIcon: Icons.terminal_outlined,
-      kickerText: 'Flutter Android',
-      topActions: [
-        IconButton.filledTonal(
-          onPressed: _busy ? null : _cloneWorkspace,
-          tooltip: '克隆仓库',
-          icon: const Icon(Icons.download_for_offline_outlined),
+    final showError = _status.contains('失败') || _status.contains('不能为空');
+    return AppPageScaffold(
+      title: '工作区',
+      actions: [
+        IconButton(
+          onPressed: _busy ? null : _showWorkspaceAddActions,
+          tooltip: '添加工作区',
+          icon: const Icon(Icons.add),
         ),
-        IconButton.filledTonal(
-          onPressed: _busy ? null : () => _refresh(),
-          tooltip: '刷新列表',
-          icon: const Icon(Icons.refresh_outlined),
-        ),
-        if (_activeWorkspaceId != null)
-          IconButton.filledTonal(
-            onPressed: _busy ? null : widget.onOpenSessionsRequested,
-            tooltip: '进入会话',
-            icon: const Icon(Icons.chat_bubble_outline),
-          ),
       ],
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _busy ? null : _createWorkspace,
-        icon: const Icon(Icons.add),
-        label: const Text('新建工作区'),
+      body: Column(
+        children: [
+          if (_busy) const LinearProgressIndicator(minHeight: 2),
+          if (showError)
+            AppStatusNotice(message: _status, tone: AppNoticeTone.error),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  _WorkspaceStitchListSection(
+                    workspaces: _workspaces,
+                    selectedWorkspaceId: _selectedWorkspaceId,
+                    activeWorkspaceId: _activeWorkspaceId,
+                    busy: _busy,
+                    onSelectWorkspace: _openWorkspaceDetails,
+                    onActivateWorkspace: _activateWorkspace,
+                    onRenameWorkspace: _renameWorkspace,
+                    onDeleteWorkspace: _deleteWorkspace,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
-      children: [
-        StitchInfoBanner(
-          icon: Icons.info_outline,
-          title: '当前状态',
-          subtitle: _status,
+    );
+  }
+}
+
+class _WorkspaceDetailPage extends StatelessWidget {
+  const _WorkspaceDetailPage({
+    required this.workspace,
+    required this.active,
+    required this.pathsFuture,
+    required this.repoReadyResolver,
+    required this.busy,
+    required this.onActivate,
+    required this.onSync,
+    required this.onRename,
+    required this.onDelete,
+    required this.onOpenSessions,
+  });
+
+  final Workspace workspace;
+  final bool active;
+  final Future<WorkspacePaths> pathsFuture;
+  final bool Function(WorkspacePaths? paths) repoReadyResolver;
+  final bool busy;
+  final Future<void> Function() onActivate;
+  final Future<void> Function() onSync;
+  final Future<void> Function() onRename;
+  final Future<bool> Function() onDelete;
+  final Future<void> Function() onOpenSessions;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppPageScaffold(
+      title: workspace.name,
+      actions: [
+        PopupMenuButton<String>(
+          tooltip: '工作区操作',
+          onSelected: (value) {
+            if (value == 'rename') {
+              onRename();
+            } else if (value == 'delete') {
+              onDelete();
+            }
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem(value: 'rename', child: Text('重命名')),
+            PopupMenuItem(value: 'delete', child: Text('删除')),
+          ],
         ),
-        _WorkspaceStitchListSection(
-          workspaces: _workspaces,
-          selectedWorkspaceId: _selectedWorkspaceId,
-          activeWorkspaceId: _activeWorkspaceId,
-          selectedPaths: _selectedPaths,
-          busy: _busy,
-          onSelectWorkspace: _selectWorkspace,
-          onActivateWorkspace: _activateWorkspace,
-          onRenameWorkspace: _renameWorkspace,
-          onDeleteWorkspace: _deleteWorkspace,
-          onSyncGit: _syncWorkspaceGit,
-          onOpenSessionsRequested: widget.onOpenSessionsRequested,
-          repoReadyResolver: _isRepoReady,
-        ),
-        if (_busy)
-          const StitchInfoBanner(
-            icon: Icons.sync,
-            title: '正在处理工作区',
-            subtitle: '完成后会自动刷新列表。',
-          ),
       ],
+      body: ListView(
+        padding: const EdgeInsets.only(bottom: 24),
+        children: [
+          AppListSection(
+            title: '概览',
+            children: [
+              AppListTile(
+                title: active ? '当前工作区' : '非当前工作区',
+                subtitle: active ? '新会话将在这里运行' : '设为当前后可开始会话',
+                leading: Icon(
+                  active ? Icons.check_circle : Icons.folder_outlined,
+                ),
+                trailing: active
+                    ? null
+                    : TextButton(
+                        onPressed: busy ? null : onActivate,
+                        child: const Text('设为当前'),
+                      ),
+              ),
+              FutureBuilder<WorkspacePaths>(
+                future: pathsFuture,
+                builder: (context, snapshot) {
+                  final ready = repoReadyResolver(snapshot.data);
+                  return AppListTile(
+                    title: workspace.git == null ? '本地工作区' : 'Git 仓库',
+                    subtitle: workspace.git == null
+                        ? '未配置远程仓库'
+                        : (ready ? '仓库已准备，可以同步' : '仓库尚未完成克隆'),
+                    leading: Icon(
+                      ready
+                          ? Icons.source_outlined
+                          : Icons.cloud_download_outlined,
+                    ),
+                    trailing: workspace.git == null
+                        ? null
+                        : TextButton(
+                            onPressed: busy ? null : onSync,
+                            child: Text(ready ? '拉取更新' : '继续克隆'),
+                          ),
+                  );
+                },
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+            child: FilledButton.icon(
+              onPressed: busy ? null : onOpenSessions,
+              icon: const Icon(Icons.chat_bubble_outline),
+              label: const Text('进入会话'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

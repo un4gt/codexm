@@ -1,4 +1,5 @@
 import 'package:codexm_native/codexm_native.dart';
+import 'package:flutter/services.dart';
 
 import '../../codex/application/codex_models.dart';
 import '../../codex/application/codex_slash_commands.dart';
@@ -6,6 +7,20 @@ import '../../codex/application/runtime_path_mapper.dart';
 import '../../workspaces/application/workspace_paths.dart';
 
 enum ComposerMentionKind { file, commit }
+
+enum ComposerTriggerKind { slash, mention }
+
+class ComposerTrigger {
+  const ComposerTrigger({
+    required this.kind,
+    required this.query,
+    required this.range,
+  });
+
+  final ComposerTriggerKind kind;
+  final String query;
+  final TextRange range;
+}
 
 class ComposerPendingMention {
   const ComposerPendingMention.file({required this.label, required this.value})
@@ -33,6 +48,83 @@ class ComposerMentionSuggestion {
   final String label;
   final String value;
   final String description;
+}
+
+ComposerTrigger? findComposerTrigger(TextEditingValue value) {
+  final selection = value.selection;
+  if (!selection.isValid || !selection.isCollapsed) {
+    return null;
+  }
+  final text = value.text;
+  final cursor = selection.extentOffset;
+  if (cursor < 0 || cursor > text.length) {
+    return null;
+  }
+  final beforeCursor = text.substring(0, cursor);
+  final match = RegExp(r'(^|\s)([/@])([^\s/@]*)$').firstMatch(beforeCursor);
+  if (match == null) {
+    return null;
+  }
+
+  final prefixLength = (match.group(1) ?? '').length;
+  final start = match.start + prefixLength;
+  final marker = match.group(2);
+  if (marker == '/') {
+    final firstContent = text.indexOf(RegExp(r'\S'));
+    if (firstContent != start) {
+      return null;
+    }
+  }
+
+  var end = cursor;
+  while (end < text.length && !RegExp(r'[\s/@]').hasMatch(text[end])) {
+    end += 1;
+  }
+  return ComposerTrigger(
+    kind: marker == '/'
+        ? ComposerTriggerKind.slash
+        : ComposerTriggerKind.mention,
+    query: match.group(3) ?? '',
+    range: TextRange(start: start, end: end),
+  );
+}
+
+TextEditingValue applyComposerSuggestion(
+  TextEditingValue value,
+  ComposerTrigger trigger,
+  String replacement,
+) {
+  final text = value.text;
+  final safeStart = trigger.range.start.clamp(0, text.length);
+  final safeEnd = trigger.range.end.clamp(safeStart, text.length);
+  final prefix = text.substring(0, safeStart);
+  final suffix = text.substring(safeEnd);
+  final hasLeadingWhitespace =
+      suffix.isNotEmpty && RegExp(r'\s').hasMatch(suffix[0]);
+  final inserted = hasLeadingWhitespace ? replacement : '$replacement ';
+  final next = '$prefix$inserted$suffix';
+  final cursor =
+      prefix.length + inserted.length + (hasLeadingWhitespace ? 1 : 0);
+  return TextEditingValue(
+    text: next,
+    selection: TextSelection.collapsed(offset: cursor.clamp(0, next.length)),
+  );
+}
+
+TextEditingValue removeComposerTrigger(
+  TextEditingValue value,
+  ComposerTrigger trigger,
+) {
+  final text = value.text;
+  final safeStart = trigger.range.start.clamp(0, text.length);
+  final safeEnd = trigger.range.end.clamp(safeStart, text.length);
+  final prefix = text.substring(0, safeStart).trimRight();
+  final suffix = text.substring(safeEnd);
+  final next = '$prefix$suffix';
+  return TextEditingValue(
+    text: next,
+    selection: TextSelection.collapsed(offset: prefix.length),
+  );
 }
 
 String? extractSlashToken(String input) {
@@ -89,6 +181,19 @@ List<CodexSlashCommand> filterSlashCommands(String input) {
   return visibleCodexSlashCommands
       .where(
         (item) => item.command.substring(1).toLowerCase().startsWith(query),
+      )
+      .toList(growable: false);
+}
+
+List<CodexSlashCommand> filterSlashCommandsForQuery(String query) {
+  final normalized = query.trim().toLowerCase();
+  if (normalized.isEmpty) {
+    return visibleCodexSlashCommands;
+  }
+  return visibleCodexSlashCommands
+      .where(
+        (item) =>
+            item.command.substring(1).toLowerCase().startsWith(normalized),
       )
       .toList(growable: false);
 }

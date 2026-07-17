@@ -48,20 +48,20 @@ class AppThemeTokens extends ThemeExtension<AppThemeTokens> {
 
   static const fallback = AppThemeTokens(
     pagePadding: EdgeInsets.fromLTRB(16, 16, 16, 20),
-    sectionSpacing: 16,
-    compactSpacing: 12,
-    spacingSmall: 12,
+    sectionSpacing: 24,
+    compactSpacing: 8,
+    spacingSmall: 8,
     spacingMedium: 16,
-    spacingLarge: 20,
-    cardRadius: 16,
-    inputRadius: 16,
-    elevationLow: 2,
-    elevationMedium: 4,
-    elevationHigh: 6,
-    composerMinHeight: 132,
-    maxContentWidth: 1180,
+    spacingLarge: 24,
+    cardRadius: 8,
+    inputRadius: 12,
+    elevationLow: 0,
+    elevationMedium: 2,
+    elevationHigh: 5,
+    composerMinHeight: 64,
+    maxContentWidth: 800,
     chatHorizontalGutterFactor: 0.04,
-    chatMessageWidthFactor: 0.92,
+    chatMessageWidthFactor: 0.82,
     codePadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     codeBackground: Color(0xFFF3F4F6),
     lightCodeThemePreference: CodexLightCodeThemePreference.vscodeLight,
@@ -382,19 +382,19 @@ ThemeData _buildAppThemeFromScheme({
       ),
       bodyLarge: textTheme.bodyLarge?.copyWith(
         height: 1.5,
-        fontSize: 15,
+        fontSize: 16,
         letterSpacing: 0,
         color: colorScheme.onSurface,
       ),
       bodyMedium: textTheme.bodyMedium?.copyWith(
         height: 1.5,
-        fontSize: 13,
+        fontSize: 14,
         letterSpacing: 0,
         color: colorScheme.onSurface,
       ),
       bodySmall: textTheme.bodySmall?.copyWith(
         height: 1.4,
-        fontSize: 11,
+        fontSize: 12,
         letterSpacing: 0,
         color: colorScheme.onSurfaceVariant,
       ),
@@ -436,7 +436,7 @@ ThemeData _buildAppThemeFromScheme({
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: colorScheme.surface,
-      height: 72,
+      height: 64,
       indicatorColor: colorScheme.primaryContainer,
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         return TextStyle(
@@ -451,7 +451,7 @@ ThemeData _buildAppThemeFromScheme({
       }),
     ),
     navigationRailTheme: NavigationRailThemeData(
-      minWidth: 88,
+      minWidth: 80,
       backgroundColor: colorScheme.surface,
       selectedLabelTextStyle: TextStyle(
         fontSize: 11,

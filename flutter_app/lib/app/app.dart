@@ -135,6 +135,8 @@ class _AppShellState extends State<_AppShell> {
   int _selectedIndex = 0;
   Workspace? _activeWorkspace;
   Session? _selectedSession;
+  bool _sessionDetailVisible = false;
+  SessionActivity? _sessionActivity;
   bool _startupUpdateCheckTriggered = false;
 
   @override
@@ -179,6 +181,7 @@ class _AppShellState extends State<_AppShell> {
     return <Widget>[
       WorkspacesPage(
         activeWorkspaceId: _activeWorkspace?.id,
+        lockedWorkspaceId: _sessionActivity?.workspaceId,
         onActiveWorkspaceChanged: _handleWorkspaceChanged,
         onOpenSessionsRequested: () {
           setState(() {
@@ -187,6 +190,7 @@ class _AppShellState extends State<_AppShell> {
         },
       ),
       SessionsPage(
+        isActive: _selectedIndex == 1,
         activeWorkspaceId: _activeWorkspace?.id,
         selectedSessionId: _selectedSession?.id,
         onActiveWorkspaceChanged: _handleWorkspaceChanged,
@@ -201,9 +205,27 @@ class _AppShellState extends State<_AppShell> {
             _selectedIndex = 3;
           });
         },
+        onDetailVisibilityChanged: (visible) {
+          if (_sessionDetailVisible == visible) {
+            return;
+          }
+          setState(() {
+            _sessionDetailVisible = visible;
+          });
+        },
+        onActivityChanged: (activity) {
+          if (_sessionActivity?.workspaceId == activity?.workspaceId &&
+              _sessionActivity?.sessionId == activity?.sessionId) {
+            return;
+          }
+          setState(() {
+            _sessionActivity = activity;
+          });
+        },
       ),
       const McpPage(),
       SettingsPage(
+        isActive: _selectedIndex == 3,
         onLocalePreferenceChanged: widget.onLocalePreferenceChanged,
         onSettingsChanged: widget.onSettingsChanged,
       ),
@@ -214,7 +236,7 @@ class _AppShellState extends State<_AppShell> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
-    final isCompact = context.adaptiveWidthClass.isCompact;
+    final layout = context.adaptiveLayoutInfo;
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
     final destinations = <NavigationDestination>[
       NavigationDestination(
@@ -269,7 +291,7 @@ class _AppShellState extends State<_AppShell> {
     return Scaffold(
       body: ColoredBox(
         color: theme.colorScheme.surface,
-        child: isCompact
+        child: layout.useBottomNavigation
             ? bodyContent
             : Row(
                 children: [
@@ -289,7 +311,9 @@ class _AppShellState extends State<_AppShell> {
                 ],
               ),
       ),
-      bottomNavigationBar: isCompact
+      bottomNavigationBar:
+          layout.useBottomNavigation &&
+              !(_selectedIndex == 1 && _sessionDetailVisible)
           ? DecoratedBox(
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,

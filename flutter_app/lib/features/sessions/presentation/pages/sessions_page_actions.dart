@@ -135,7 +135,7 @@ extension _SessionsPageActions on _SessionsPageState {
     });
     widget.onSessionSelected?.call(session);
     _handleComposerChanged();
-    _scrollToBottom();
+    _scrollToBottom(force: true);
   }
 
   Future<void> _openSessionSwitcher() async {
@@ -340,10 +340,17 @@ extension _SessionsPageActions on _SessionsPageState {
   }
 
   void _applySlashSuggestion(CodexSlashCommand command) {
-    final next = replaceActiveSlashToken(
-      _composerController.text,
-      command.command,
-    );
+    final current = _composerController.value;
+    final trigger = findComposerTrigger(current);
+    if (trigger?.kind == ComposerTriggerKind.slash) {
+      _composerController.value = applyComposerSuggestion(
+        current,
+        trigger!,
+        command.command,
+      );
+      return;
+    }
+    final next = replaceActiveSlashToken(current.text, command.command);
     _composerController.value = TextEditingValue(
       text: next,
       selection: TextSelection.collapsed(offset: next.length),
@@ -351,7 +358,16 @@ extension _SessionsPageActions on _SessionsPageState {
   }
 
   void _applyMentionSuggestion(ComposerMentionSuggestion suggestion) {
-    final next = clearActiveMentionToken(_composerController.text);
+    final current = _composerController.value;
+    final trigger = findComposerTrigger(current);
+    final nextValue = trigger?.kind == ComposerTriggerKind.mention
+        ? removeComposerTrigger(current, trigger!)
+        : TextEditingValue(
+            text: clearActiveMentionToken(current.text),
+            selection: TextSelection.collapsed(
+              offset: clearActiveMentionToken(current.text).length,
+            ),
+          );
     final mentions = [..._pendingMentions];
     final exists = mentions.any(
       (item) => item.kind == suggestion.kind && item.value == suggestion.value,
@@ -377,7 +393,7 @@ extension _SessionsPageActions on _SessionsPageState {
           ? '已标记文件：${suggestion.label}'
           : '已标记提交：${suggestion.label}';
     });
-    final text = next.isEmpty ? '' : '$next ';
+    final text = nextValue.text.isEmpty ? '' : '${nextValue.text} ';
     _composerController.value = TextEditingValue(
       text: text,
       selection: TextSelection.collapsed(offset: text.length),
@@ -1078,6 +1094,7 @@ extension _SessionsPageActions on _SessionsPageState {
       _runtimeStatusIsRetrying = false;
       _status = pendingStatus;
     });
+    _emitActivityState();
 
     try {
       final ensuredSession = await _ensureSession(titleHint: titleHint);
@@ -1104,7 +1121,7 @@ extension _SessionsPageActions on _SessionsPageState {
               ? CodexCollaborationMode.plan
               : CodexCollaborationMode.standard);
 
-      _scrollToBottom(animated: false);
+      _scrollToBottom(animated: false, force: true);
       await for (final event in _runner.run(
         workspace: workspace,
         sessionId: ensuredSession.id,
@@ -1219,6 +1236,7 @@ extension _SessionsPageActions on _SessionsPageState {
         _messages = [..._messages, ?assistantMessage, ?systemMessage];
       }
     });
+    _emitActivityState();
     if (shouldUpdateVisibleMessages) {
       _scrollToBottom(animated: false);
     } else {

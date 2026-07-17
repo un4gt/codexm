@@ -1,33 +1,5 @@
 part of 'settings_page.dart';
 
-class _UpdateEntrySection extends StatelessWidget {
-  const _UpdateEntrySection({
-    required this.busy,
-    required this.onOpenUpdatePage,
-  });
-
-  final bool busy;
-  final Future<void> Function() onOpenUpdatePage;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        StitchSectionHeader(title: l10n.settingsSystemSection),
-        const SizedBox(height: 8),
-        StitchListItem(
-          title: l10n.settingsAppUpdates,
-          leading: const Icon(Icons.system_update_alt_outlined),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: busy ? null : () => onOpenUpdatePage(),
-        ),
-      ],
-    );
-  }
-}
-
 class _ConnectionSection extends StatelessWidget {
   const _ConnectionSection({
     required this.apiKeyController,
@@ -742,22 +714,6 @@ class _PreferenceSection extends StatelessWidget {
                 ),
         ),
       ],
-    );
-  }
-}
-
-class _BusySettingsCard extends StatelessWidget {
-  const _BusySettingsCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: const SizedBox(
-        width: 20,
-        height: 20,
-        child: CircularProgressIndicator(strokeWidth: 2),
-      ),
-      title: Text(AppLocalizations.of(context).settingsSyncing),
     );
   }
 }

@@ -10,8 +10,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   const pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
-  const secureStorageChannel =
-      MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+  const secureStorageChannel = MethodChannel(
+    'plugins.it_nomads.com/flutter_secure_storage',
+  );
 
   late Directory documentsDir;
   late Directory temporaryDir;
@@ -59,19 +60,22 @@ void main() {
     }
   });
 
-  testWidgets('shows empty workspace guidance and primary actions', (
+  testWidgets('shows empty workspace guidance and grouped add actions', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        theme: buildAppTheme(),
-        home: const WorkspacesPage(),
-      ),
+      MaterialApp(theme: buildAppTheme(), home: const WorkspacesPage()),
     );
     await tester.pumpAndSettle();
 
     expect(find.text('还没有工作区'), findsOneWidget);
-    expect(find.text('新建工作区'), findsOneWidget);
     expect(find.text('工作区'), findsAtLeastNWidgets(1));
+    expect(find.byTooltip('添加工作区'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('添加工作区'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('新建空白工作区'), findsOneWidget);
+    expect(find.text('克隆 Git 仓库'), findsOneWidget);
   });
 }

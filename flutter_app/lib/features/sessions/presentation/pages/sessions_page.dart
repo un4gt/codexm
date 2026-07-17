@@ -2,9 +2,10 @@ import 'dart:io';
 
 import 'package:codexm_native/codexm_native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import '../../../../app/theme/app_theme.dart';
 import '../../../../shared/widgets/adaptive_breakpoints.dart';
+import '../../../../shared/widgets/app_ui.dart';
 import '../../../codex/application/codex_models.dart';
 import '../../../codex/application/codex_session_runner.dart';
 import '../../../codex/application/codex_skills_store.dart';
@@ -25,23 +26,41 @@ import '../widgets/message_bubble.dart';
 part 'sessions_page_actions.dart';
 part 'sessions_page_panels.dart';
 
+class SessionActivity {
+  const SessionActivity({
+    required this.workspaceId,
+    required this.sessionId,
+    required this.sessionTitle,
+  });
+
+  final WorkspaceId workspaceId;
+  final SessionId sessionId;
+  final String sessionTitle;
+}
+
 class SessionsPage extends StatefulWidget {
   const SessionsPage({
     super.key,
+    this.isActive = true,
     this.activeWorkspaceId,
     this.selectedSessionId,
     this.onActiveWorkspaceChanged,
     this.onSessionSelected,
     this.onOpenWorkspacesRequested,
     this.onOpenSettingsRequested,
+    this.onDetailVisibilityChanged,
+    this.onActivityChanged,
   });
 
+  final bool isActive;
   final WorkspaceId? activeWorkspaceId;
   final SessionId? selectedSessionId;
   final ValueChanged<Workspace?>? onActiveWorkspaceChanged;
   final ValueChanged<Session?>? onSessionSelected;
   final VoidCallback? onOpenWorkspacesRequested;
   final VoidCallback? onOpenSettingsRequested;
+  final ValueChanged<bool>? onDetailVisibilityChanged;
+  final ValueChanged<SessionActivity?>? onActivityChanged;
 
   @override
   State<SessionsPage> createState() => _SessionsPageState();
@@ -89,21 +108,77 @@ class _SessionsPageState extends State<SessionsPage> {
   bool _chatSearchVisible = false;
   List<_ChatSearchMatch> _chatSearchMatches = const <_ChatSearchMatch>[];
   int _activeChatSearchMatch = -1;
+  bool _showChatDetail = false;
+  bool _followMessageOutput = true;
+  bool _showScrollToBottom = false;
 
   @override
   void initState() {
     super.initState();
     _composerController.addListener(_handleComposerChanged);
+    _messagesScrollController.addListener(_handleMessageScroll);
     _refresh();
   }
 
   @override
   void dispose() {
+    widget.onDetailVisibilityChanged?.call(false);
+    widget.onActivityChanged?.call(null);
     _composerController.removeListener(_handleComposerChanged);
+    _messagesScrollController.removeListener(_handleMessageScroll);
     _composerController.dispose();
     _chatSearchController.dispose();
     _messagesScrollController.dispose();
     super.dispose();
+  }
+
+  void _setChatDetailVisible(bool visible) {
+    if (_showChatDetail == visible) {
+      return;
+    }
+    setState(() {
+      _showChatDetail = visible;
+    });
+    final isImmersivePhone = context.adaptiveLayoutInfo.isPhone && visible;
+    widget.onDetailVisibilityChanged?.call(isImmersivePhone);
+  }
+
+  Future<void> _openChatForSession(Session session) async {
+    if (_running && session.id != _selectedSessionId) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('当前会话仍在运行，完成后可切换其他会话。')));
+      return;
+    }
+    await _selectSession(session);
+    if (!mounted) {
+      return;
+    }
+    _setChatDetailVisible(true);
+  }
+
+  void _leaveChatDetail() {
+    if (_chatSearchVisible) {
+      _toggleChatSearch();
+      return;
+    }
+    _setChatDetailVisible(false);
+  }
+
+  void _emitActivityState() {
+    final workspace = _activeWorkspace;
+    final session = _selectedSession;
+    if (!_running || workspace == null || session == null) {
+      widget.onActivityChanged?.call(null);
+      return;
+    }
+    widget.onActivityChanged?.call(
+      SessionActivity(
+        workspaceId: workspace.id,
+        sessionId: session.id,
+        sessionTitle: session.title,
+      ),
+    );
   }
 
   @override
@@ -206,7 +281,7 @@ class _SessionsPageState extends State<SessionsPage> {
       _findSessionById(sessions, selectedSessionId) ?? primary,
     );
     _handleComposerChanged();
-    _scrollToBottom();
+    _scrollToBottom(force: true);
   }
 
   Future<Workspace?> _loadActiveWorkspace() async {
@@ -240,7 +315,28 @@ class _SessionsPageState extends State<SessionsPage> {
     setState(change);
   }
 
-  void _scrollToBottom({bool animated = true}) {
+  void _handleMessageScroll() {
+    if (!_messagesScrollController.hasClients) {
+      return;
+    }
+    final position = _messagesScrollController.position;
+    final distance = position.maxScrollExtent - position.pixels;
+    final shouldFollow = distance <= 80;
+    final shouldShowButton = distance > 300;
+    if (_followMessageOutput == shouldFollow &&
+        _showScrollToBottom == shouldShowButton) {
+      return;
+    }
+    setState(() {
+      _followMessageOutput = shouldFollow;
+      _showScrollToBottom = shouldShowButton;
+    });
+  }
+
+  void _scrollToBottom({bool animated = true, bool force = false}) {
+    if (!force && !_followMessageOutput) {
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_messagesScrollController.hasClients) {
         return;
@@ -260,6 +356,14 @@ class _SessionsPageState extends State<SessionsPage> {
         curve: Curves.easeOut,
       );
     });
+  }
+
+  void _returnToLatestMessage() {
+    setState(() {
+      _followMessageOutput = true;
+      _showScrollToBottom = false;
+    });
+    _scrollToBottom(force: true);
   }
 
   void _toggleChatSearch() {
@@ -391,9 +495,13 @@ class _SessionsPageState extends State<SessionsPage> {
   }
 
   void _handleComposerChanged() {
-    final input = _composerController.text;
-    final slashSuggestions = filterSlashCommands(input);
-    final mentionQuery = extractMentionToken(input);
+    final trigger = findComposerTrigger(_composerController.value);
+    final slashSuggestions = trigger?.kind == ComposerTriggerKind.slash
+        ? filterSlashCommandsForQuery(trigger!.query)
+        : const <CodexSlashCommand>[];
+    final mentionQuery = trigger?.kind == ComposerTriggerKind.mention
+        ? trigger!.query
+        : null;
 
     if (mounted) {
       setState(() {
@@ -523,12 +631,12 @@ class _SessionsPageState extends State<SessionsPage> {
     final canEditComposer = !_busy && !_running && _activeWorkspace != null;
     final canSend =
         canEditComposer && _composerController.text.trim().isNotEmpty;
-    final pagePadding = context.adaptivePagePadding;
-
-    final content = _activeWorkspace == null
-        ? _WorkspaceEmptyState(
-            onOpenWorkspacesRequested: widget.onOpenWorkspacesRequested,
-          )
+    final layout = context.adaptiveLayoutInfo;
+    final emptyState = _WorkspaceEmptyState(
+      onOpenWorkspacesRequested: widget.onOpenWorkspacesRequested,
+    );
+    final chatPanel = _activeWorkspace == null
+        ? emptyState
         : _ChatPanel(
             workspace: _activeWorkspace!,
             sessions: _sessions,
@@ -550,6 +658,8 @@ class _SessionsPageState extends State<SessionsPage> {
             pendingAssistantParts: _pendingAssistantParts,
             pendingStartedAt: _pendingStartedAt,
             scrollController: _messagesScrollController,
+            showScrollToBottom: _showScrollToBottom,
+            onScrollToBottom: _returnToLatestMessage,
             composerController: _composerController,
             pendingMentions: _pendingMentions,
             slashSuggestions: _slashSuggestions,
@@ -570,12 +680,48 @@ class _SessionsPageState extends State<SessionsPage> {
             onMoveChatSearchMatch: _moveChatSearchMatch,
             onOpenSettingsRequested: widget.onOpenSettingsRequested,
             onEditModelRequested: _editModelFromHeader,
+            onBack: layout.useMasterDetail ? null : _leaveChatDetail,
           );
+    final overview = _SessionsOverview(
+      workspace: _activeWorkspace,
+      sessions: _sessions,
+      selectedSessionId: _selectedSessionId,
+      runningSessionId: _running ? _selectedSessionId : null,
+      busy: _busy,
+      onOpenWorkspaces: widget.onOpenWorkspacesRequested,
+      onOpenSession: _openChatForSession,
+      onCreateSession: () async {
+        await _createSession();
+        if (mounted && _selectedSession != null) {
+          _setChatDetailVisible(true);
+        }
+      },
+      onRenameSession: _renameSession,
+      onDeleteSession: _deleteSession,
+    );
 
-    return SafeArea(
+    final Widget content;
+    if (layout.useMasterDetail && _activeWorkspace != null) {
+      content = AdaptiveMasterDetail(master: overview, detail: chatPanel);
+    } else {
+      content = _showChatDetail && _activeWorkspace != null
+          ? chatPanel
+          : overview;
+    }
+
+    return PopScope(
+      canPop: !widget.isActive || !_showChatDetail || layout.useMasterDetail,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop &&
+            widget.isActive &&
+            _showChatDetail &&
+            !layout.useMasterDetail) {
+          _leaveChatDetail();
+        }
+      },
       child: Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        body: Padding(padding: pagePadding, child: content),
+        body: SafeArea(child: content),
       ),
     );
   }

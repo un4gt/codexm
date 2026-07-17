@@ -37,7 +37,7 @@ void main() {
       ),
     );
 
-    expect(find.text('回复'), findsOneWidget);
+    expect(find.text('回复'), findsNothing);
     expect(find.text('最终回复'), findsOneWidget);
     expect(find.text('思考过程'), findsOneWidget);
     expect(find.text('先检查现状。'), findsOneWidget);
@@ -166,7 +166,7 @@ void main() {
   });
 
   testWidgets(
-    'uses 92 percent bubble width on compact and expanded viewports',
+    'uses a compact user bubble and flat full-width assistant messages',
     (WidgetTester tester) async {
       Future<void> verifyForWidth(double width) async {
         tester.view.physicalSize = Size(width, 900);
@@ -214,28 +214,29 @@ void main() {
         );
         await tester.pump();
 
-        final expected = width * 0.92;
+        final availableWidth = width * 0.92;
+        final expectedUserWidth = availableWidth * 0.82;
         expect(
           tester.getSize(find.byKey(const ValueKey('user-message-card'))).width,
-          closeTo(expected, 0.5),
+          closeTo(expectedUserWidth, 0.5),
         );
         expect(
           tester
               .getSize(find.byKey(const ValueKey('assistant-message-card')))
               .width,
-          closeTo(expected, 0.5),
+          closeTo(availableWidth, 0.5),
         );
         expect(
           tester
               .getSize(find.byKey(const ValueKey('structured-message-card')))
               .width,
-          closeTo(expected, 0.5),
+          closeTo(availableWidth, 0.5),
         );
         expect(
           tester
               .getSize(find.byKey(const ValueKey('simple-code-block')).first)
               .width,
-          closeTo(expected - 28, 0.5),
+          closeTo(availableWidth - 24, 0.5),
         );
       }
 
