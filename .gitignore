@@ -48,3 +48,4 @@ __pycache__/
 *.aab
 app-example
 .env
+image-gen-env.txt
