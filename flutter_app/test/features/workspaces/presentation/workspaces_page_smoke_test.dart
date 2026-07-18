@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:codexm_flutter/app/theme/app_theme.dart';
 import 'package:codexm_flutter/features/workspaces/presentation/pages/workspaces_page.dart';
+import 'package:codexm_flutter/features/workspaces/application/workspace_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -77,5 +79,56 @@ void main() {
 
     expect(find.text('新建空白工作区'), findsOneWidget);
     expect(find.text('克隆 Git 仓库'), findsOneWidget);
+  });
+
+  testWidgets('opens the workspace-scoped session flow from a workspace row', (
+    WidgetTester tester,
+  ) async {
+    final workspacesDir = Directory('${documentsDir.path}/workspaces');
+    final indexDir = Directory('${workspacesDir.path}/.index');
+    await tester.runAsync(() async {
+      await indexDir.create(recursive: true);
+      await File('${indexDir.path}/workspaces.json').writeAsString(
+        jsonEncode({
+          'version': 2,
+          'workspaces': [
+            {
+              'id': 'workspace-1',
+              'name': '测试工作区',
+              'createdAt': 1,
+              'localPath': '${workspacesDir.path}/workspace-1/',
+              'integrationBranch': 'main',
+              'sessionGitVersion': 1,
+            },
+          ],
+        }),
+      );
+    });
+    Workspace? opened;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: WorkspacesPage(
+          onOpenSessionsRequested: (workspace) => opened = workspace,
+        ),
+      ),
+    );
+    for (var i = 0; i < 100 && find.text('测试工作区').evaluate().isEmpty; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+    await tester.tap(find.text('测试工作区'));
+    for (var i = 0; i < 100 && opened == null; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+
+    expect(opened?.id, 'workspace-1');
+    expect(find.text('测试工作区'), findsOneWidget);
   });
 }

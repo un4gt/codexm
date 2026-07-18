@@ -2,7 +2,6 @@
   "@@locale": "en",
   "appTitle": "CodexM",
   "navWorkspaces": "Workspaces",
-  "navSessions": "Sessions",
   "navMcpSkills": "MCP & Skills",
   "navSettings": "Settings",
   "settingsPageTitle": "Settings",

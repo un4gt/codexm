@@ -81,6 +81,11 @@ class Workspace {
     required this.localPath,
     this.git,
     this.webdav,
+    this.integrationBranch,
+    this.sessionGitVersion = 0,
+    this.gitUserName,
+    this.gitUserEmail,
+    this.pendingMergeSourceSessionId,
   });
 
   final WorkspaceId id;
@@ -89,6 +94,11 @@ class Workspace {
   final String localPath;
   final WorkspaceGitConfig? git;
   final WorkspaceWebDavConfig? webdav;
+  final String? integrationBranch;
+  final int sessionGitVersion;
+  final String? gitUserName;
+  final String? gitUserEmail;
+  final String? pendingMergeSourceSessionId;
 
   Workspace copyWith({
     String? name,
@@ -96,8 +106,14 @@ class Workspace {
     String? localPath,
     WorkspaceGitConfig? git,
     WorkspaceWebDavConfig? webdav,
+    String? integrationBranch,
+    int? sessionGitVersion,
+    String? gitUserName,
+    String? gitUserEmail,
+    String? pendingMergeSourceSessionId,
     bool clearGit = false,
     bool clearWebDav = false,
+    bool clearPendingMergeSourceSessionId = false,
   }) {
     return Workspace(
       id: id,
@@ -106,6 +122,13 @@ class Workspace {
       localPath: localPath ?? this.localPath,
       git: clearGit ? null : (git ?? this.git),
       webdav: clearWebDav ? null : (webdav ?? this.webdav),
+      integrationBranch: integrationBranch ?? this.integrationBranch,
+      sessionGitVersion: sessionGitVersion ?? this.sessionGitVersion,
+      gitUserName: gitUserName ?? this.gitUserName,
+      gitUserEmail: gitUserEmail ?? this.gitUserEmail,
+      pendingMergeSourceSessionId: clearPendingMergeSourceSessionId
+          ? null
+          : (pendingMergeSourceSessionId ?? this.pendingMergeSourceSessionId),
     );
   }
 
@@ -117,6 +140,11 @@ class Workspace {
       'localPath': localPath,
       'git': git?.toMap(),
       'webdav': webdav?.toMap(),
+      'integrationBranch': integrationBranch,
+      'sessionGitVersion': sessionGitVersion,
+      'gitUserName': gitUserName,
+      'gitUserEmail': gitUserEmail,
+      'pendingMergeSourceSessionId': pendingMergeSourceSessionId,
     };
   }
 
@@ -136,6 +164,12 @@ class Workspace {
               Map<String, Object?>.from(map['webdav'] as Map),
             )
           : null,
+      integrationBranch: map['integrationBranch']?.toString(),
+      sessionGitVersion: (map['sessionGitVersion'] as num?)?.toInt() ?? 0,
+      gitUserName: map['gitUserName']?.toString(),
+      gitUserEmail: map['gitUserEmail']?.toString(),
+      pendingMergeSourceSessionId: map['pendingMergeSourceSessionId']
+          ?.toString(),
     );
   }
 }

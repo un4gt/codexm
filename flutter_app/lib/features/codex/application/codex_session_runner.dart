@@ -204,7 +204,7 @@ class CodexSessionRunner {
 
       await _runtimeBridge.startRuntime(
         runtimeId: runtimeId,
-        cwdPath: launchContext.paths.repoDir.path,
+        cwdPath: launchContext.workingDirectory,
         assetPath: 'codex/{abi}/codex',
         args: const <String>['app-server', '--listen', 'stdio://'],
         env: launchContext.env,
@@ -260,7 +260,7 @@ class CodexSessionRunner {
             'thread/resume',
             params: <String, Object?>{
               'threadId': threadId,
-              'cwd': launchContext.paths.repoDir.path,
+              'cwd': launchContext.workingDirectory,
               'approvalPolicy': approvalPolicy,
               'personality': settings.personality,
             },
@@ -284,7 +284,7 @@ class CodexSessionRunner {
         final result = await rpc.request<Object?>(
           'thread/start',
           params: <String, Object?>{
-            'cwd': launchContext.paths.repoDir.path,
+            'cwd': launchContext.workingDirectory,
             'approvalPolicy': approvalPolicy,
             'personality': settings.personality,
           },
@@ -369,7 +369,7 @@ class CodexSessionRunner {
       } else {
         final params = <String, Object?>{
           'threadId': threadId,
-          'cwd': launchContext.paths.repoDir.path,
+          'cwd': launchContext.workingDirectory,
           'approvalPolicy': approvalPolicy,
           'input': inputElements,
         };

@@ -2,6 +2,15 @@ import '../../workspaces/application/workspace_models.dart';
 
 typedef SessionId = String;
 
+enum SessionCodeState {
+  provisioning,
+  ready,
+  conflict,
+  archived,
+  migrationRequired,
+  failed,
+}
+
 class Session {
   const Session({
     required this.id,
@@ -11,6 +20,12 @@ class Session {
     required this.updatedAt,
     this.codexThreadId,
     this.codexCollaborationMode,
+    this.branchName,
+    this.baseCommitOid,
+    this.createdFromSessionId,
+    this.codeState = SessionCodeState.provisioning,
+    this.archivedAt,
+    this.pendingMergeSourceSessionId,
   });
 
   final SessionId id;
@@ -20,6 +35,12 @@ class Session {
   final int updatedAt;
   final String? codexThreadId;
   final String? codexCollaborationMode;
+  final String? branchName;
+  final String? baseCommitOid;
+  final SessionId? createdFromSessionId;
+  final SessionCodeState codeState;
+  final int? archivedAt;
+  final SessionId? pendingMergeSourceSessionId;
 
   Session copyWith({
     String? title,
@@ -27,8 +48,16 @@ class Session {
     int? updatedAt,
     String? codexThreadId,
     String? codexCollaborationMode,
+    String? branchName,
+    String? baseCommitOid,
+    SessionId? createdFromSessionId,
+    SessionCodeState? codeState,
+    int? archivedAt,
+    SessionId? pendingMergeSourceSessionId,
     bool clearThreadId = false,
     bool clearCollaborationMode = false,
+    bool clearArchivedAt = false,
+    bool clearPendingMergeSourceSessionId = false,
   }) {
     return Session(
       id: id,
@@ -42,6 +71,14 @@ class Session {
       codexCollaborationMode: clearCollaborationMode
           ? null
           : (codexCollaborationMode ?? this.codexCollaborationMode),
+      branchName: branchName ?? this.branchName,
+      baseCommitOid: baseCommitOid ?? this.baseCommitOid,
+      createdFromSessionId: createdFromSessionId ?? this.createdFromSessionId,
+      codeState: codeState ?? this.codeState,
+      archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
+      pendingMergeSourceSessionId: clearPendingMergeSourceSessionId
+          ? null
+          : (pendingMergeSourceSessionId ?? this.pendingMergeSourceSessionId),
     );
   }
 
@@ -54,6 +91,12 @@ class Session {
       'updatedAt': updatedAt,
       'codexThreadId': codexThreadId,
       'codexCollaborationMode': codexCollaborationMode,
+      'branchName': branchName,
+      'baseCommitOid': baseCommitOid,
+      'createdFromSessionId': createdFromSessionId,
+      'codeState': codeState.name,
+      'archivedAt': archivedAt,
+      'pendingMergeSourceSessionId': pendingMergeSourceSessionId,
     };
   }
 
@@ -66,6 +109,16 @@ class Session {
       updatedAt: (map['updatedAt'] as num?)?.toInt() ?? 0,
       codexThreadId: map['codexThreadId']?.toString(),
       codexCollaborationMode: map['codexCollaborationMode']?.toString(),
+      branchName: map['branchName']?.toString(),
+      baseCommitOid: map['baseCommitOid']?.toString(),
+      createdFromSessionId: map['createdFromSessionId']?.toString(),
+      codeState: SessionCodeState.values.firstWhere(
+        (value) => value.name == map['codeState']?.toString(),
+        orElse: () => SessionCodeState.migrationRequired,
+      ),
+      archivedAt: (map['archivedAt'] as num?)?.toInt(),
+      pendingMergeSourceSessionId: map['pendingMergeSourceSessionId']
+          ?.toString(),
     );
   }
 }

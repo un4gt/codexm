@@ -63,6 +63,10 @@ class SessionStore {
   Future<Session> createSession(
     WorkspaceId workspaceId, {
     String? title,
+    String? branchName,
+    String? baseCommitOid,
+    SessionId? createdFromSessionId,
+    SessionCodeState codeState = SessionCodeState.provisioning,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final session = Session(
@@ -71,12 +75,16 @@ class SessionStore {
       title: title?.trim().isNotEmpty == true ? title!.trim() : '新会话',
       createdAt: now,
       updatedAt: now,
+      branchName: branchName,
+      baseCommitOid: baseCommitOid,
+      createdFromSessionId: createdFromSessionId,
+      codeState: codeState,
     );
 
     final index = await _readIndex(workspaceId);
     await _writeIndex(
       workspaceId,
-      _SessionsIndex(version: 2, sessions: [session, ...index.sessions]),
+      _SessionsIndex(version: 3, sessions: [session, ...index.sessions]),
     );
     await _writeMessagesFile(workspaceId, session.id, const <ChatMessage>[]);
     return session;
@@ -112,7 +120,7 @@ class SessionStore {
               : session,
         )
         .toList(growable: false);
-    await _writeIndex(workspaceId, _SessionsIndex(version: 2, sessions: next));
+    await _writeIndex(workspaceId, _SessionsIndex(version: 3, sessions: next));
   }
 
   Future<void> setSessionCodexThreadId(
@@ -147,6 +155,33 @@ class SessionStore {
     );
   }
 
+  Future<void> updateSessionCodeContext(
+    WorkspaceId workspaceId,
+    SessionId sessionId, {
+    String? branchName,
+    String? baseCommitOid,
+    SessionCodeState? codeState,
+    int? archivedAt,
+    SessionId? pendingMergeSourceSessionId,
+    bool clearArchivedAt = false,
+    bool clearPendingMergeSourceSessionId = false,
+  }) async {
+    await _updateSession(
+      workspaceId,
+      sessionId,
+      (session) => session.copyWith(
+        branchName: branchName,
+        baseCommitOid: baseCommitOid,
+        codeState: codeState,
+        archivedAt: archivedAt,
+        pendingMergeSourceSessionId: pendingMergeSourceSessionId,
+        clearArchivedAt: clearArchivedAt,
+        clearPendingMergeSourceSessionId: clearPendingMergeSourceSessionId,
+        updatedAt: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
   Future<void> deleteSession(
     WorkspaceId workspaceId,
     SessionId sessionId,
@@ -155,7 +190,7 @@ class SessionStore {
     final next = index.sessions
         .where((session) => session.id != sessionId)
         .toList(growable: false);
-    await _writeIndex(workspaceId, _SessionsIndex(version: 2, sessions: next));
+    await _writeIndex(workspaceId, _SessionsIndex(version: 3, sessions: next));
     final file = await _messagesFile(workspaceId, sessionId);
     if (file.existsSync()) {
       await file.delete();
@@ -220,17 +255,17 @@ class SessionStore {
           (session) => session.id == sessionId ? transform(session) : session,
         )
         .toList(growable: false);
-    await _writeIndex(workspaceId, _SessionsIndex(version: 2, sessions: next));
+    await _writeIndex(workspaceId, _SessionsIndex(version: 3, sessions: next));
   }
 
   Future<_SessionsIndex> _readIndex(WorkspaceId workspaceId) async {
     final file = await _indexFile(workspaceId);
     if (!file.existsSync()) {
-      return const _SessionsIndex(version: 2, sessions: <Session>[]);
+      return const _SessionsIndex(version: 3, sessions: <Session>[]);
     }
     final parsed = jsonDecode(await file.readAsString());
     if (parsed is! Map) {
-      return const _SessionsIndex(version: 2, sessions: <Session>[]);
+      return const _SessionsIndex(version: 3, sessions: <Session>[]);
     }
     final version = (parsed['version'] as num?)?.toInt() ?? 1;
     final rawSessions = (parsed['sessions'] as List? ?? const []);
@@ -238,7 +273,10 @@ class SessionStore {
         .whereType<Map>()
         .map((item) => Session.fromMap(Map<String, Object?>.from(item)))
         .toList(growable: false);
-    return _SessionsIndex(version: version == 2 ? 2 : 2, sessions: sessions);
+    return _SessionsIndex(
+      version: version < 3 ? 3 : version,
+      sessions: sessions,
+    );
   }
 
   Future<void> _writeIndex(

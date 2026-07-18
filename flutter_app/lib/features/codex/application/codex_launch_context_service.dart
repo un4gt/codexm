@@ -36,6 +36,13 @@ class CodexLaunchContextService {
     }
 
     final paths = await _ensureWorkspacePaths(workspace.id);
+    if (session.branchName == null || session.branchName!.isEmpty) {
+      throw StateError('会话代码环境尚未准备，请返回会话列表重试。');
+    }
+    final workingDirectory = paths.sessionWorktreeDir(session.id);
+    if (!workingDirectory.existsSync()) {
+      throw StateError('会话代码环境不可用，请返回会话列表重试。');
+    }
     final settings = await _settingsStore.getSettings();
     final apiKey = await _settingsStore.getCodexApiKey();
     if (apiKey == null || apiKey.trim().isEmpty) {
@@ -75,6 +82,7 @@ class CodexLaunchContextService {
       session: session,
       settings: config.settings,
       paths: paths,
+      workingDirectory: workingDirectory.path,
       codexHomePath: config.codexHomePath,
       configTomlPath: config.configTomlPath,
       authJsonPath: config.authJsonPath,
@@ -89,6 +97,7 @@ class CodexLaunchContextService {
     final paths = await _workspaceDirectoryService.pathsFor(workspaceId);
     for (final directory in <Directory>[
       paths.repoDir,
+      paths.worktreesDir,
       paths.metaDir,
       paths.codexHomeDir,
       paths.tmpDir,

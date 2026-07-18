@@ -3,7 +3,11 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'codexm_native_method_channel.dart';
 import 'src/models/app_update_app_info.dart';
 import 'src/models/git_commit_summary.dart';
+import 'src/models/git_commit_result.dart';
+import 'src/models/git_merge_result.dart';
+import 'src/models/git_repository_info.dart';
 import 'src/models/git_status.dart';
+import 'src/models/git_worktree_info.dart';
 import 'src/models/runtime_line_event.dart';
 
 abstract class CodexmNativePlatform extends PlatformInterface {
@@ -93,10 +97,7 @@ abstract class CodexmNativePlatform extends PlatformInterface {
 
   Future<GitStatus> gitStatus({required String localRepoDirUri});
 
-  Future<String> gitDiff({
-    required String localRepoDirUri,
-    int maxBytes,
-  });
+  Future<String> gitDiff({required String localRepoDirUri, int maxBytes});
 
   Future<List<GitCommitSummary>> gitRecentCommits({
     required String localRepoDirUri,
@@ -108,4 +109,69 @@ abstract class CodexmNativePlatform extends PlatformInterface {
     required String hash,
     int maxBytes,
   });
+
+  Future<GitRepositoryInfo> gitInitRepository({
+    required String localRepoDirUri,
+    required String initialBranch,
+  });
+
+  Future<GitRepositoryInfo> gitRepositoryInfo({
+    required String localRepoDirUri,
+  });
+
+  Future<GitWorktreeInfo> gitCreateWorktree({
+    required String mainRepoDirUri,
+    required String worktreeDirUri,
+    required String name,
+    required String branchName,
+    required String startRef,
+  });
+
+  Future<List<GitWorktreeInfo>> gitListWorktrees({
+    required String mainRepoDirUri,
+  });
+
+  Future<void> gitRemoveWorktree({
+    required String mainRepoDirUri,
+    required String name,
+    required bool force,
+  });
+
+  Future<GitCommitResult> gitCreateCheckpoint({
+    required String localRepoDirUri,
+    required String message,
+    required String userName,
+    required String userEmail,
+  });
+
+  Future<bool> gitIsAncestor({
+    required String localRepoDirUri,
+    required String ancestorRef,
+    required String descendantRef,
+  });
+
+  Future<void> gitDeleteBranch({
+    required String localRepoDirUri,
+    required String branchName,
+    required bool force,
+  });
+
+  Future<GitMergeResult> gitMerge({
+    required String targetRepoDirUri,
+    required String sourceRef,
+    required String message,
+    required String userName,
+    required String userEmail,
+  });
+
+  Future<GitMergeResult> gitMergeState({required String targetRepoDirUri});
+
+  Future<GitMergeResult> gitContinueMerge({
+    required String targetRepoDirUri,
+    required String message,
+    required String userName,
+    required String userEmail,
+  });
+
+  Future<void> gitAbortMerge({required String targetRepoDirUri});
 }

@@ -126,6 +126,9 @@ void main() {
       repoDir: Directory(
         '/data/user/0/com.unsafe.codexm.flutterapp/app_flutter/workspaces/ws_1/repo',
       ),
+      worktreesDir: Directory(
+        '/data/user/0/com.unsafe.codexm.flutterapp/app_flutter/workspaces/ws_1/worktrees',
+      ),
       metaDir: Directory(
         '/data/user/0/com.unsafe.codexm.flutterapp/app_flutter/workspaces/ws_1/.meta',
       ),

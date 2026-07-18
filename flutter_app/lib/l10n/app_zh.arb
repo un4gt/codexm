@@ -2,7 +2,6 @@
   "@@locale": "zh",
   "appTitle": "CodexM",
   "navWorkspaces": "工作区",
-  "navSessions": "会话",
   "navMcpSkills": "MCP 与技能",
   "navSettings": "设置",
   "settingsPageTitle": "设置",

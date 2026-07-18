@@ -15,9 +15,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get navWorkspaces => 'Workspaces';
 
   @override
-  String get navSessions => 'Sessions';
-
-  @override
   String get navMcpSkills => 'MCP & Skills';
 
   @override

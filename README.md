@@ -13,8 +13,9 @@ CodexM 是一个以移动端为主的 Codex 交互与 coding 工作台，当前�
 ## 已完成能力
 
 - 设置：密钥 / 地址 / 模型列表拉取、配置预览与连接配置生成
-- 工作区：空白工作区创建、Git clone / pull、WebDAV 配置与同步
-- 会话：单工作区单 session、历史恢复、流式消息、review / compact
+- 工作区：空白工作区创建、Git clone / pull、WebDAV 配置与同步，以及主集成分支管理
+- 会话：单工作区多会话、Codex thread 恢复、独立 Git 分支与 linked worktree、流式消息、review / compact
+- 代码流转：代码检查点、基于会话新建、会话间合并、合并到主工作区、冲突继续或放弃、归档与受保护删除
 - 输入增强：slash command、本地命令、`@` 文件与最近 commit mention
 - MCP：全局作用域，仅支持 `Streamable HTTP/HTTP` 与 `Rust stdio (aarch64 build)`
 - skills：全局作用域管理
@@ -23,7 +24,8 @@ CodexM 是一个以移动端为主的 Codex 交互与 coding 工作台，当前�
 
 - Android `arm64` 真机验收尚未执行
 - 当前不支持 iOS
-- 多 session / worktree 冲突管理暂不在范围内
+- 同一时间只运行一个 Codex turn
+- 会话合并仅修改本地仓库，不会自动推送远端
 
 ## 开发与发布
 

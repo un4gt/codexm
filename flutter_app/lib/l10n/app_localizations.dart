@@ -111,12 +111,6 @@ abstract class AppLocalizations {
   /// **'Workspaces'**
   String get navWorkspaces;
 
-  /// No description provided for @navSessions.
-  ///
-  /// In en, this message translates to:
-  /// **'Sessions'**
-  String get navSessions;
-
   /// No description provided for @navMcpSkills.
   ///
   /// In en, this message translates to:

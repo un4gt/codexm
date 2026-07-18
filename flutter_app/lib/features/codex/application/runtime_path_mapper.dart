@@ -17,7 +17,7 @@ class RuntimePathMapper {
     CodexRuntimeLaunchContext launchContext,
   ) {
     return RuntimePathMapper(
-      workspaceRepoDir: launchContext.paths.repoDir.path,
+      workspaceRepoDir: launchContext.workingDirectory,
       codexHomeDir: launchContext.paths.codexHomeDir.path,
       tmpDir: launchContext.paths.tmpDir.path,
     );

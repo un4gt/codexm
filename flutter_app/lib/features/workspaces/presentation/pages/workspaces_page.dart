@@ -6,6 +6,7 @@ import 'package:codexm_native/codexm_native.dart';
 import '../../../../shared/widgets/app_ui.dart';
 import '../../../settings/application/auth_store.dart';
 import '../../../settings/application/auth_types.dart' hide AuthRef;
+import '../../../sessions/application/session_code_workspace_service.dart';
 import '../../application/workspace_git_error_mapper.dart';
 import '../../application/workspace_models.dart';
 import '../../application/workspace_paths.dart';
@@ -24,7 +25,7 @@ class WorkspacesPage extends StatefulWidget {
 
   final WorkspaceId? activeWorkspaceId;
   final ValueChanged<Workspace?>? onActiveWorkspaceChanged;
-  final VoidCallback? onOpenSessionsRequested;
+  final ValueChanged<Workspace>? onOpenSessionsRequested;
   final WorkspaceId? lockedWorkspaceId;
 
   @override
@@ -60,6 +61,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
   final _workspaceStore = WorkspaceStore();
   final _workspaceDirectoryService = WorkspaceDirectoryService();
   final _authStore = AuthStore();
+  final _codeWorkspaceService = SessionCodeWorkspaceService();
 
   List<Workspace> _workspaces = const <Workspace>[];
   WorkspaceId? _activeWorkspaceId;
@@ -278,7 +280,10 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
     }
 
     await _runAction('正在创建工作区...', () async {
-      final workspace = await _workspaceStore.createWorkspace(name: name);
+      final created = await _workspaceStore.createWorkspace(name: name);
+      final workspace = await _codeWorkspaceService.prepareNewWorkspace(
+        created,
+      );
       await _workspaceStore.setActiveWorkspaceId(workspace.id);
       _selectedWorkspaceId = workspace.id;
       widget.onActiveWorkspaceChanged?.call(workspace);
@@ -630,8 +635,11 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
         userEmail: gitConfig.userEmail,
         allowInsecure: gitConfig.allowInsecure,
       );
+      final prepared = await _codeWorkspaceService.registerClonedRepository(
+        workspace,
+      );
       await _workspaceStore.setActiveWorkspaceId(workspace.id);
-      widget.onActiveWorkspaceChanged?.call(workspace);
+      widget.onActiveWorkspaceChanged?.call(prepared);
       return '已克隆并激活工作区：${workspace.name}';
     });
   }
@@ -809,7 +817,7 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
             if (detailContext.mounted) {
               Navigator.of(detailContext).pop();
             }
-            widget.onOpenSessionsRequested?.call();
+            widget.onOpenSessionsRequested?.call(workspace);
           },
         ),
       ),
@@ -817,6 +825,16 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
     if (mounted) {
       await _refresh();
     }
+  }
+
+  Future<void> _openWorkspaceSessions(Workspace workspace) async {
+    if (_blockMutationWhileSessionRuns()) {
+      return;
+    }
+    if (workspace.id != _activeWorkspaceId) {
+      await _activateWorkspace(workspace);
+    }
+    widget.onOpenSessionsRequested?.call(workspace);
   }
 
   @override
@@ -847,7 +865,8 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                     selectedWorkspaceId: _selectedWorkspaceId,
                     activeWorkspaceId: _activeWorkspaceId,
                     busy: _busy,
-                    onSelectWorkspace: _openWorkspaceDetails,
+                    onSelectWorkspace: _openWorkspaceSessions,
+                    onOpenWorkspaceDetails: _openWorkspaceDetails,
                     onActivateWorkspace: _activateWorkspace,
                     onRenameWorkspace: _renameWorkspace,
                     onDeleteWorkspace: _deleteWorkspace,

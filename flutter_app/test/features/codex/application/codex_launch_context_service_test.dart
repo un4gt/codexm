@@ -4,6 +4,7 @@ import 'package:codexm_flutter/features/codex/application/codex_launch_context_s
 import 'package:codexm_flutter/features/mcp/application/mcp_models.dart';
 import 'package:codexm_flutter/features/mcp/application/mcp_store.dart';
 import 'package:codexm_flutter/features/sessions/application/session_store.dart';
+import 'package:codexm_flutter/features/sessions/application/session_models.dart';
 import 'package:codexm_flutter/features/settings/application/auth_store.dart';
 import 'package:codexm_flutter/features/settings/application/codex_settings_store.dart';
 import 'package:codexm_flutter/features/workspaces/application/workspace_paths.dart';
@@ -59,7 +60,14 @@ void main() {
     final session = await sessionStore.createSession(
       workspace.id,
       title: 'Codex Session',
+      branchName: 'codexm/session/test',
+      baseCommitOid: 'abc123',
+      codeState: SessionCodeState.ready,
     );
+    final workspacePaths = await workspaceDirectoryService.pathsFor(
+      workspace.id,
+    );
+    await workspacePaths.sessionWorktreeDir(session.id).create(recursive: true);
 
     await settingsStore.saveSettings(
       CodexSettings(
@@ -86,6 +94,7 @@ void main() {
     expect(context.env['OPENAI_API_KEY'], 'sk-test-1234567890');
     expect(context.env['OPENAI_BASE_URL'], 'https://example.com/v1');
     expect(context.enabledMcpServerIds, <String>[server.id]);
+    expect(context.workingDirectory, contains('worktrees/${session.id}'));
     expect(
       await File(context.configTomlPath).readAsString(),
       contains('[mcp_servers.demo-mcp]'),

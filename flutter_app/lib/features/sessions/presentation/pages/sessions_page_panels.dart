@@ -1,6 +1,14 @@
 part of 'sessions_page.dart';
 
-enum _SessionAction { rename, delete }
+enum _SessionAction {
+  changes,
+  checkpoint,
+  merge,
+  createFrom,
+  rename,
+  archive,
+  delete,
+}
 
 enum _HeaderMenuAction {
   newSession,
@@ -9,7 +17,21 @@ enum _HeaderMenuAction {
   connectionSettings,
   renameSession,
   deleteSession,
+  changes,
+  checkpoint,
+  merge,
+  createFrom,
+  archive,
 }
+
+String _sessionCodeStatusLabel(Session session) => switch (session.codeState) {
+  SessionCodeState.provisioning => '正在准备代码副本',
+  SessionCodeState.ready => '代码副本已准备',
+  SessionCodeState.conflict => '存在合并冲突',
+  SessionCodeState.archived => '已归档',
+  SessionCodeState.migrationRequired => '等待迁移',
+  SessionCodeState.failed => '代码副本需要修复',
+};
 
 class _ChatSearchMatch {
   const _ChatSearchMatch({required this.messageIndex});
@@ -48,6 +70,75 @@ class _WorkspaceEmptyState extends StatelessWidget {
   }
 }
 
+class _WorkspaceMigrationPanel extends StatelessWidget {
+  const _WorkspaceMigrationPanel({
+    required this.workspace,
+    required this.migration,
+    required this.busy,
+    required this.onContinue,
+    required this.onBack,
+  });
+
+  final Workspace workspace;
+  final SessionCodeMigrationRequiredException migration;
+  final bool busy;
+  final VoidCallback onContinue;
+  final VoidCallback? onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final changedCount =
+        migration.status.staged.length +
+        migration.status.unstaged.length +
+        migration.status.untracked.length +
+        migration.status.conflicted.length;
+    return AppPageScaffold(
+      title: workspace.name,
+      leading: IconButton(
+        tooltip: '返回工作区',
+        onPressed: onBack,
+        icon: const Icon(Icons.arrow_back),
+      ),
+      body: ListView(
+        children: [
+          AppStatusNotice(
+            message: '检测到 $changedCount 个尚未保存的文件。先保存当前代码基线，才能为每个会话创建独立副本。',
+            tone: AppNoticeTone.warning,
+          ),
+          AppListSection(
+            title: '迁移内容',
+            children: [
+              AppListTile(
+                title: '保存当前代码状态',
+                subtitle: '现有会话记录和 Codex 上下文都会保留。',
+                leading: const Icon(Icons.save_outlined),
+              ),
+              AppListTile(
+                title: '创建独立会话副本',
+                subtitle: '之后各会话的文件改动互不覆盖，并可选择合并。',
+                leading: const Icon(Icons.call_split_outlined),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: FilledButton.icon(
+              onPressed: busy ? null : onContinue,
+              icon: busy
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.arrow_forward),
+              label: const Text('查看改动并继续'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SessionsOverview extends StatelessWidget {
   const _SessionsOverview({
     required this.workspace,
@@ -60,6 +151,13 @@ class _SessionsOverview extends StatelessWidget {
     required this.onCreateSession,
     required this.onRenameSession,
     required this.onDeleteSession,
+    required this.onShowChanges,
+    required this.onCheckpoint,
+    required this.onMerge,
+    required this.onCreateFrom,
+    required this.onArchive,
+    required this.onContinueMainMerge,
+    required this.onAbortMainMerge,
   });
 
   final Workspace? workspace;
@@ -72,6 +170,13 @@ class _SessionsOverview extends StatelessWidget {
   final VoidCallback onCreateSession;
   final ValueChanged<Session> onRenameSession;
   final ValueChanged<Session> onDeleteSession;
+  final ValueChanged<Session> onShowChanges;
+  final ValueChanged<Session> onCheckpoint;
+  final ValueChanged<Session> onMerge;
+  final ValueChanged<Session> onCreateFrom;
+  final ValueChanged<Session> onArchive;
+  final VoidCallback onContinueMainMerge;
+  final VoidCallback onAbortMainMerge;
 
   @override
   Widget build(BuildContext context) {
@@ -122,6 +227,32 @@ class _SessionsOverview extends StatelessWidget {
             ),
           ),
         ),
+        if (workspace?.pendingMergeSourceSessionId != null) ...[
+          AppStatusNotice(
+            message: '主工作区存在合并冲突。处理冲突后完成合并，或放弃本次合并。',
+            tone: AppNoticeTone.warning,
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: busy ? null : onAbortMainMerge,
+                    child: const Text('放弃合并'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: busy ? null : onContinueMainMerge,
+                    child: const Text('完成合并'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         Expanded(
           child: workspace == null
               ? _WorkspaceEmptyState(
@@ -155,7 +286,7 @@ class _SessionsOverview extends StatelessWidget {
                       title: session.title,
                       subtitle: running
                           ? '正在生成回复...'
-                          : _formatUpdatedAt(session.updatedAt),
+                          : '${_sessionCodeStatusLabel(session)} · ${_formatUpdatedAt(session.updatedAt)}',
                       selected: session.id == selectedSessionId,
                       enabled: !busy,
                       leading: running
@@ -169,16 +300,46 @@ class _SessionsOverview extends StatelessWidget {
                         enabled: !busy && runningSessionId == null,
                         onSelected: (action) {
                           switch (action) {
+                            case _SessionAction.changes:
+                              onShowChanges(session);
+                            case _SessionAction.checkpoint:
+                              onCheckpoint(session);
+                            case _SessionAction.merge:
+                              onMerge(session);
+                            case _SessionAction.createFrom:
+                              onCreateFrom(session);
                             case _SessionAction.rename:
                               onRenameSession(session);
+                            case _SessionAction.archive:
+                              onArchive(session);
                             case _SessionAction.delete:
                               onDeleteSession(session);
                           }
                         },
                         itemBuilder: (context) => const [
                           PopupMenuItem(
+                            value: _SessionAction.changes,
+                            child: Text('查看代码改动'),
+                          ),
+                          PopupMenuItem(
+                            value: _SessionAction.checkpoint,
+                            child: Text('保存代码检查点'),
+                          ),
+                          PopupMenuItem(
+                            value: _SessionAction.merge,
+                            child: Text('合并到...'),
+                          ),
+                          PopupMenuItem(
+                            value: _SessionAction.createFrom,
+                            child: Text('基于此会话新建'),
+                          ),
+                          PopupMenuItem(
                             value: _SessionAction.rename,
                             child: Text('重命名'),
+                          ),
+                          PopupMenuItem(
+                            value: _SessionAction.archive,
+                            child: Text('归档'),
                           ),
                           PopupMenuItem(
                             value: _SessionAction.delete,
@@ -255,6 +416,13 @@ class _ChatPanel extends StatelessWidget {
     required this.onCreateSession,
     required this.onRenameSession,
     required this.onDeleteSession,
+    required this.onShowChanges,
+    required this.onCheckpoint,
+    required this.onMerge,
+    required this.onCreateFrom,
+    required this.onArchive,
+    required this.onContinueMerge,
+    required this.onAbortMerge,
     required this.canSend,
     required this.canEditComposer,
     required this.onToggleChatSearch,
@@ -300,6 +468,13 @@ class _ChatPanel extends StatelessWidget {
   final VoidCallback onCreateSession;
   final ValueChanged<Session> onRenameSession;
   final ValueChanged<Session> onDeleteSession;
+  final ValueChanged<Session> onShowChanges;
+  final ValueChanged<Session> onCheckpoint;
+  final ValueChanged<Session> onMerge;
+  final ValueChanged<Session> onCreateFrom;
+  final ValueChanged<Session> onArchive;
+  final ValueChanged<Session> onContinueMerge;
+  final ValueChanged<Session> onAbortMerge;
   final bool canSend;
   final bool canEditComposer;
   final VoidCallback onToggleChatSearch;
@@ -366,9 +541,56 @@ class _ChatPanel extends StatelessWidget {
                       onDeleteSession(session);
                     }
                     break;
+                  case _HeaderMenuAction.changes:
+                    final session = selectedSession;
+                    if (session != null) onShowChanges(session);
+                    break;
+                  case _HeaderMenuAction.checkpoint:
+                    final session = selectedSession;
+                    if (session != null) onCheckpoint(session);
+                    break;
+                  case _HeaderMenuAction.merge:
+                    final session = selectedSession;
+                    if (session != null) onMerge(session);
+                    break;
+                  case _HeaderMenuAction.createFrom:
+                    final session = selectedSession;
+                    if (session != null) onCreateFrom(session);
+                    break;
+                  case _HeaderMenuAction.archive:
+                    final session = selectedSession;
+                    if (session != null) onArchive(session);
+                    break;
                 }
               },
             ),
+            if (selectedSession?.codeState == SessionCodeState.conflict)
+              AppStatusNotice(
+                message: '当前会话存在合并冲突。处理冲突文件后完成合并，或放弃本次合并。',
+                tone: AppNoticeTone.warning,
+                onTap: () => onContinueMerge(selectedSession!),
+              ),
+            if (selectedSession?.codeState == SessionCodeState.conflict)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => onAbortMerge(selectedSession!),
+                        child: const Text('放弃合并'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () => onContinueMerge(selectedSession!),
+                        child: const Text('完成合并'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Expanded(
               child: Stack(
                 children: [
@@ -603,9 +825,35 @@ class _SessionHeader extends StatelessWidget {
                       ),
                       const PopupMenuDivider(),
                       PopupMenuItem(
+                        value: _HeaderMenuAction.changes,
+                        enabled: selectedSession != null,
+                        child: const Text('查看代码改动'),
+                      ),
+                      PopupMenuItem(
+                        value: _HeaderMenuAction.checkpoint,
+                        enabled: selectedSession != null,
+                        child: const Text('保存代码检查点'),
+                      ),
+                      PopupMenuItem(
+                        value: _HeaderMenuAction.merge,
+                        enabled: selectedSession != null,
+                        child: const Text('合并到...'),
+                      ),
+                      PopupMenuItem(
+                        value: _HeaderMenuAction.createFrom,
+                        enabled: selectedSession != null,
+                        child: const Text('基于此会话新建'),
+                      ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
                         value: _HeaderMenuAction.renameSession,
                         enabled: selectedSession != null,
                         child: const Text('重命名当前会话'),
+                      ),
+                      PopupMenuItem(
+                        value: _HeaderMenuAction.archive,
+                        enabled: selectedSession != null,
+                        child: const Text('归档当前会话'),
                       ),
                       PopupMenuItem(
                         value: _HeaderMenuAction.deleteSession,

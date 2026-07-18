@@ -414,6 +414,11 @@ GitStatus git_status(const std::string &localPath) {
     const unsigned int st = s->status;
     const std::string p(path);
 
+    if (st & GIT_STATUS_CONFLICTED) {
+      out.conflicted.push_back(p);
+      continue;
+    }
+
     if (st & (GIT_STATUS_INDEX_NEW | GIT_STATUS_INDEX_MODIFIED | GIT_STATUS_INDEX_DELETED |
               GIT_STATUS_INDEX_RENAMED | GIT_STATUS_INDEX_TYPECHANGE)) {
       out.staged.push_back(p);
@@ -779,4 +784,634 @@ std::string git_show_commit(const std::string &localPath,
     append_text(buf, "\n…（commit 输出已截断）\n");
   }
   return buf.out;
+}
+
+namespace {
+
+std::string oid_to_string(const git_oid *oid) {
+  if (!oid) return "";
+  char buffer[GIT_OID_SHA1_HEXSIZE + 1] = {0};
+  git_oid_tostr(buffer, sizeof(buffer), oid);
+  return std::string(buffer);
+}
+
+bool status_is_clean(const GitStatus &status) {
+  return status.staged.empty() && status.unstaged.empty() &&
+         status.untracked.empty() && status.conflicted.empty();
+}
+
+std::vector<std::string> index_conflict_paths(git_index *index) {
+  std::vector<std::string> out;
+  git_index_conflict_iterator *iterator = nullptr;
+  int rc = git_index_conflict_iterator_new(&iterator, index);
+  if (rc != 0) throw GitException(last_error_message(rc));
+
+  const git_index_entry *ancestor = nullptr;
+  const git_index_entry *ours = nullptr;
+  const git_index_entry *theirs = nullptr;
+  while ((rc = git_index_conflict_next(&ancestor, &ours, &theirs, iterator)) == 0) {
+    const char *path = ours && ours->path
+                           ? ours->path
+                           : (theirs && theirs->path
+                                  ? theirs->path
+                                  : (ancestor ? ancestor->path : nullptr));
+    if (path) out.emplace_back(path);
+  }
+  git_index_conflict_iterator_free(iterator);
+  if (rc != GIT_ITEROVER) throw GitException(last_error_message(rc));
+  return out;
+}
+
+GitRepositoryInfo repository_info(git_repository *repo,
+                                  const std::string &localPath) {
+  GitRepositoryInfo out;
+  git_reference *head = nullptr;
+  int rc = git_repository_head(&head, repo);
+  if (rc == 0 && head) {
+    if (git_reference_is_branch(head)) {
+      const char *shorthand = git_reference_shorthand(head);
+      if (shorthand) out.branch = shorthand;
+    }
+    out.headOid = oid_to_string(git_reference_target(head));
+    git_reference_free(head);
+  } else if (rc != GIT_EUNBORNBRANCH && rc != GIT_ENOTFOUND) {
+    throw GitException(last_error_message(rc));
+  }
+  out.isClean = status_is_clean(git_status(localPath));
+  out.isMerging = git_repository_state(repo) == GIT_REPOSITORY_STATE_MERGE;
+  return out;
+}
+
+void stage_all(git_repository *repo, git_index **outIndex) {
+  git_index *index = nullptr;
+  int rc = git_repository_index(&index, repo);
+  if (rc != 0) throw GitException(last_error_message(rc));
+  git_strarray pathspec = {nullptr, 0};
+  rc = git_index_add_all(index, &pathspec, GIT_INDEX_ADD_DEFAULT, nullptr, nullptr);
+  if (rc == 0) {
+    rc = git_index_update_all(index, &pathspec, nullptr, nullptr);
+  }
+  if (rc == 0) rc = git_index_write(index);
+  if (rc != 0) {
+    git_index_free(index);
+    throw GitException(last_error_message(rc));
+  }
+  *outIndex = index;
+}
+
+git_signature *make_signature(const std::string &userName,
+                              const std::string &userEmail) {
+  if (userName.empty() || userEmail.empty()) {
+    throw GitException("Git user name and email are required");
+  }
+  git_signature *signature = nullptr;
+  const int rc = git_signature_now(&signature, userName.c_str(), userEmail.c_str());
+  if (rc != 0) throw GitException(last_error_message(rc));
+  return signature;
+}
+
+GitCommitResult commit_index(git_repository *repo,
+                             git_index *index,
+                             const std::string &message,
+                             const std::string &userName,
+                             const std::string &userEmail,
+                             const std::vector<git_commit *> &parents) {
+  git_oid tree_oid;
+  int rc = git_index_write_tree(&tree_oid, index);
+  if (rc != 0) throw GitException(last_error_message(rc));
+
+  git_tree *tree = nullptr;
+  rc = git_tree_lookup(&tree, repo, &tree_oid);
+  if (rc != 0) throw GitException(last_error_message(rc));
+
+  git_signature *signature = make_signature(userName, userEmail);
+  std::vector<const git_commit *> parent_ptrs;
+  parent_ptrs.reserve(parents.size());
+  for (git_commit *parent : parents) parent_ptrs.push_back(parent);
+
+  git_oid commit_oid;
+  rc = git_commit_create(&commit_oid, repo, "HEAD", signature, signature,
+                         nullptr, message.c_str(), tree,
+                         parent_ptrs.size(), parent_ptrs.data());
+  git_signature_free(signature);
+  git_tree_free(tree);
+  if (rc != 0) throw GitException(last_error_message(rc));
+  return GitCommitResult{oid_to_string(&commit_oid), true};
+}
+
+git_commit *lookup_head_commit(git_repository *repo) {
+  git_reference *head = nullptr;
+  int rc = git_repository_head(&head, repo);
+  if (rc != 0) throw GitException(last_error_message(rc));
+  const git_oid *oid = git_reference_target(head);
+  git_commit *commit = nullptr;
+  if (!oid) {
+    git_reference_free(head);
+    throw GitException("HEAD has no commit");
+  }
+  rc = git_commit_lookup(&commit, repo, oid);
+  git_reference_free(head);
+  if (rc != 0) throw GitException(last_error_message(rc));
+  return commit;
+}
+
+void write_orig_head(git_repository *repo) {
+  git_reference *head = nullptr;
+  int rc = git_repository_head(&head, repo);
+  if (rc != 0) throw GitException(last_error_message(rc));
+  const git_oid *head_oid = git_reference_target(head);
+  if (!head_oid) {
+    git_reference_free(head);
+    throw GitException("HEAD has no commit");
+  }
+  git_reference *original = nullptr;
+  rc = git_reference_create(&original, repo, "ORIG_HEAD", head_oid, 1,
+                            "CodexM merge");
+  git_reference_free(head);
+  if (original) git_reference_free(original);
+  if (rc != 0) throw GitException(last_error_message(rc));
+}
+
+GitMergeResult merge_result(git_repository *repo,
+                            const std::string &outcome,
+                            const std::vector<std::string> &conflicts = {}) {
+  git_reference *head = nullptr;
+  std::string oid;
+  if (git_repository_head(&head, repo) == 0 && head) {
+    oid = oid_to_string(git_reference_target(head));
+    git_reference_free(head);
+  }
+  return GitMergeResult{outcome, oid, conflicts};
+}
+
+int collect_merge_head(const git_oid *oid, void *payload) {
+  auto *heads = reinterpret_cast<std::vector<git_oid> *>(payload);
+  heads->push_back(*oid);
+  return 0;
+}
+
+GitMergeResult finish_merge(git_repository *repo,
+                            git_index *index,
+                            const git_oid &source_oid,
+                            const std::string &message,
+                            const std::string &userName,
+                            const std::string &userEmail) {
+  git_commit *head = lookup_head_commit(repo);
+  git_commit *source = nullptr;
+  int rc = git_commit_lookup(&source, repo, &source_oid);
+  if (rc != 0) {
+    git_commit_free(head);
+    throw GitException(last_error_message(rc));
+  }
+  const auto result = commit_index(repo, index, message, userName, userEmail,
+                                   {head, source});
+  git_commit_free(source);
+  git_commit_free(head);
+  rc = git_repository_state_cleanup(repo);
+  if (rc != 0) throw GitException(last_error_message(rc));
+  return GitMergeResult{"merged", result.oid, {}};
+}
+
+}  // namespace
+
+GitRepositoryInfo git_init_repository(const std::string &localPath,
+                                      const std::string &initialBranch) {
+  ensure_libgit2();
+  git_repository *repo = nullptr;
+  int rc = git_repository_open(&repo, localPath.c_str());
+  if (rc == 0) {
+    const auto info = repository_info(repo, localPath);
+    git_repository_free(repo);
+    return info;
+  }
+
+  rc = git_repository_init(&repo, localPath.c_str(), 0);
+  if (rc != 0) throw GitException(last_error_message(rc));
+  const std::string branch = initialBranch.empty() ? "main" : initialBranch;
+  const std::string ref_name = "refs/heads/" + branch;
+  rc = git_repository_set_head(repo, ref_name.c_str());
+  if (rc != 0) {
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+
+  git_index *index = nullptr;
+  rc = git_repository_index(&index, repo);
+  if (rc != 0) {
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+  const auto result = commit_index(repo, index, "Initialize CodexM workspace",
+                                   "CodexM", "codexm@local.invalid", {});
+  (void)result;
+  git_index_free(index);
+  const auto info = repository_info(repo, localPath);
+  git_repository_free(repo);
+  return info;
+}
+
+GitRepositoryInfo git_repository_info(const std::string &localPath) {
+  ensure_libgit2();
+  git_repository *repo = nullptr;
+  const int rc = git_repository_open(&repo, localPath.c_str());
+  if (rc != 0) throw GitException(last_error_message(rc));
+  const auto info = repository_info(repo, localPath);
+  git_repository_free(repo);
+  return info;
+}
+
+GitWorktreeInfo git_create_worktree(const std::string &mainRepoPath,
+                                    const std::string &worktreePath,
+                                    const std::string &name,
+                                    const std::string &branchName,
+                                    const std::string &startRef) {
+  ensure_libgit2();
+  git_repository *repo = nullptr;
+  int rc = git_repository_open(&repo, mainRepoPath.c_str());
+  if (rc != 0) throw GitException(last_error_message(rc));
+
+  git_reference *branch = nullptr;
+  rc = git_branch_lookup(&branch, repo, branchName.c_str(), GIT_BRANCH_LOCAL);
+  if (rc == GIT_ENOTFOUND) {
+    git_object *start = nullptr;
+    rc = git_revparse_single(&start, repo, startRef.c_str());
+    if (rc != 0) {
+      git_repository_free(repo);
+      throw GitException(last_error_message(rc));
+    }
+    git_commit *commit = nullptr;
+    rc = git_commit_lookup(&commit, repo, git_object_id(start));
+    git_object_free(start);
+    if (rc == 0) {
+      rc = git_branch_create(&branch, repo, branchName.c_str(), commit, 0);
+    }
+    if (commit) git_commit_free(commit);
+  }
+  if (rc != 0 || !branch) {
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+
+  git_worktree_add_options options = GIT_WORKTREE_ADD_OPTIONS_INIT;
+  options.ref = branch;
+  options.checkout_existing = 1;
+  options.checkout_options.checkout_strategy =
+      GIT_CHECKOUT_SAFE | GIT_CHECKOUT_RECREATE_MISSING;
+  git_worktree *worktree = nullptr;
+  rc = git_worktree_add(&worktree, repo, name.c_str(), worktreePath.c_str(),
+                        &options);
+  git_reference_free(branch);
+  if (rc != 0 || !worktree) {
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+  const char *path = git_worktree_path(worktree);
+  const int locked = git_worktree_is_locked(nullptr, worktree);
+  GitWorktreeInfo info{name, path ? path : worktreePath,
+                       git_worktree_validate(worktree) == 0, locked > 0};
+  git_worktree_free(worktree);
+  git_repository_free(repo);
+  return info;
+}
+
+std::vector<GitWorktreeInfo> git_list_worktrees(const std::string &mainRepoPath) {
+  ensure_libgit2();
+  git_repository *repo = nullptr;
+  int rc = git_repository_open(&repo, mainRepoPath.c_str());
+  if (rc != 0) throw GitException(last_error_message(rc));
+  git_strarray names = {nullptr, 0};
+  rc = git_worktree_list(&names, repo);
+  if (rc != 0) {
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+  std::vector<GitWorktreeInfo> out;
+  for (size_t i = 0; i < names.count; ++i) {
+    git_worktree *worktree = nullptr;
+    if (git_worktree_lookup(&worktree, repo, names.strings[i]) != 0 ||
+        !worktree) {
+      continue;
+    }
+    const char *path = git_worktree_path(worktree);
+    const int locked = git_worktree_is_locked(nullptr, worktree);
+    out.push_back(GitWorktreeInfo{
+        names.strings[i], path ? path : "",
+        git_worktree_validate(worktree) == 0, locked > 0});
+    git_worktree_free(worktree);
+  }
+  git_strarray_dispose(&names);
+  git_repository_free(repo);
+  return out;
+}
+
+void git_remove_worktree(const std::string &mainRepoPath,
+                         const std::string &name,
+                         bool force) {
+  ensure_libgit2();
+  git_repository *repo = nullptr;
+  int rc = git_repository_open(&repo, mainRepoPath.c_str());
+  if (rc != 0) throw GitException(last_error_message(rc));
+  git_worktree *worktree = nullptr;
+  rc = git_worktree_lookup(&worktree, repo, name.c_str());
+  if (rc != 0) {
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+  const char *path = git_worktree_path(worktree);
+  if (!force && path && !status_is_clean(git_status(path))) {
+    git_worktree_free(worktree);
+    git_repository_free(repo);
+    throw GitException("worktree has uncommitted changes");
+  }
+  if (force && git_worktree_is_locked(nullptr, worktree) > 0) {
+    git_worktree_unlock(worktree);
+  }
+  git_worktree_prune_options options = GIT_WORKTREE_PRUNE_OPTIONS_INIT;
+  options.flags = GIT_WORKTREE_PRUNE_VALID | GIT_WORKTREE_PRUNE_WORKING_TREE;
+  if (force) options.flags |= GIT_WORKTREE_PRUNE_LOCKED;
+  rc = git_worktree_prune(worktree, &options);
+  git_worktree_free(worktree);
+  git_repository_free(repo);
+  if (rc != 0) throw GitException(last_error_message(rc));
+}
+
+GitCommitResult git_create_checkpoint(const std::string &localPath,
+                                      const std::string &message,
+                                      const std::string &userName,
+                                      const std::string &userEmail) {
+  ensure_libgit2();
+  git_repository *repo = nullptr;
+  int rc = git_repository_open(&repo, localPath.c_str());
+  if (rc != 0) throw GitException(last_error_message(rc));
+  git_index *index = nullptr;
+  stage_all(repo, &index);
+
+  git_oid tree_oid;
+  rc = git_index_write_tree(&tree_oid, index);
+  git_commit *head = nullptr;
+  if (rc == 0) head = lookup_head_commit(repo);
+  if (rc != 0 || !head) {
+    git_index_free(index);
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+  git_tree *head_tree = nullptr;
+  rc = git_commit_tree(&head_tree, head);
+  if (rc != 0) {
+    git_commit_free(head);
+    git_index_free(index);
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+  if (git_oid_equal(&tree_oid, git_tree_id(head_tree))) {
+    const GitCommitResult result{oid_to_string(git_commit_id(head)), false};
+    git_tree_free(head_tree);
+    git_commit_free(head);
+    git_index_free(index);
+    git_repository_free(repo);
+    return result;
+  }
+  git_tree_free(head_tree);
+  const auto result = commit_index(repo, index, message, userName, userEmail,
+                                   {head});
+  git_commit_free(head);
+  git_index_free(index);
+  git_repository_free(repo);
+  return result;
+}
+
+bool git_is_ancestor(const std::string &localPath,
+                     const std::string &ancestorRef,
+                     const std::string &descendantRef) {
+  ensure_libgit2();
+  git_repository *repo = nullptr;
+  int rc = git_repository_open(&repo, localPath.c_str());
+  if (rc != 0) throw GitException(last_error_message(rc));
+  git_object *ancestor = nullptr;
+  git_object *descendant = nullptr;
+  rc = git_revparse_single(&ancestor, repo, ancestorRef.c_str());
+  if (rc == 0) rc = git_revparse_single(&descendant, repo, descendantRef.c_str());
+  if (rc != 0) {
+    if (ancestor) git_object_free(ancestor);
+    if (descendant) git_object_free(descendant);
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+  if (git_oid_equal(git_object_id(descendant), git_object_id(ancestor))) {
+    rc = 1;
+  } else {
+    rc = git_graph_descendant_of(repo, git_object_id(descendant),
+                                 git_object_id(ancestor));
+  }
+  git_object_free(descendant);
+  git_object_free(ancestor);
+  git_repository_free(repo);
+  if (rc < 0) throw GitException(last_error_message(rc));
+  return rc == 1;
+}
+
+void git_delete_branch(const std::string &localPath,
+                       const std::string &branchName,
+                       bool force) {
+  ensure_libgit2();
+  (void)force;
+  git_repository *repo = nullptr;
+  int rc = git_repository_open(&repo, localPath.c_str());
+  if (rc != 0) throw GitException(last_error_message(rc));
+  git_reference *branch = nullptr;
+  rc = git_branch_lookup(&branch, repo, branchName.c_str(), GIT_BRANCH_LOCAL);
+  if (rc == GIT_ENOTFOUND) {
+    git_repository_free(repo);
+    return;
+  }
+  if (rc == 0) rc = git_branch_delete(branch);
+  if (branch) git_reference_free(branch);
+  git_repository_free(repo);
+  if (rc != 0) throw GitException(last_error_message(rc));
+}
+
+GitMergeResult git_merge_ref(const std::string &targetPath,
+                             const std::string &sourceRef,
+                             const std::string &message,
+                             const std::string &userName,
+                             const std::string &userEmail) {
+  ensure_libgit2();
+  if (!status_is_clean(git_status(targetPath))) {
+    throw GitException("target worktree has uncommitted changes");
+  }
+  git_repository *repo = nullptr;
+  int rc = git_repository_open(&repo, targetPath.c_str());
+  if (rc != 0) throw GitException(last_error_message(rc));
+  if (git_repository_state(repo) != GIT_REPOSITORY_STATE_NONE) {
+    git_repository_free(repo);
+    throw GitException("target repository already has an operation in progress");
+  }
+
+  git_object *source_object = nullptr;
+  rc = git_revparse_single(&source_object, repo, sourceRef.c_str());
+  if (rc != 0) {
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+  const git_oid source_oid = *git_object_id(source_object);
+  git_object_free(source_object);
+  git_annotated_commit *source = nullptr;
+  rc = git_annotated_commit_lookup(&source, repo, &source_oid);
+  if (rc != 0) {
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+  const git_annotated_commit *heads[] = {source};
+  git_merge_analysis_t analysis;
+  git_merge_preference_t preference;
+  rc = git_merge_analysis(&analysis, &preference, repo, heads, 1);
+  if (rc != 0) {
+    git_annotated_commit_free(source);
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+  if (analysis & GIT_MERGE_ANALYSIS_UP_TO_DATE) {
+    const auto result = merge_result(repo, "upToDate");
+    git_annotated_commit_free(source);
+    git_repository_free(repo);
+    return result;
+  }
+  if (analysis & GIT_MERGE_ANALYSIS_FASTFORWARD) {
+    git_reference *head = nullptr;
+    rc = git_repository_head(&head, repo);
+    if (rc != 0 || !head || !git_reference_is_branch(head)) {
+      if (head) git_reference_free(head);
+      git_annotated_commit_free(source);
+      git_repository_free(repo);
+      throw GitException("fast-forward requires an attached target branch");
+    }
+    const std::string head_name = git_reference_name(head);
+    git_object *target = nullptr;
+    rc = git_object_lookup(&target, repo, &source_oid, GIT_OBJECT_COMMIT);
+    if (rc == 0) {
+      git_checkout_options checkout = GIT_CHECKOUT_OPTIONS_INIT;
+      checkout.checkout_strategy = GIT_CHECKOUT_SAFE | GIT_CHECKOUT_RECREATE_MISSING;
+      rc = git_checkout_tree(repo, target, &checkout);
+    }
+    if (target) git_object_free(target);
+    git_reference *updated = nullptr;
+    if (rc == 0) {
+      rc = git_reference_set_target(&updated, head, &source_oid, "CodexM merge");
+    }
+    git_reference_free(head);
+    if (updated) git_reference_free(updated);
+    if (rc == 0) rc = git_repository_set_head(repo, head_name.c_str());
+    if (rc != 0) {
+      git_annotated_commit_free(source);
+      git_repository_free(repo);
+      throw GitException(last_error_message(rc));
+    }
+    const auto result = merge_result(repo, "fastForward");
+    git_annotated_commit_free(source);
+    git_repository_free(repo);
+    return result;
+  }
+
+  git_merge_options merge_options = GIT_MERGE_OPTIONS_INIT;
+  git_checkout_options checkout = GIT_CHECKOUT_OPTIONS_INIT;
+  checkout.checkout_strategy = GIT_CHECKOUT_SAFE | GIT_CHECKOUT_RECREATE_MISSING;
+  write_orig_head(repo);
+  rc = git_merge(repo, heads, 1, &merge_options, &checkout);
+  git_annotated_commit_free(source);
+  if (rc != 0) {
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+  git_index *index = nullptr;
+  rc = git_repository_index(&index, repo);
+  if (rc != 0) {
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+  const auto conflicts = index_conflict_paths(index);
+  if (!conflicts.empty()) {
+    git_index_free(index);
+    const auto result = merge_result(repo, "conflicts", conflicts);
+    git_repository_free(repo);
+    return result;
+  }
+  const auto result = finish_merge(repo, index, source_oid, message, userName,
+                                   userEmail);
+  git_index_free(index);
+  git_repository_free(repo);
+  return result;
+}
+
+GitMergeResult git_merge_state(const std::string &targetPath) {
+  ensure_libgit2();
+  git_repository *repo = nullptr;
+  int rc = git_repository_open(&repo, targetPath.c_str());
+  if (rc != 0) throw GitException(last_error_message(rc));
+  git_index *index = nullptr;
+  rc = git_repository_index(&index, repo);
+  if (rc != 0) {
+    git_repository_free(repo);
+    throw GitException(last_error_message(rc));
+  }
+  const auto conflicts = index_conflict_paths(index);
+  git_index_free(index);
+  const auto result = merge_result(repo, conflicts.empty() ? "merged" : "conflicts",
+                                   conflicts);
+  git_repository_free(repo);
+  return result;
+}
+
+GitMergeResult git_continue_merge(const std::string &targetPath,
+                                  const std::string &message,
+                                  const std::string &userName,
+                                  const std::string &userEmail) {
+  ensure_libgit2();
+  git_repository *repo = nullptr;
+  int rc = git_repository_open(&repo, targetPath.c_str());
+  if (rc != 0) throw GitException(last_error_message(rc));
+  if (git_repository_state(repo) != GIT_REPOSITORY_STATE_MERGE) {
+    git_repository_free(repo);
+    throw GitException("no merge is in progress");
+  }
+  git_index *index = nullptr;
+  stage_all(repo, &index);
+  const auto conflicts = index_conflict_paths(index);
+  if (!conflicts.empty()) {
+    git_index_free(index);
+    const auto result = merge_result(repo, "conflicts", conflicts);
+    git_repository_free(repo);
+    return result;
+  }
+  std::vector<git_oid> merge_heads;
+  rc = git_repository_mergehead_foreach(repo, collect_merge_head, &merge_heads);
+  if (rc != 0 || merge_heads.empty()) {
+    git_index_free(index);
+    git_repository_free(repo);
+    throw GitException(rc == 0 ? "merge source is missing" : last_error_message(rc));
+  }
+  const auto result = finish_merge(repo, index, merge_heads.front(), message,
+                                   userName, userEmail);
+  git_index_free(index);
+  git_repository_free(repo);
+  return result;
+}
+
+void git_abort_merge(const std::string &targetPath) {
+  ensure_libgit2();
+  git_repository *repo = nullptr;
+  int rc = git_repository_open(&repo, targetPath.c_str());
+  if (rc != 0) throw GitException(last_error_message(rc));
+  git_oid original;
+  rc = git_reference_name_to_id(&original, repo, "ORIG_HEAD");
+  git_object *target = nullptr;
+  if (rc == 0) rc = git_object_lookup(&target, repo, &original, GIT_OBJECT_COMMIT);
+  if (rc == 0) {
+    git_checkout_options checkout = GIT_CHECKOUT_OPTIONS_INIT;
+    checkout.checkout_strategy = GIT_CHECKOUT_FORCE | GIT_CHECKOUT_RECREATE_MISSING;
+    rc = git_reset(repo, target, GIT_RESET_HARD, &checkout);
+  }
+  if (target) git_object_free(target);
+  if (rc == 0) rc = git_repository_state_cleanup(repo);
+  git_repository_free(repo);
+  if (rc != 0) throw GitException(last_error_message(rc));
 }

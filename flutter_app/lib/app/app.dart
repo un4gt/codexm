@@ -136,6 +136,7 @@ class _AppShellState extends State<_AppShell> {
   Workspace? _activeWorkspace;
   Session? _selectedSession;
   bool _sessionDetailVisible = false;
+  bool _workspaceSessionsVisible = false;
   SessionActivity? _sessionActivity;
   bool _startupUpdateCheckTriggered = false;
 
@@ -179,53 +180,71 @@ class _AppShellState extends State<_AppShell> {
 
   List<Widget> _buildPages() {
     return <Widget>[
-      WorkspacesPage(
-        activeWorkspaceId: _activeWorkspace?.id,
-        lockedWorkspaceId: _sessionActivity?.workspaceId,
-        onActiveWorkspaceChanged: _handleWorkspaceChanged,
-        onOpenSessionsRequested: () {
-          setState(() {
-            _selectedIndex = 1;
-          });
-        },
-      ),
-      SessionsPage(
-        isActive: _selectedIndex == 1,
-        activeWorkspaceId: _activeWorkspace?.id,
-        selectedSessionId: _selectedSession?.id,
-        onActiveWorkspaceChanged: _handleWorkspaceChanged,
-        onSessionSelected: _handleSessionChanged,
-        onOpenWorkspacesRequested: () {
-          setState(() {
-            _selectedIndex = 0;
-          });
-        },
-        onOpenSettingsRequested: () {
-          setState(() {
-            _selectedIndex = 3;
-          });
-        },
-        onDetailVisibilityChanged: (visible) {
-          if (_sessionDetailVisible == visible) {
-            return;
+      PopScope(
+        canPop: !_workspaceSessionsVisible,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop && _workspaceSessionsVisible && !_sessionDetailVisible) {
+            setState(() {
+              _workspaceSessionsVisible = false;
+            });
           }
-          setState(() {
-            _sessionDetailVisible = visible;
-          });
         },
-        onActivityChanged: (activity) {
-          if (_sessionActivity?.workspaceId == activity?.workspaceId &&
-              _sessionActivity?.sessionId == activity?.sessionId) {
-            return;
-          }
-          setState(() {
-            _sessionActivity = activity;
-          });
-        },
+        child: IndexedStack(
+          index: _workspaceSessionsVisible ? 1 : 0,
+          children: [
+            WorkspacesPage(
+              activeWorkspaceId: _activeWorkspace?.id,
+              lockedWorkspaceId: _sessionActivity?.workspaceId,
+              onActiveWorkspaceChanged: _handleWorkspaceChanged,
+              onOpenSessionsRequested: (workspace) {
+                setState(() {
+                  _activeWorkspace = workspace;
+                  _selectedSession = null;
+                  _workspaceSessionsVisible = true;
+                });
+              },
+            ),
+            SessionsPage(
+              isActive: _selectedIndex == 0 && _workspaceSessionsVisible,
+              activeWorkspaceId: _activeWorkspace?.id,
+              selectedSessionId: _selectedSession?.id,
+              onActiveWorkspaceChanged: _handleWorkspaceChanged,
+              onSessionSelected: _handleSessionChanged,
+              onOpenWorkspacesRequested: () {
+                setState(() {
+                  _workspaceSessionsVisible = false;
+                  _sessionDetailVisible = false;
+                });
+              },
+              onOpenSettingsRequested: () {
+                setState(() {
+                  _selectedIndex = 2;
+                });
+              },
+              onDetailVisibilityChanged: (visible) {
+                if (_sessionDetailVisible == visible) {
+                  return;
+                }
+                setState(() {
+                  _sessionDetailVisible = visible;
+                });
+              },
+              onActivityChanged: (activity) {
+                if (_sessionActivity?.workspaceId == activity?.workspaceId &&
+                    _sessionActivity?.sessionId == activity?.sessionId) {
+                  return;
+                }
+                setState(() {
+                  _sessionActivity = activity;
+                });
+              },
+            ),
+          ],
+        ),
       ),
       const McpPage(),
       SettingsPage(
-        isActive: _selectedIndex == 3,
+        isActive: _selectedIndex == 2,
         onLocalePreferenceChanged: widget.onLocalePreferenceChanged,
         onSettingsChanged: widget.onSettingsChanged,
       ),
@@ -245,11 +264,6 @@ class _AppShellState extends State<_AppShell> {
         label: l10n.navWorkspaces,
       ),
       NavigationDestination(
-        icon: const Icon(Icons.chat_bubble_outline),
-        selectedIcon: const Icon(Icons.chat_bubble),
-        label: l10n.navSessions,
-      ),
-      NavigationDestination(
         icon: const Icon(Icons.extension_outlined),
         selectedIcon: const Icon(Icons.extension),
         label: l10n.navMcpSkills,
@@ -265,11 +279,6 @@ class _AppShellState extends State<_AppShell> {
         icon: const Icon(Icons.folder_outlined),
         selectedIcon: const Icon(Icons.folder),
         label: Text(l10n.navWorkspaces),
-      ),
-      NavigationRailDestination(
-        icon: const Icon(Icons.chat_bubble_outline),
-        selectedIcon: const Icon(Icons.chat_bubble),
-        label: Text(l10n.navSessions),
       ),
       NavigationRailDestination(
         icon: const Icon(Icons.extension_outlined),
@@ -299,6 +308,10 @@ class _AppShellState extends State<_AppShell> {
                     selectedIndex: _selectedIndex,
                     onDestinationSelected: (index) {
                       setState(() {
+                        if (index == 0 && _selectedIndex == 0) {
+                          _workspaceSessionsVisible = false;
+                          _sessionDetailVisible = false;
+                        }
                         _selectedIndex = index;
                       });
                     },
@@ -313,7 +326,7 @@ class _AppShellState extends State<_AppShell> {
       ),
       bottomNavigationBar:
           layout.useBottomNavigation &&
-              !(_selectedIndex == 1 && _sessionDetailVisible)
+              !(_selectedIndex == 0 && _sessionDetailVisible)
           ? DecoratedBox(
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,
@@ -335,6 +348,10 @@ class _AppShellState extends State<_AppShell> {
                       destinations: destinations,
                       onDestinationSelected: (index) {
                         setState(() {
+                          if (index == 0 && _selectedIndex == 0) {
+                            _workspaceSessionsVisible = false;
+                            _sessionDetailVisible = false;
+                          }
                           _selectedIndex = index;
                         });
                       },

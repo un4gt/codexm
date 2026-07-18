@@ -18,6 +18,8 @@ import '../../../workspaces/application/workspace_paths.dart';
 import '../../../workspaces/application/workspace_store.dart';
 import '../../application/assistant_part_accumulator.dart';
 import '../../application/session_composer_logic.dart';
+import '../../application/session_code_error_mapper.dart';
+import '../../application/session_code_workspace_service.dart';
 import '../../application/session_models.dart';
 import '../../application/session_search.dart';
 import '../../application/session_store.dart';
@@ -71,6 +73,7 @@ class _SessionsPageState extends State<SessionsPage> {
   final _workspaceStore = WorkspaceStore();
   final _workspaceDirectoryService = WorkspaceDirectoryService();
   final _sessionStore = SessionStore();
+  final _codeWorkspaceService = SessionCodeWorkspaceService();
   final _settingsStore = CodexSettingsStore();
   final _mcpStore = McpStore();
   final _skillsStore = CodexSkillsStore();
@@ -93,7 +96,6 @@ class _SessionsPageState extends State<SessionsPage> {
   String _pendingAssistantText = '';
   List<ChatMessagePart> _pendingAssistantParts = const <ChatMessagePart>[];
   int _pendingStartedAt = 0;
-  int _legacySessionCount = 0;
   List<String> _installedSkills = const <String>[];
   List<CodexSlashCommand> _slashSuggestions = const <CodexSlashCommand>[];
   List<ComposerMentionSuggestion> _mentionSuggestions =
@@ -111,6 +113,7 @@ class _SessionsPageState extends State<SessionsPage> {
   bool _showChatDetail = false;
   bool _followMessageOutput = true;
   bool _showScrollToBottom = false;
+  SessionCodeMigrationRequiredException? _migrationRequired;
 
   @override
   void initState() {
@@ -150,7 +153,34 @@ class _SessionsPageState extends State<SessionsPage> {
       ).showSnackBar(const SnackBar(content: Text('当前会话仍在运行，完成后可切换其他会话。')));
       return;
     }
-    await _selectSession(session);
+    final workspace = _activeWorkspace;
+    if (workspace == null) {
+      return;
+    }
+    try {
+      final ready = await _codeWorkspaceService.ensureSessionWorktree(
+        workspace,
+        session,
+      );
+      _updateView(() {
+        _sessions = _sessions
+            .map((item) => item.id == ready.id ? ready : item)
+            .toList(growable: false);
+      });
+      await _selectSession(ready);
+    } catch (error, stackTrace) {
+      if (mounted) {
+        final details = mapSessionCodeError(error);
+        debugPrint(
+          'Unable to prepare session code environment: '
+          '${details.debugMessage}\n$stackTrace',
+        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(details.message)));
+      }
+      return;
+    }
     if (!mounted) {
       return;
     }
@@ -192,7 +222,7 @@ class _SessionsPageState extends State<SessionsPage> {
 
   Future<void> _refresh({String? status}) async {
     final previousWorkspaceId = _activeWorkspace?.id;
-    final workspace = await _loadActiveWorkspace();
+    var workspace = await _loadActiveWorkspace();
     final settings = await _settingsStore.getSettings();
     final apiKey = await _settingsStore.getCodexApiKey();
     final skills = await _skillsStore.listInstalledSkills();
@@ -209,7 +239,6 @@ class _SessionsPageState extends State<SessionsPage> {
         _settings = settings;
         _hasApiKey = apiKey?.trim().isNotEmpty == true;
         _installedSkills = skills;
-        _legacySessionCount = 0;
         _pendingMentions = const <ComposerPendingMention>[];
         _slashSuggestions = const <CodexSlashCommand>[];
         _mentionSuggestions = const <ComposerMentionSuggestion>[];
@@ -219,16 +248,37 @@ class _SessionsPageState extends State<SessionsPage> {
         _status = status ?? '请先创建并激活工作区，然后再开始对话。';
         _runtimeStatus = null;
         _runtimeStatusIsRetrying = false;
+        _migrationRequired = null;
       });
       widget.onActiveWorkspaceChanged?.call(null);
       widget.onSessionSelected?.call(null);
       return;
     }
 
-    final primary = await _sessionStore.ensurePrimarySession(
-      workspace.id,
-      title: '主会话',
-    );
+    Session primary;
+    try {
+      workspace = await _codeWorkspaceService.migrateWorkspace(workspace);
+      primary = await _codeWorkspaceService.ensurePrimarySession(workspace);
+    } on SessionCodeMigrationRequiredException catch (error) {
+      final sessions = await _sessionStore.listSessions(workspace!.id);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _activeWorkspace = workspace;
+        _sessions = sessions;
+        _selectedSessionId = null;
+        _messages = const <ChatMessage>[];
+        _settings = settings;
+        _hasApiKey = apiKey?.trim().isNotEmpty == true;
+        _installedSkills = skills;
+        _migrationRequired = error;
+        _status = '需要先保存当前工作区改动，才能启用独立会话。';
+      });
+      widget.onActiveWorkspaceChanged?.call(workspace);
+      widget.onSessionSelected?.call(null);
+      return;
+    }
     final sessions = await _sessionStore.listSessions(workspace.id);
     final preferredSessionId =
         widget.selectedSessionId ??
@@ -243,7 +293,6 @@ class _SessionsPageState extends State<SessionsPage> {
       selectedSessionId,
     );
     final workspaceChanged = previousWorkspaceId != workspace.id;
-    final legacySessionCount = sessions.length > 1 ? sessions.length - 1 : 0;
 
     if (!mounted) {
       return;
@@ -257,7 +306,6 @@ class _SessionsPageState extends State<SessionsPage> {
       _settings = settings;
       _hasApiKey = apiKey?.trim().isNotEmpty == true;
       _installedSkills = skills;
-      _legacySessionCount = legacySessionCount;
       if (workspaceChanged) {
         _pendingMentions = const <ComposerPendingMention>[];
         _slashSuggestions = const <CodexSlashCommand>[];
@@ -267,13 +315,10 @@ class _SessionsPageState extends State<SessionsPage> {
         _commitDetails = const <String, String>{};
         _activeMentionQuery = null;
       }
-      _status =
-          status ??
-          (legacySessionCount > 0
-              ? '检测到 $legacySessionCount 个历史会话，已自动继续最近主会话。'
-              : '已恢复当前工作区的主会话。');
+      _status = status ?? '已恢复当前工作区的 ${sessions.length} 个会话。';
       _runtimeStatus = null;
       _runtimeStatusIsRetrying = false;
+      _migrationRequired = null;
     });
 
     widget.onActiveWorkspaceChanged?.call(workspace);
@@ -306,6 +351,19 @@ class _SessionsPageState extends State<SessionsPage> {
       }
     }
     return null;
+  }
+
+  Future<Directory?> _workingDirectoryForSession([Session? session]) async {
+    final workspace = _activeWorkspace;
+    final selected = session ?? _selectedSession;
+    if (workspace == null || selected == null) {
+      return null;
+    }
+    final ready = await _codeWorkspaceService.ensureSessionWorktree(
+      workspace,
+      selected,
+    );
+    return _codeWorkspaceService.workingDirectory(workspace.id, ready.id);
   }
 
   void _updateView(VoidCallback change) {
@@ -564,19 +622,21 @@ class _SessionsPageState extends State<SessionsPage> {
 
   Future<List<String>> _loadRepoFiles(Workspace workspace) async {
     try {
-      final paths = await _workspaceDirectoryService.pathsFor(workspace.id);
-      if (!paths.repoDir.existsSync()) {
+      final workingDirectory = await _workingDirectoryForSession();
+      if (workingDirectory == null || !workingDirectory.existsSync()) {
         return const <String>[];
       }
       final out = <String>[];
-      await for (final entity in paths.repoDir.list(
+      await for (final entity in workingDirectory.list(
         recursive: true,
         followLinks: false,
       )) {
         if (entity is! File) {
           continue;
         }
-        final relative = entity.path.substring(paths.repoDir.path.length + 1);
+        final relative = entity.path.substring(
+          workingDirectory.path.length + 1,
+        );
         if (!_shouldIncludeRepoFile(relative)) {
           continue;
         }
@@ -612,12 +672,12 @@ class _SessionsPageState extends State<SessionsPage> {
 
   Future<List<GitCommitSummary>> _loadRecentCommits(Workspace workspace) async {
     try {
-      final paths = await _workspaceDirectoryService.pathsFor(workspace.id);
-      if (!paths.repoDir.existsSync()) {
+      final workingDirectory = await _workingDirectoryForSession();
+      if (workingDirectory == null || !workingDirectory.existsSync()) {
         return const <GitCommitSummary>[];
       }
       return _native.gitRecentCommits(
-        localRepoDirUri: paths.repoDir.path,
+        localRepoDirUri: workingDirectory.path,
         limit: 24,
       );
     } catch (_) {
@@ -635,6 +695,16 @@ class _SessionsPageState extends State<SessionsPage> {
     final emptyState = _WorkspaceEmptyState(
       onOpenWorkspacesRequested: widget.onOpenWorkspacesRequested,
     );
+    final migrationPanel =
+        _migrationRequired != null && _activeWorkspace != null
+        ? _WorkspaceMigrationPanel(
+            workspace: _activeWorkspace!,
+            migration: _migrationRequired!,
+            busy: _busy,
+            onContinue: _completeWorkspaceMigration,
+            onBack: widget.onOpenWorkspacesRequested,
+          )
+        : null;
     final chatPanel = _activeWorkspace == null
         ? emptyState
         : _ChatPanel(
@@ -670,9 +740,16 @@ class _SessionsPageState extends State<SessionsPage> {
             onRemovePendingMention: _removePendingMention,
             onSendMessage: _sendMessage,
             onOpenSessionSwitcher: _openSessionSwitcher,
-            onCreateSession: _createSession,
+            onCreateSession: () => _createSession(),
             onRenameSession: _renameSession,
             onDeleteSession: _deleteSession,
+            onShowChanges: _showSessionChanges,
+            onCheckpoint: (session) => _checkpointSession(session),
+            onMerge: _mergeSession,
+            onCreateFrom: (session) => _createSession(sourceSession: session),
+            onArchive: _archiveSession,
+            onContinueMerge: _continueSessionMerge,
+            onAbortMerge: _abortSessionMerge,
             canSend: canSend,
             canEditComposer: canEditComposer,
             onToggleChatSearch: _toggleChatSearch,
@@ -698,10 +775,19 @@ class _SessionsPageState extends State<SessionsPage> {
       },
       onRenameSession: _renameSession,
       onDeleteSession: _deleteSession,
+      onShowChanges: _showSessionChanges,
+      onCheckpoint: (session) => _checkpointSession(session),
+      onMerge: _mergeSession,
+      onCreateFrom: (session) => _createSession(sourceSession: session),
+      onArchive: _archiveSession,
+      onContinueMainMerge: _continueMainMerge,
+      onAbortMainMerge: _abortMainMerge,
     );
 
     final Widget content;
-    if (layout.useMasterDetail && _activeWorkspace != null) {
+    if (migrationPanel != null) {
+      content = migrationPanel;
+    } else if (layout.useMasterDetail && _activeWorkspace != null) {
       content = AdaptiveMasterDetail(master: overview, detail: chatPanel);
     } else {
       content = _showChatDetail && _activeWorkspace != null

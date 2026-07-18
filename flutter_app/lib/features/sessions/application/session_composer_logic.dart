@@ -294,7 +294,11 @@ String buildUserFacingInput(
   return buffer.toString().trimRight();
 }
 
-String displayPathForWorkspace(WorkspacePaths paths, String rawPath) {
+String displayPathForWorkspace(
+  WorkspacePaths paths,
+  String rawPath, {
+  String? workspaceRepoDir,
+}) {
   final hasFileScheme = rawPath.trim().startsWith('file://');
   final value = rawPath.trim().replaceFirst(RegExp(r'^file://'), '');
   if (value.isEmpty) {
@@ -302,7 +306,7 @@ String displayPathForWorkspace(WorkspacePaths paths, String rawPath) {
   }
 
   final mapper = RuntimePathMapper(
-    workspaceRepoDir: paths.repoDir.path,
+    workspaceRepoDir: workspaceRepoDir ?? paths.repoDir.path,
     codexHomeDir: paths.codexHomeDir.path,
     tmpDir: paths.tmpDir.path,
   );

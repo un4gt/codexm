@@ -1,12 +1,20 @@
 import 'codexm_native_platform_interface.dart';
 import 'src/models/app_update_app_info.dart';
 import 'src/models/git_commit_summary.dart';
+import 'src/models/git_commit_result.dart';
+import 'src/models/git_merge_result.dart';
+import 'src/models/git_repository_info.dart';
 import 'src/models/git_status.dart';
+import 'src/models/git_worktree_info.dart';
 import 'src/models/runtime_line_event.dart';
 
 export 'src/models/app_update_app_info.dart';
 export 'src/models/git_commit_summary.dart';
+export 'src/models/git_commit_result.dart';
+export 'src/models/git_merge_result.dart';
+export 'src/models/git_repository_info.dart';
 export 'src/models/git_status.dart';
+export 'src/models/git_worktree_info.dart';
 export 'src/models/runtime_line_event.dart';
 
 class CodexmNative {
@@ -189,6 +197,140 @@ class CodexmNative {
       localRepoDirUri: localRepoDirUri,
       hash: hash,
       maxBytes: maxBytes,
+    );
+  }
+
+  Future<GitRepositoryInfo> gitInitRepository({
+    required String localRepoDirUri,
+    String initialBranch = 'main',
+  }) {
+    return CodexmNativePlatform.instance.gitInitRepository(
+      localRepoDirUri: localRepoDirUri,
+      initialBranch: initialBranch,
+    );
+  }
+
+  Future<GitRepositoryInfo> gitRepositoryInfo({
+    required String localRepoDirUri,
+  }) {
+    return CodexmNativePlatform.instance.gitRepositoryInfo(
+      localRepoDirUri: localRepoDirUri,
+    );
+  }
+
+  Future<GitWorktreeInfo> gitCreateWorktree({
+    required String mainRepoDirUri,
+    required String worktreeDirUri,
+    required String name,
+    required String branchName,
+    required String startRef,
+  }) {
+    return CodexmNativePlatform.instance.gitCreateWorktree(
+      mainRepoDirUri: mainRepoDirUri,
+      worktreeDirUri: worktreeDirUri,
+      name: name,
+      branchName: branchName,
+      startRef: startRef,
+    );
+  }
+
+  Future<List<GitWorktreeInfo>> gitListWorktrees({
+    required String mainRepoDirUri,
+  }) {
+    return CodexmNativePlatform.instance.gitListWorktrees(
+      mainRepoDirUri: mainRepoDirUri,
+    );
+  }
+
+  Future<void> gitRemoveWorktree({
+    required String mainRepoDirUri,
+    required String name,
+    bool force = false,
+  }) {
+    return CodexmNativePlatform.instance.gitRemoveWorktree(
+      mainRepoDirUri: mainRepoDirUri,
+      name: name,
+      force: force,
+    );
+  }
+
+  Future<GitCommitResult> gitCreateCheckpoint({
+    required String localRepoDirUri,
+    required String message,
+    required String userName,
+    required String userEmail,
+  }) {
+    return CodexmNativePlatform.instance.gitCreateCheckpoint(
+      localRepoDirUri: localRepoDirUri,
+      message: message,
+      userName: userName,
+      userEmail: userEmail,
+    );
+  }
+
+  Future<bool> gitIsAncestor({
+    required String localRepoDirUri,
+    required String ancestorRef,
+    required String descendantRef,
+  }) {
+    return CodexmNativePlatform.instance.gitIsAncestor(
+      localRepoDirUri: localRepoDirUri,
+      ancestorRef: ancestorRef,
+      descendantRef: descendantRef,
+    );
+  }
+
+  Future<void> gitDeleteBranch({
+    required String localRepoDirUri,
+    required String branchName,
+    bool force = false,
+  }) {
+    return CodexmNativePlatform.instance.gitDeleteBranch(
+      localRepoDirUri: localRepoDirUri,
+      branchName: branchName,
+      force: force,
+    );
+  }
+
+  Future<GitMergeResult> gitMerge({
+    required String targetRepoDirUri,
+    required String sourceRef,
+    required String message,
+    required String userName,
+    required String userEmail,
+  }) {
+    return CodexmNativePlatform.instance.gitMerge(
+      targetRepoDirUri: targetRepoDirUri,
+      sourceRef: sourceRef,
+      message: message,
+      userName: userName,
+      userEmail: userEmail,
+    );
+  }
+
+  Future<GitMergeResult> gitMergeState({required String targetRepoDirUri}) {
+    return CodexmNativePlatform.instance.gitMergeState(
+      targetRepoDirUri: targetRepoDirUri,
+    );
+  }
+
+  Future<GitMergeResult> gitContinueMerge({
+    required String targetRepoDirUri,
+    required String message,
+    required String userName,
+    required String userEmail,
+  }) {
+    return CodexmNativePlatform.instance.gitContinueMerge(
+      targetRepoDirUri: targetRepoDirUri,
+      message: message,
+      userName: userName,
+      userEmail: userEmail,
+    );
+  }
+
+  Future<void> gitAbortMerge({required String targetRepoDirUri}) {
+    return CodexmNativePlatform.instance.gitAbortMerge(
+      targetRepoDirUri: targetRepoDirUri,
     );
   }
 }

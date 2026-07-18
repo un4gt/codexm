@@ -3,11 +3,19 @@ class GitStatus {
     required this.staged,
     required this.unstaged,
     required this.untracked,
+    this.conflicted = const <String>[],
   });
 
   final List<String> staged;
   final List<String> unstaged;
   final List<String> untracked;
+  final List<String> conflicted;
+
+  bool get isClean =>
+      staged.isEmpty &&
+      unstaged.isEmpty &&
+      untracked.isEmpty &&
+      conflicted.isEmpty;
 
   factory GitStatus.fromMap(Map<Object?, Object?> map) {
     List<String> readList(String key) {
@@ -22,6 +30,7 @@ class GitStatus {
       staged: readList('staged'),
       unstaged: readList('unstaged'),
       untracked: readList('untracked'),
+      conflicted: readList('conflicted'),
     );
   }
 }

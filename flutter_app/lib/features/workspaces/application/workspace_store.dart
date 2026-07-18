@@ -111,7 +111,7 @@ class WorkspaceStore {
     if (!replaced) {
       next.insert(0, workspace);
     }
-    await _writeIndex(_WorkspaceIndex(version: 1, workspaces: next));
+    await _writeIndex(_WorkspaceIndex(version: 2, workspaces: next));
     await _writeWorkspaceManifest(workspace);
   }
 
@@ -120,7 +120,7 @@ class WorkspaceStore {
     final next = index.workspaces
         .where((workspace) => workspace.id != id)
         .toList();
-    await _writeIndex(_WorkspaceIndex(version: 1, workspaces: next));
+    await _writeIndex(_WorkspaceIndex(version: 2, workspaces: next));
 
     final activeId = await getActiveWorkspaceId();
     if (activeId == id) {

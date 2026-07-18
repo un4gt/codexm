@@ -8,6 +8,123 @@ extension on String {
 }
 
 extension _SessionsPageActions on _SessionsPageState {
+  Future<Workspace?> _ensureGitIdentity() async {
+    final workspace = _activeWorkspace;
+    if (workspace == null) {
+      return null;
+    }
+    final existingName = workspace.gitUserName ?? workspace.git?.userName;
+    final existingEmail = workspace.gitUserEmail ?? workspace.git?.userEmail;
+    if (existingName?.trim().isNotEmpty == true &&
+        existingEmail?.trim().isNotEmpty == true) {
+      return workspace;
+    }
+    final nameController = TextEditingController(text: existingName ?? '');
+    final emailController = TextEditingController(text: existingEmail ?? '');
+    final result = await showDialog<(String, String)>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('设置 Git 提交身份'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: '姓名'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(labelText: '邮箱'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final name = nameController.text.trim();
+              final email = emailController.text.trim();
+              if (name.isNotEmpty && email.isNotEmpty) {
+                Navigator.of(dialogContext).pop((name, email));
+              }
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    nameController.dispose();
+    emailController.dispose();
+    if (result == null) {
+      return null;
+    }
+    final updated = await _codeWorkspaceService.updateGitIdentity(
+      workspace,
+      userName: result.$1,
+      userEmail: result.$2,
+    );
+    _updateView(() {
+      _activeWorkspace = updated;
+    });
+    widget.onActiveWorkspaceChanged?.call(updated);
+    return updated;
+  }
+
+  Future<void> _completeWorkspaceMigration() async {
+    final migration = _migrationRequired;
+    if (migration == null || _busy || _running) {
+      return;
+    }
+    final workspace = await _ensureGitIdentity();
+    if (workspace == null || !mounted) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('保存工作区基线'),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: SelectableText(
+              migration.diff.trim().isEmpty
+                  ? '检测到未提交文件。保存后，所有历史会话将从这个基线创建独立代码副本。'
+                  : migration.diff,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('保存并继续'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    await _runAction('正在准备独立会话...', () async {
+      await _codeWorkspaceService.checkpointMigrationBaseline(
+        workspace,
+        message: 'Save workspace baseline before session migration',
+        userName: workspace.gitUserName!,
+        userEmail: workspace.gitUserEmail!,
+      );
+      return '工作区已完成独立会话迁移。';
+    });
+  }
+
   Future<String?> _promptSessionName({
     required String title,
     String? initialValue,
@@ -47,22 +164,295 @@ extension _SessionsPageActions on _SessionsPageState {
     return result;
   }
 
-  Future<void> _createSession() async {
+  Future<void> _createSession({Session? sourceSession}) async {
     final workspace = _activeWorkspace;
     if (workspace == null || _busy || _running) {
       return;
     }
-    final name = await _promptSessionName(title: '新建会话', hintText: '例如：发布问题排查');
+    if (sourceSession != null) {
+      final ready = await _checkpointSession(
+        sourceSession,
+        onlyWhenDirty: true,
+      );
+      if (!ready) {
+        return;
+      }
+    }
+    final name = await _promptSessionName(
+      title: sourceSession == null ? '新建会话' : '基于此会话新建',
+      hintText: '例如：发布问题排查',
+    );
     if (name == null) {
       return;
     }
     await _runAction('正在创建会话...', () async {
-      final session = await _sessionStore.createSession(
-        workspace.id,
+      final session = await _codeWorkspaceService.createSession(
+        workspace,
         title: name.trim().isEmpty ? '新会话' : name.trim(),
+        sourceSession: sourceSession,
       );
       _selectedSessionId = session.id;
       return '已创建会话：${session.title}';
+    });
+  }
+
+  Future<void> _showSessionChanges(Session session) async {
+    final workspace = _activeWorkspace;
+    if (workspace == null || _busy || _running) {
+      return;
+    }
+    final workingDirectory = await _workingDirectoryForSession(session);
+    if (workingDirectory == null || !mounted) {
+      return;
+    }
+    final status = await _codeWorkspaceService.statusFor(workspace, session);
+    final diff = await _native.gitDiff(
+      localRepoDirUri: workingDirectory.path,
+      maxBytes: 200000,
+    );
+    if (!mounted) {
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('${session.title}的改动'),
+        content: SizedBox(
+          width: 560,
+          child: SingleChildScrollView(
+            child: SelectableText(
+              status.isClean
+                  ? '当前没有未保存改动。'
+                  : (diff.trim().isEmpty
+                        ? '未跟踪文件：\n${status.untracked.join('\n')}'
+                        : diff),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _checkpointSession(
+    Session session, {
+    bool onlyWhenDirty = false,
+  }) async {
+    final workspace = _activeWorkspace;
+    if (workspace == null || _busy || _running) {
+      return false;
+    }
+    final status = await _codeWorkspaceService.statusFor(workspace, session);
+    if (status.isClean) {
+      return true;
+    }
+    final identifiedWorkspace = await _ensureGitIdentity();
+    if (identifiedWorkspace == null || !mounted) {
+      return false;
+    }
+    final workingDirectory = await _workingDirectoryForSession(session);
+    if (workingDirectory == null) {
+      return false;
+    }
+    final diff = await _native.gitDiff(
+      localRepoDirUri: workingDirectory.path,
+      maxBytes: 200000,
+    );
+    if (!mounted) {
+      return false;
+    }
+    final messageController = TextEditingController(
+      text: 'Save changes from ${session.title}',
+    );
+    final message = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('保存代码检查点'),
+        content: SizedBox(
+          width: 560,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: messageController,
+                decoration: const InputDecoration(labelText: '提交说明'),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: SelectableText(
+                    diff.trim().isEmpty
+                        ? '未跟踪文件：\n${status.untracked.join('\n')}'
+                        : diff,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = messageController.text.trim();
+              if (value.isNotEmpty) {
+                Navigator.of(dialogContext).pop(value);
+              }
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    messageController.dispose();
+    if (message == null) {
+      return false;
+    }
+    var completed = false;
+    await _runAction('正在保存代码检查点...', () async {
+      await _codeWorkspaceService.checkpoint(
+        identifiedWorkspace,
+        session,
+        message: message,
+      );
+      completed = true;
+      return '已保存 ${session.title} 的代码检查点。';
+    });
+    return completed;
+  }
+
+  Future<void> _mergeSession(Session source) async {
+    final workspace = _activeWorkspace;
+    if (workspace == null || _busy || _running) {
+      return;
+    }
+    if (!await _checkpointSession(source, onlyWhenDirty: true)) {
+      return;
+    }
+    final identifiedWorkspace = await _ensureGitIdentity();
+    if (identifiedWorkspace == null || !mounted) {
+      return;
+    }
+    final targetId = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: AppListSection(
+          title: '合并 ${source.title} 到',
+          children: [
+            AppListTile(
+              title: '主工作区',
+              subtitle: identifiedWorkspace.integrationBranch ?? 'main',
+              leading: const Icon(Icons.account_tree_outlined),
+              onTap: () => Navigator.of(sheetContext).pop('__main__'),
+            ),
+            for (final session in _sessions)
+              if (session.id != source.id &&
+                  session.codeState != SessionCodeState.archived)
+                AppListTile(
+                  title: session.title,
+                  subtitle: _sessionCodeStatusLabel(session),
+                  leading: const Icon(Icons.chat_bubble_outline),
+                  enabled: session.codeState == SessionCodeState.ready,
+                  onTap: () => Navigator.of(sheetContext).pop(session.id),
+                ),
+          ],
+        ),
+      ),
+    );
+    if (targetId == null) {
+      return;
+    }
+    final target = targetId == '__main__'
+        ? null
+        : _findSessionById(_sessions, targetId);
+    await _runAction('正在合并会话代码...', () async {
+      final result = await _codeWorkspaceService.merge(
+        identifiedWorkspace,
+        source: source,
+        target: target,
+      );
+      if (result.outcome == GitMergeOutcome.conflicts) {
+        if (target != null) {
+          _selectedSessionId = target.id;
+        }
+        return '合并存在冲突，请在目标${target == null ? '工作区' : '会话'}中解决。';
+      }
+      return switch (result.outcome) {
+        GitMergeOutcome.upToDate => '目标已包含该会话的全部改动。',
+        GitMergeOutcome.fastForward => '已快速合并 ${source.title}。',
+        GitMergeOutcome.merged => '已合并 ${source.title}。',
+        GitMergeOutcome.conflicts => '合并存在冲突。',
+      };
+    });
+  }
+
+  Future<void> _archiveSession(Session session) async {
+    final workspace = _activeWorkspace;
+    if (workspace == null || _busy || _running) {
+      return;
+    }
+    if (!await _checkpointSession(session, onlyWhenDirty: true)) {
+      return;
+    }
+    await _runAction('正在归档会话...', () async {
+      await _codeWorkspaceService.archive(workspace, session);
+      return '已归档会话：${session.title}';
+    });
+  }
+
+  Future<void> _continueSessionMerge(Session session) async {
+    final workspace = await _ensureGitIdentity();
+    if (workspace == null || _busy || _running) {
+      return;
+    }
+    await _runAction('正在完成合并...', () async {
+      final result = await _codeWorkspaceService.continueMerge(
+        workspace,
+        target: session,
+      );
+      return result.outcome == GitMergeOutcome.conflicts
+          ? '仍有 ${result.conflictPaths.length} 个冲突文件需要处理。'
+          : '已完成会话代码合并。';
+    });
+  }
+
+  Future<void> _abortSessionMerge(Session session) async {
+    final workspace = _activeWorkspace;
+    if (workspace == null || _busy || _running) {
+      return;
+    }
+    await _runAction('正在放弃合并...', () async {
+      await _codeWorkspaceService.abortMerge(workspace, target: session);
+      return '已放弃本次合并，目标会话已恢复。';
+    });
+  }
+
+  Future<void> _continueMainMerge() async {
+    final workspace = await _ensureGitIdentity();
+    if (workspace == null || _busy || _running) return;
+    await _runAction('正在完成主工作区合并...', () async {
+      final result = await _codeWorkspaceService.continueMerge(workspace);
+      return result.outcome == GitMergeOutcome.conflicts
+          ? '主工作区仍有 ${result.conflictPaths.length} 个冲突文件。'
+          : '已完成主工作区合并。';
+    });
+  }
+
+  Future<void> _abortMainMerge() async {
+    final workspace = _activeWorkspace;
+    if (workspace == null || _busy || _running) return;
+    await _runAction('正在放弃主工作区合并...', () async {
+      await _codeWorkspaceService.abortMerge(workspace);
+      return '已放弃主工作区合并。';
     });
   }
 
@@ -94,7 +484,9 @@ extension _SessionsPageActions on _SessionsPageState {
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('删除会话'),
-          content: Text('确认删除「${session.title}」吗？该会话中的消息将一并删除。'),
+          content: Text(
+            '删除「${session.title}」将移除聊天记录、代码工作副本和专属分支。若有未保存或未合并的代码，将再次向你确认。',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -102,7 +494,7 @@ extension _SessionsPageActions on _SessionsPageState {
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('删除'),
+              child: const Text('删除会话'),
             ),
           ],
         );
@@ -112,11 +504,45 @@ extension _SessionsPageActions on _SessionsPageState {
       return;
     }
     await _runAction('正在删除会话...', () async {
-      await _sessionStore.deleteSession(workspace.id, session.id);
+      try {
+        await _codeWorkspaceService.delete(workspace, session, force: false);
+      } on SessionCodeDirtyException catch (_) {
+        final force = await _confirmForceDeleteSession(session);
+        if (!force) return '已取消删除。';
+        await _codeWorkspaceService.delete(workspace, session, force: true);
+      } on SessionCodeUnmergedException catch (_) {
+        final force = await _confirmForceDeleteSession(session);
+        if (!force) return '已取消删除。';
+        await _codeWorkspaceService.delete(workspace, session, force: true);
+      }
       final remaining = await _sessionStore.listSessions(workspace.id);
       _selectedSessionId = remaining.isEmpty ? null : remaining.first.id;
       return '已删除会话：${session.title}';
     });
+  }
+
+  Future<bool> _confirmForceDeleteSession(Session session) async {
+    if (!mounted) return false;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('永久删除代码与会话'),
+        content: Text(
+          '「${session.title}」仍有未保存或未合并的代码。永久删除将移除代码副本、分支和聊天记录，且无法恢复。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('保留会话'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('仍要永久删除'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 
   Future<void> _selectSession(Session session) async {
@@ -208,8 +634,18 @@ extension _SessionsPageActions on _SessionsPageState {
                           onSelected: (action) async {
                             Navigator.of(sheetContext).pop();
                             switch (action) {
+                              case _SessionAction.changes:
+                                await _showSessionChanges(session);
+                              case _SessionAction.checkpoint:
+                                await _checkpointSession(session);
+                              case _SessionAction.merge:
+                                await _mergeSession(session);
+                              case _SessionAction.createFrom:
+                                await _createSession(sourceSession: session);
                               case _SessionAction.rename:
                                 await _renameSession(session);
+                              case _SessionAction.archive:
+                                await _archiveSession(session);
                               case _SessionAction.delete:
                                 await _deleteSession(session);
                             }
@@ -257,12 +693,16 @@ extension _SessionsPageActions on _SessionsPageState {
     try {
       final successStatus = await action();
       await _refresh(status: successStatus);
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (!mounted) {
         return;
       }
+      final details = mapSessionCodeError(error);
+      debugPrint(
+        'Session code action failed: ${details.debugMessage}\n$stackTrace',
+      );
       _updateView(() {
-        _status = '执行失败：$error';
+        _status = details.message;
       });
     } finally {
       if (mounted) {
@@ -279,10 +719,7 @@ extension _SessionsPageActions on _SessionsPageState {
       throw StateError('当前没有可用工作区。');
     }
 
-    final session = await _sessionStore.ensurePrimarySession(
-      workspace.id,
-      title: titleHint,
-    );
+    final session = await _codeWorkspaceService.ensurePrimarySession(workspace);
     _selectedSessionId = session.id;
     return session;
   }
@@ -323,8 +760,9 @@ extension _SessionsPageActions on _SessionsPageState {
       return value;
     }
     final paths = await _workspaceDirectoryService.pathsFor(workspace.id);
+    final workingDirectory = await _workingDirectoryForSession();
     return RuntimePathMapper(
-      workspaceRepoDir: paths.repoDir.path,
+      workspaceRepoDir: workingDirectory?.path ?? paths.repoDir.path,
       codexHomeDir: paths.codexHomeDir.path,
       tmpDir: paths.tmpDir.path,
     ).realToVirtual(value);
@@ -640,7 +1078,7 @@ extension _SessionsPageActions on _SessionsPageState {
             '- /logout：清除本地密钥',
             '',
             '说明',
-            '- /new、/resume：当前工作区固定单会话，自动恢复最近历史。',
+            '- /new：创建独立会话；/resume：继续当前会话。',
           ].join('\n'),
         );
         return true;
@@ -653,10 +1091,11 @@ extension _SessionsPageActions on _SessionsPageState {
             if (workspace == null) {
               return '当前没有可用工作区。';
             }
-            final paths = await _workspaceDirectoryService.pathsFor(
-              workspace.id,
-            );
-            final file = File('${paths.repoDir.path}/AGENTS.md');
+            final workingDirectory = await _workingDirectoryForSession();
+            if (workingDirectory == null) {
+              return '当前还没有可用会话。';
+            }
+            final file = File('${workingDirectory.path}/AGENTS.md');
             if (file.existsSync()) {
               return 'AGENTS.md 已存在（未覆盖）。';
             }
@@ -709,11 +1148,12 @@ extension _SessionsPageActions on _SessionsPageState {
             if (workspace == null) {
               return '当前没有可用工作区。';
             }
-            final paths = await _workspaceDirectoryService.pathsFor(
-              workspace.id,
-            );
+            final workingDirectory = await _workingDirectoryForSession();
+            if (workingDirectory == null) {
+              return '当前还没有可用会话。';
+            }
             final diff = await _native.gitDiff(
-              localRepoDirUri: paths.repoDir.path,
+              localRepoDirUri: workingDirectory.path,
               maxBytes: 200000,
             );
             if (diff.trim().isEmpty) {
@@ -742,8 +1182,8 @@ extension _SessionsPageActions on _SessionsPageState {
               '当前状态',
               '- 工作区：${workspace.name}',
               '- 会话：${session.title}',
-              '- 单会话模式：已启用',
-              '- 历史隐藏会话：$_legacySessionCount',
+              '- 工作区会话：${_sessions.length}',
+              '- 代码环境：${_sessionCodeStatusLabel(session)}',
               '- 模式：${session.codexCollaborationMode == 'plan' ? '计划' : '默认'}',
               '- 模型：${_settings.model?.trim().isNotEmpty == true ? _settings.model : '默认'}',
               '- 权限：${_settings.approvalPolicy}',
@@ -904,11 +1344,13 @@ extension _SessionsPageActions on _SessionsPageState {
               return '路径为空：用法 /mention <path>';
             }
             final workspace = _activeWorkspace;
+            final workingDirectory = await _workingDirectoryForSession();
             final label = workspace == null
                 ? trimmed
                 : displayPathForWorkspace(
                     await _workspaceDirectoryService.pathsFor(workspace.id),
                     trimmed,
+                    workspaceRepoDir: workingDirectory?.path,
                   );
             final next = [..._pendingMentions];
             if (!next.any(
@@ -958,7 +1400,7 @@ extension _SessionsPageActions on _SessionsPageState {
         await _runLocalCommandAction(
           rawText: rawText,
           pendingStatus: '正在整理命令说明...',
-          action: () async => '该命令当前仅在桌面端或多线程场景中可用，Android 单会话模式暂不支持。',
+          action: () async => '该命令当前在 Android 版本中暂不支持。',
         );
         return true;
       default:
@@ -979,7 +1421,10 @@ extension _SessionsPageActions on _SessionsPageState {
         rawText,
       );
     }
-    final paths = await _workspaceDirectoryService.pathsFor(workspace.id);
+    final workingDirectory = await _workingDirectoryForSession();
+    if (workingDirectory == null) {
+      throw StateError('当前会话代码环境不可用。');
+    }
     final mentions = [..._pendingMentions];
 
     final skillInputs = <CodexInputElement>[];
@@ -998,7 +1443,7 @@ extension _SessionsPageActions on _SessionsPageState {
           final rawPath = item.value.replaceFirst(RegExp(r'^file://'), '');
           final resolvedPath = rawPath.startsWith('/')
               ? rawPath
-              : '${paths.repoDir.path}/$rawPath';
+              : '${workingDirectory.path}/$rawPath';
           return <String, Object?>{
             'type': 'mention',
             'name': item.label,
@@ -1019,7 +1464,7 @@ extension _SessionsPageActions on _SessionsPageState {
         if (detail == null) {
           try {
             detail = await _native.gitShowCommit(
-              localRepoDirUri: paths.repoDir.path,
+              localRepoDirUri: workingDirectory.path,
               hash: mention.value,
               maxBytes: 60000,
             );

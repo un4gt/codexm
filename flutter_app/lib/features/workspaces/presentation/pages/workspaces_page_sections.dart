@@ -1,6 +1,6 @@
 part of 'workspaces_page.dart';
 
-enum _WorkspaceAction { activate, rename, delete }
+enum _WorkspaceAction { details, activate, rename, delete }
 
 class _WorkspaceStitchListSection extends StatelessWidget {
   const _WorkspaceStitchListSection({
@@ -10,6 +10,7 @@ class _WorkspaceStitchListSection extends StatelessWidget {
     required this.busy,
     required this.onSelectWorkspace,
     required this.onActivateWorkspace,
+    required this.onOpenWorkspaceDetails,
     required this.onRenameWorkspace,
     required this.onDeleteWorkspace,
   });
@@ -20,6 +21,7 @@ class _WorkspaceStitchListSection extends StatelessWidget {
   final bool busy;
   final ValueChanged<Workspace> onSelectWorkspace;
   final ValueChanged<Workspace> onActivateWorkspace;
+  final ValueChanged<Workspace> onOpenWorkspaceDetails;
   final ValueChanged<Workspace> onRenameWorkspace;
   final ValueChanged<Workspace> onDeleteWorkspace;
 
@@ -46,6 +48,7 @@ class _WorkspaceStitchListSection extends StatelessWidget {
             busy: busy,
             onTap: () => onSelectWorkspace(workspace),
             onActivate: () => onActivateWorkspace(workspace),
+            onOpenDetails: () => onOpenWorkspaceDetails(workspace),
             onRename: () => onRenameWorkspace(workspace),
             onDelete: () => onDeleteWorkspace(workspace),
           ),
@@ -62,6 +65,7 @@ class _WorkspaceStitchRow extends StatelessWidget {
     required this.busy,
     required this.onTap,
     required this.onActivate,
+    required this.onOpenDetails,
     required this.onRename,
     required this.onDelete,
   });
@@ -72,6 +76,7 @@ class _WorkspaceStitchRow extends StatelessWidget {
   final bool busy;
   final VoidCallback onTap;
   final VoidCallback onActivate;
+  final VoidCallback onOpenDetails;
   final VoidCallback onRename;
   final VoidCallback onDelete;
 
@@ -90,6 +95,8 @@ class _WorkspaceStitchRow extends StatelessWidget {
         enabled: !busy,
         onSelected: (action) {
           switch (action) {
+            case _WorkspaceAction.details:
+              onOpenDetails();
             case _WorkspaceAction.activate:
               onActivate();
             case _WorkspaceAction.rename:
@@ -99,6 +106,7 @@ class _WorkspaceStitchRow extends StatelessWidget {
           }
         },
         itemBuilder: (context) => const [
+          PopupMenuItem(value: _WorkspaceAction.details, child: Text('工作区详情')),
           PopupMenuItem(
             value: _WorkspaceAction.activate,
             child: Text('设为当前工作区'),

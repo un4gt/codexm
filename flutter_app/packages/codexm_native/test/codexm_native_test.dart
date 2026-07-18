@@ -97,6 +97,113 @@ class MockCodexmNativePlatform
   }
 
   @override
+  Future<GitRepositoryInfo> gitInitRepository({
+    required String localRepoDirUri,
+    required String initialBranch,
+  }) async => const GitRepositoryInfo(
+    branch: 'main',
+    headOid: 'abc',
+    isClean: true,
+    isMerging: false,
+  );
+
+  @override
+  Future<GitRepositoryInfo> gitRepositoryInfo({
+    required String localRepoDirUri,
+  }) => gitInitRepository(
+    localRepoDirUri: localRepoDirUri,
+    initialBranch: 'main',
+  );
+
+  @override
+  Future<GitWorktreeInfo> gitCreateWorktree({
+    required String mainRepoDirUri,
+    required String worktreeDirUri,
+    required String name,
+    required String branchName,
+    required String startRef,
+  }) async => GitWorktreeInfo(
+    name: name,
+    path: worktreeDirUri,
+    valid: true,
+    locked: false,
+  );
+
+  @override
+  Future<List<GitWorktreeInfo>> gitListWorktrees({
+    required String mainRepoDirUri,
+  }) async => const [];
+
+  @override
+  Future<void> gitRemoveWorktree({
+    required String mainRepoDirUri,
+    required String name,
+    required bool force,
+  }) async {}
+
+  @override
+  Future<GitCommitResult> gitCreateCheckpoint({
+    required String localRepoDirUri,
+    required String message,
+    required String userName,
+    required String userEmail,
+  }) async => const GitCommitResult(oid: 'abc', created: true);
+
+  @override
+  Future<bool> gitIsAncestor({
+    required String localRepoDirUri,
+    required String ancestorRef,
+    required String descendantRef,
+  }) async => true;
+
+  @override
+  Future<void> gitDeleteBranch({
+    required String localRepoDirUri,
+    required String branchName,
+    required bool force,
+  }) async {}
+
+  @override
+  Future<GitMergeResult> gitMerge({
+    required String targetRepoDirUri,
+    required String sourceRef,
+    required String message,
+    required String userName,
+    required String userEmail,
+  }) async => const GitMergeResult(
+    outcome: GitMergeOutcome.merged,
+    headOid: 'abc',
+    conflictPaths: [],
+  );
+
+  @override
+  Future<GitMergeResult> gitMergeState({required String targetRepoDirUri}) =>
+      gitMerge(
+        targetRepoDirUri: targetRepoDirUri,
+        sourceRef: 'source',
+        message: 'merge',
+        userName: 'name',
+        userEmail: 'email',
+      );
+
+  @override
+  Future<GitMergeResult> gitContinueMerge({
+    required String targetRepoDirUri,
+    required String message,
+    required String userName,
+    required String userEmail,
+  }) => gitMerge(
+    targetRepoDirUri: targetRepoDirUri,
+    sourceRef: 'source',
+    message: message,
+    userName: userName,
+    userEmail: userEmail,
+  );
+
+  @override
+  Future<void> gitAbortMerge({required String targetRepoDirUri}) async {}
+
+  @override
   Future<void> installApk({required String apkPath}) async {}
 
   @override

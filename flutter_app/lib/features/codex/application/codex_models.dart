@@ -144,6 +144,7 @@ class CodexRuntimeLaunchContext {
     required this.session,
     required this.settings,
     required this.paths,
+    required this.workingDirectory,
     required this.codexHomePath,
     required this.configTomlPath,
     required this.authJsonPath,
@@ -157,6 +158,7 @@ class CodexRuntimeLaunchContext {
   final Session session;
   final CodexSettings settings;
   final WorkspacePaths paths;
+  final String workingDirectory;
   final String codexHomePath;
   final String configTomlPath;
   final String authJsonPath;

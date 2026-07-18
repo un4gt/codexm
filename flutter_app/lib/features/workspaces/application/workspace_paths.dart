@@ -9,6 +9,7 @@ class WorkspacePaths {
     required this.id,
     required this.workspaceRoot,
     required this.repoDir,
+    required this.worktreesDir,
     required this.metaDir,
     required this.codexHomeDir,
     required this.tmpDir,
@@ -17,6 +18,7 @@ class WorkspacePaths {
   final String id;
   final Directory workspaceRoot;
   final Directory repoDir;
+  final Directory worktreesDir;
   final Directory metaDir;
   final Directory codexHomeDir;
   final Directory tmpDir;
@@ -26,6 +28,9 @@ class WorkspacePaths {
   File get configTomlFile => File('${codexHomeDir.path}/config.toml');
 
   File get authJsonFile => File('${codexHomeDir.path}/auth.json');
+
+  Directory sessionWorktreeDir(String sessionId) =>
+      Directory('${worktreesDir.path}/$sessionId');
 }
 
 /// Mirrors the RN workspace path rules on Flutter Android.
@@ -54,12 +59,14 @@ class WorkspaceDirectoryService {
   /// Returns the workspace paths without mutating on-disk contents.
   Future<WorkspacePaths> pathsFor(String workspaceId) async {
     final workspacesDir = await _appDirectoryService.workspacesDir();
-    final temporaryRoot =
-        await _appDirectoryService.ensureTemporarySubdir('workspaces');
+    final temporaryRoot = await _appDirectoryService.ensureTemporarySubdir(
+      'workspaces',
+    );
 
     final workspaceRoot = Directory('${workspacesDir.path}/$workspaceId');
     final tmpRoot = Directory('${temporaryRoot.path}/$workspaceId');
     final repoDir = Directory('${workspaceRoot.path}/repo');
+    final worktreesDir = Directory('${workspaceRoot.path}/worktrees');
     final metaDir = Directory('${workspaceRoot.path}/.meta');
     final codexHomeDir = Directory('${metaDir.path}/codex');
     final tmpDir = Directory('${tmpRoot.path}/tmp');
@@ -68,6 +75,7 @@ class WorkspaceDirectoryService {
       id: workspaceId,
       workspaceRoot: workspaceRoot,
       repoDir: repoDir,
+      worktreesDir: worktreesDir,
       metaDir: metaDir,
       codexHomeDir: codexHomeDir,
       tmpDir: tmpDir,
@@ -95,6 +103,7 @@ class WorkspaceDirectoryService {
 
     for (final directory in [
       paths.repoDir,
+      paths.worktreesDir,
       paths.metaDir,
       paths.codexHomeDir,
       paths.tmpDir,

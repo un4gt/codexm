@@ -413,13 +413,18 @@ Future<_RunnerFixture> _createRunnerFixture(_FakeRuntimeBridge bridge) async {
   final session = await sessionStore.createSession(
     workspace.id,
     title: 'Runner Session',
+    branchName: 'codexm/session/runner',
+    baseCommitOid: 'abc123',
+    codeState: SessionCodeState.ready,
   );
   await settingsStore.saveSettings(
     const CodexSettings(model: 'gpt-test', debugLogToFile: true),
   );
   await settingsStore.saveCodexApiKey('sk-test-1234567890');
   final paths = await workspaceDirectoryService.pathsFor(workspace.id);
-  bridge.structuredRepoPath = paths.repoDir.path;
+  final workingDirectory = paths.sessionWorktreeDir(session.id);
+  await workingDirectory.create(recursive: true);
+  bridge.structuredRepoPath = workingDirectory.path;
 
   final runner = CodexSessionRunner(
     launchContextService: CodexLaunchContextService(

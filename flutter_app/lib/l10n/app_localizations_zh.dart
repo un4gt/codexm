@@ -15,9 +15,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get navWorkspaces => '工作区';
 
   @override
-  String get navSessions => '会话';
-
-  @override
   String get navMcpSkills => 'MCP 与技能';
 
   @override
@@ -283,9 +280,6 @@ class AppLocalizationsZhHans extends AppLocalizationsZh {
 
   @override
   String get navWorkspaces => '工作区';
-
-  @override
-  String get navSessions => '会话';
 
   @override
   String get navMcpSkills => 'MCP 与技能';

@@ -30,13 +30,18 @@ void main() {
 
     expect(paths.workspaceRoot.existsSync(), isTrue);
     expect(paths.repoDir.existsSync(), isTrue);
+    expect(paths.worktreesDir.existsSync(), isTrue);
+    expect(
+      paths.sessionWorktreeDir('session-1').path,
+      '${paths.worktreesDir.path}/session-1',
+    );
     expect(paths.metaDir.existsSync(), isTrue);
     expect(paths.codexHomeDir.existsSync(), isTrue);
     expect(paths.tmpDir.existsSync(), isTrue);
 
-    final workspaceJson = jsonDecode(
-      await paths.workspaceJsonFile.readAsString(),
-    ) as Map<String, dynamic>;
+    final workspaceJson =
+        jsonDecode(await paths.workspaceJsonFile.readAsString())
+            as Map<String, dynamic>;
     expect(workspaceJson['id'], 'workspace-case');
     expect(workspaceJson['name'], 'Workspace Case');
 

@@ -14,6 +14,7 @@ void main() {
   const secureStorageChannel = MethodChannel(
     'plugins.it_nomads.com/flutter_secure_storage',
   );
+  const nativeChannel = MethodChannel('codexm_native/methods');
 
   late Directory documentsDir;
   late Directory temporaryDir;
@@ -29,6 +30,46 @@ void main() {
               return documentsDir.path;
             case 'getTemporaryDirectory':
               return temporaryDir.path;
+            default:
+              return null;
+          }
+        });
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(nativeChannel, (call) async {
+          final args = Map<String, Object?>.from(
+            call.arguments as Map? ?? const <String, Object?>{},
+          );
+          switch (call.method) {
+            case 'git.initRepository':
+            case 'git.repositoryInfo':
+              return {
+                'branch': 'main',
+                'headOid': 'abc123',
+                'isClean': true,
+                'isMerging': false,
+              };
+            case 'git.status':
+              return {
+                'staged': <String>[],
+                'unstaged': <String>[],
+                'untracked': <String>[],
+                'conflicted': <String>[],
+              };
+            case 'git.diff':
+              return '';
+            case 'git.listWorktrees':
+            case 'git.recentCommits':
+              return <Object?>[];
+            case 'git.createWorktree':
+              final path = args['worktreeDirUri']!.toString();
+              await Directory(path).create(recursive: true);
+              return {
+                'name': args['name'],
+                'path': path,
+                'valid': true,
+                'locked': false,
+              };
             default:
               return null;
           }
@@ -53,6 +94,8 @@ void main() {
         .setMockMethodCallHandler(pathProviderChannel, null);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(secureStorageChannel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(nativeChannel, null);
     if (documentsDir.existsSync()) {
       await documentsDir.delete(recursive: true);
     }
