@@ -412,6 +412,7 @@ class _ChatPanel extends StatelessWidget {
     required this.onSelectMentionSuggestion,
     required this.onRemovePendingMention,
     required this.onSendMessage,
+    required this.onStopMessage,
     required this.onOpenSessionSwitcher,
     required this.onCreateSession,
     required this.onRenameSession,
@@ -464,6 +465,7 @@ class _ChatPanel extends StatelessWidget {
   final ValueChanged<ComposerMentionSuggestion> onSelectMentionSuggestion;
   final ValueChanged<ComposerPendingMention> onRemovePendingMention;
   final VoidCallback onSendMessage;
+  final VoidCallback onStopMessage;
   final VoidCallback onOpenSessionSwitcher;
   final VoidCallback onCreateSession;
   final ValueChanged<Session> onRenameSession;
@@ -636,6 +638,7 @@ class _ChatPanel extends StatelessWidget {
               onSelectMentionSuggestion: onSelectMentionSuggestion,
               onRemovePendingMention: onRemovePendingMention,
               onSendMessage: onSendMessage,
+              onStopMessage: onStopMessage,
               canSend: canSend,
               canEditComposer: canEditComposer,
               showSuggestions: showSuggestions,
@@ -953,6 +956,7 @@ class _SessionInputBar extends StatefulWidget {
     required this.onSelectMentionSuggestion,
     required this.onRemovePendingMention,
     required this.onSendMessage,
+    required this.onStopMessage,
     required this.canSend,
     required this.canEditComposer,
     required this.showSuggestions,
@@ -973,6 +977,7 @@ class _SessionInputBar extends StatefulWidget {
   final ValueChanged<ComposerMentionSuggestion> onSelectMentionSuggestion;
   final ValueChanged<ComposerPendingMention> onRemovePendingMention;
   final VoidCallback onSendMessage;
+  final VoidCallback onStopMessage;
   final bool canSend;
   final bool canEditComposer;
   final bool showSuggestions;
@@ -1162,10 +1167,10 @@ class _SessionInputBarState extends State<_SessionInputBar> {
     }
 
     final sendButtonTooltip = widget.running
-        ? '正在等待 Codex 回复'
+        ? '停止当前轮次'
         : (widget.canSend ? '发送消息' : '请输入内容后发送');
     final sendButtonLabel = widget.running
-        ? '正在等待 Codex 回复'
+        ? '停止当前轮次'
         : (widget.canSend ? '发送消息' : '发送消息（不可用）');
 
     return DecoratedBox(
@@ -1345,27 +1350,23 @@ class _SessionInputBarState extends State<_SessionInputBar> {
                         const SizedBox(width: 8),
                         Semantics(
                           button: true,
-                          enabled: widget.canSend,
+                          enabled: widget.running || widget.canSend,
                           label: sendButtonLabel,
                           child: IconButton.filled(
                             tooltip: sendButtonTooltip,
-                            onPressed: widget.canSend
-                                ? widget.onSendMessage
-                                : null,
+                            onPressed: widget.running
+                                ? widget.onStopMessage
+                                : (widget.canSend
+                                      ? widget.onSendMessage
+                                      : null),
                             icon: AnimatedSwitcher(
                               duration: const Duration(milliseconds: 180),
                               switchInCurve: Curves.easeOut,
                               switchOutCurve: Curves.easeIn,
                               child: widget.running
-                                  ? SizedBox(
-                                      key: const ValueKey('send-loading'),
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.4,
-                                        color:
-                                            theme.colorScheme.onSurfaceVariant,
-                                      ),
+                                  ? const Icon(
+                                      Icons.stop_rounded,
+                                      key: ValueKey('stop-icon'),
                                     )
                                   : const Icon(
                                       Icons.arrow_upward_rounded,

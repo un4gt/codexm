@@ -19,10 +19,14 @@ CodexM 是一个以移动端为主的 Codex 交互与 coding 工作台，当前�
 - 输入增强：slash command、本地命令、`@` 文件与最近 commit mention
 - MCP：全局作用域，仅支持 `Streamable HTTP/HTTP` 与 `Rust stdio (aarch64 build)`
 - skills：全局作用域管理
+- 局域网 Web 工作台：通过一次性配对码在浏览器查看工作区与多会话、发送消息、接收流式输出并停止当前 turn；使用 Android 前台服务保持后台运行
+
+局域网工作台的开启方式、安全边界、功能限制和故障排查见 [`docs/lan-web.md`](docs/lan-web.md)。
 
 ## 仍待验证
 
 - Android `arm64` 真机验收尚未执行
+- 局域网 Web 工作台的锁屏、系统回收与 Wi-Fi 重连仍需在 Android `arm64` 真机验收
 - 当前不支持 iOS
 - 同一时间只运行一个 Codex turn
 - 会话合并仅修改本地仓库，不会自动推送远端

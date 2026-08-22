@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:codexm_native/codexm_native.dart';
@@ -7,16 +8,15 @@ import 'package:flutter/services.dart';
 import '../../../../shared/widgets/adaptive_breakpoints.dart';
 import '../../../../shared/widgets/app_ui.dart';
 import '../../../codex/application/codex_models.dart';
-import '../../../codex/application/codex_session_runner.dart';
 import '../../../codex/application/codex_skills_store.dart';
 import '../../../codex/application/codex_slash_commands.dart';
 import '../../../codex/application/runtime_path_mapper.dart';
+import '../../../codex/application/session_turn_coordinator.dart';
 import '../../../mcp/application/mcp_store.dart';
 import '../../../settings/application/codex_settings_store.dart';
 import '../../../workspaces/application/workspace_models.dart';
 import '../../../workspaces/application/workspace_paths.dart';
 import '../../../workspaces/application/workspace_store.dart';
-import '../../application/assistant_part_accumulator.dart';
 import '../../application/session_composer_logic.dart';
 import '../../application/session_code_error_mapper.dart';
 import '../../application/session_code_workspace_service.dart';
@@ -52,6 +52,7 @@ class SessionsPage extends StatefulWidget {
     this.onOpenSettingsRequested,
     this.onDetailVisibilityChanged,
     this.onActivityChanged,
+    this.turnCoordinator,
   });
 
   final bool isActive;
@@ -63,6 +64,7 @@ class SessionsPage extends StatefulWidget {
   final VoidCallback? onOpenSettingsRequested;
   final ValueChanged<bool>? onDetailVisibilityChanged;
   final ValueChanged<SessionActivity?>? onActivityChanged;
+  final SessionTurnCoordinator? turnCoordinator;
 
   @override
   State<SessionsPage> createState() => _SessionsPageState();
@@ -77,7 +79,6 @@ class _SessionsPageState extends State<SessionsPage> {
   final _settingsStore = CodexSettingsStore();
   final _mcpStore = McpStore();
   final _skillsStore = CodexSkillsStore();
-  final _runner = CodexSessionRunner();
   final _composerController = TextEditingController();
   final _messagesScrollController = ScrollController();
   final _chatSearchController = TextEditingController();
@@ -114,12 +115,24 @@ class _SessionsPageState extends State<SessionsPage> {
   bool _followMessageOutput = true;
   bool _showScrollToBottom = false;
   SessionCodeMigrationRequiredException? _migrationRequired;
+  late final SessionTurnCoordinator _turnCoordinator;
+  late final bool _ownsTurnCoordinator;
+  StreamSubscription<ActiveTurnSnapshot?>? _turnStateSubscription;
 
   @override
   void initState() {
     super.initState();
+    _ownsTurnCoordinator = widget.turnCoordinator == null;
+    _turnCoordinator = widget.turnCoordinator ?? SessionTurnCoordinator();
+    _turnStateSubscription = _turnCoordinator.states.listen(
+      _handleTurnStateChanged,
+    );
     _composerController.addListener(_handleComposerChanged);
     _messagesScrollController.addListener(_handleMessageScroll);
+    _handleTurnStateChanged(
+      _turnCoordinator.activeTurn,
+      refreshWhenDone: false,
+    );
     _refresh();
   }
 
@@ -129,10 +142,53 @@ class _SessionsPageState extends State<SessionsPage> {
     widget.onActivityChanged?.call(null);
     _composerController.removeListener(_handleComposerChanged);
     _messagesScrollController.removeListener(_handleMessageScroll);
+    _turnStateSubscription?.cancel();
+    if (_ownsTurnCoordinator) {
+      unawaited(_turnCoordinator.dispose());
+    }
     _composerController.dispose();
     _chatSearchController.dispose();
     _messagesScrollController.dispose();
     super.dispose();
+  }
+
+  void _handleTurnStateChanged(
+    ActiveTurnSnapshot? active, {
+    bool refreshWhenDone = true,
+  }) {
+    final wasRunning = _running;
+    final selectedHere =
+        active != null &&
+        active.workspaceId == _activeWorkspace?.id &&
+        active.sessionId == _selectedSessionId;
+    _updateView(() {
+      _running = active != null;
+      if (selectedHere) {
+        _pendingAssistantText = active.assistantText;
+        _pendingAssistantParts = active.assistantParts;
+        _pendingStartedAt = active.startedAt;
+        _runtimeStatus = active.runtimeStatus;
+        _runtimeStatusIsRetrying = active.runtimeStatusIsRetrying;
+        _status = active.pendingStatus;
+      } else {
+        _pendingAssistantText = '';
+        _pendingAssistantParts = const <ChatMessagePart>[];
+        _pendingStartedAt = 0;
+        _runtimeStatus = null;
+        _runtimeStatusIsRetrying = false;
+        if (active != null) {
+          _status =
+              '「${active.sessionTitle}」正在${active.origin == TurnOrigin.web ? '网页端' : '手机端'}运行。';
+        }
+      }
+    });
+    _emitActivityState();
+    if (selectedHere) {
+      _scrollToBottom(animated: false);
+    }
+    if (wasRunning && active == null && refreshWhenDone) {
+      unawaited(_refresh());
+    }
   }
 
   void _setChatDetailVisible(bool visible) {
@@ -196,17 +252,16 @@ class _SessionsPageState extends State<SessionsPage> {
   }
 
   void _emitActivityState() {
-    final workspace = _activeWorkspace;
-    final session = _selectedSession;
-    if (!_running || workspace == null || session == null) {
+    final active = _turnCoordinator.activeTurn;
+    if (active == null) {
       widget.onActivityChanged?.call(null);
       return;
     }
     widget.onActivityChanged?.call(
       SessionActivity(
-        workspaceId: workspace.id,
-        sessionId: session.id,
-        sessionTitle: session.title,
+        workspaceId: active.workspaceId,
+        sessionId: active.sessionId,
+        sessionTitle: active.sessionTitle,
       ),
     );
   }
@@ -739,6 +794,7 @@ class _SessionsPageState extends State<SessionsPage> {
             onSelectMentionSuggestion: _applyMentionSuggestion,
             onRemovePendingMention: _removePendingMention,
             onSendMessage: _sendMessage,
+            onStopMessage: _stopCodexOperation,
             onOpenSessionSwitcher: _openSessionSwitcher,
             onCreateSession: () => _createSession(),
             onRenameSession: _renameSession,
@@ -763,7 +819,10 @@ class _SessionsPageState extends State<SessionsPage> {
       workspace: _activeWorkspace,
       sessions: _sessions,
       selectedSessionId: _selectedSessionId,
-      runningSessionId: _running ? _selectedSessionId : null,
+      runningSessionId:
+          _turnCoordinator.activeTurn?.workspaceId == _activeWorkspace?.id
+          ? _turnCoordinator.activeTurn?.sessionId
+          : null,
       busy: _busy,
       onOpenWorkspaces: widget.onOpenWorkspacesRequested,
       onOpenSession: _openChatForSession,

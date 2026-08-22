@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#f7f8fb">
+    <title>CodexM</title>
+    <link rel="icon" type="image/png" href="/app-icon.png">
+    <link rel="stylesheet" href="/styles.css">
+    <script defer src="/vendor/marked.min.js"></script>
+    <script defer src="/vendor/purify.min.js"></script>
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">跳到对话内容</a>
+
+    <main id="pair-view" class="pair-view" aria-labelledby="pair-title">
+      <section class="pair-panel">
+        <img class="pair-logo" src="/app-icon.png" width="64" height="64" alt="CodexM">
+        <h1 id="pair-title">连接 CodexM</h1>
+        <p id="pair-subtitle" class="muted">输入手机上显示的一次性配对码</p>
+        <form id="pair-form" novalidate>
+          <label id="pair-label" for="pair-code">配对码</label>
+          <input
+            id="pair-code"
+            name="code"
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            pattern="[0-9]{6}"
+            maxlength="6"
+            required
+          >
+          <p id="pair-error" class="field-error" role="alert"></p>
+          <button id="pair-submit" class="primary-command" type="submit">连接</button>
+        </form>
+      </section>
+    </main>
+
+    <div id="workspace-view" class="workspace-view" hidden>
+      <div id="drawer-scrim" class="drawer-scrim" hidden></div>
+      <aside id="sidebar" class="sidebar" aria-label="工作区与会话">
+        <header class="brand-row">
+          <img src="/app-icon.png" width="32" height="32" alt="">
+          <span>CodexM</span>
+          <button id="close-sidebar" class="icon-button mobile-only" type="button" aria-label="关闭侧栏"></button>
+        </header>
+        <div class="sidebar-heading-row">
+          <h2 id="workspaces-heading">工作区</h2>
+          <span id="workspace-count" class="count-label"></span>
+        </div>
+        <nav id="workspace-tree" class="workspace-tree" aria-labelledby="workspaces-heading"></nav>
+        <footer class="sidebar-footer">
+          <div class="connection-state">
+            <span id="connection-dot" class="status-dot" aria-hidden="true"></span>
+            <span id="connection-label">正在连接</span>
+          </div>
+          <button id="logout-button" class="icon-button" type="button" aria-label="断开此浏览器"></button>
+        </footer>
+      </aside>
+
+      <section class="chat-shell">
+        <header class="chat-header">
+          <button id="open-sidebar" class="icon-button mobile-only" type="button" aria-label="打开侧栏"></button>
+          <div class="chat-title-wrap">
+            <p id="current-workspace" class="chat-context"></p>
+            <h1 id="current-session">选择会话</h1>
+          </div>
+          <div id="mode-control" class="segmented-control" role="group" aria-label="会话模式">
+            <button type="button" data-mode="standard">默认</button>
+            <button type="button" data-mode="plan">计划</button>
+          </div>
+        </header>
+
+        <div id="reconnect-banner" class="status-banner" role="status" hidden>
+          <span id="reconnect-text">连接已中断，正在重试…</span>
+        </div>
+        <button id="active-turn-banner" class="active-turn-banner" type="button" hidden></button>
+
+        <main id="main-content" class="message-region" tabindex="-1">
+          <div id="empty-state" class="empty-state">
+            <img src="/app-icon.png" width="52" height="52" alt="">
+            <h2>选择一个会话</h2>
+          </div>
+          <div id="message-column" class="message-column" hidden>
+            <button id="load-older" class="load-older" type="button" hidden>加载更早消息</button>
+            <ol id="message-list" class="message-list" aria-live="polite" aria-relevant="additions text"></ol>
+          </div>
+        </main>
+
+        <footer class="composer-dock">
+          <form id="composer-form" class="composer" novalidate>
+            <label id="composer-label" class="sr-only" for="composer-input">消息</label>
+            <textarea
+              id="composer-input"
+              rows="1"
+              maxlength="32768"
+              placeholder="在这里输入消息..."
+            ></textarea>
+            <div class="composer-footer">
+              <span id="composer-context" class="composer-context"></span>
+              <button id="send-button" class="send-button" type="submit" aria-label="发送消息"></button>
+            </div>
+          </form>
+        </footer>
+      </section>
+    </div>
+
+    <dialog id="session-dialog" class="session-dialog">
+      <form id="session-form" method="dialog">
+        <header>
+          <h2 id="session-dialog-title">新建会话</h2>
+          <button id="close-dialog" class="icon-button" type="button" aria-label="关闭"></button>
+        </header>
+        <label id="session-name-label" for="session-name">会话名称</label>
+        <input id="session-name" type="text" maxlength="80" required>
+        <p id="session-error" class="field-error" role="alert"></p>
+        <footer>
+          <button id="cancel-dialog" class="secondary-command" type="button">取消</button>
+          <button id="save-session" class="primary-command" type="submit">保存</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  </body>
+</html>

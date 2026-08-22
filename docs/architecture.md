@@ -25,6 +25,9 @@
 - `lib/features/mcp/`
 - `lib/features/webdav/`
 - `lib/features/codex/`
+- `lib/features/lan_access/`
+
+`lib/app/app_services.dart` 是应用级服务容器。手机页面和局域网 HTTP 服务共享同一组 `WorkspaceStore`、`SessionStore`、`CodexSettingsStore`、`CodexSessionRunner` 与 `SessionTurnCoordinator`，避免为网页端创建第二份 runtime 或状态副本。
 
 ### 2. Native Plugin
 
@@ -53,6 +56,27 @@
 3. `codexm_native` 从 `nativeLibraryDir` 解析 `libcodex.so` / `libcodex_exec.so` / `librg.so`
 4. Android 侧补齐 `LD_LIBRARY_PATH`，并在运行前做共享库依赖预检
 5. `CodexSessionRunner` 以当前会话 worktree 作为 `cwd`，通过 JSON-RPC / SSE 启动或恢复 thread 并驱动流式消息
+
+`SessionTurnCoordinator` 位于所有手机端和网页端入口之前，负责：
+
+- 全局只允许一个 Codex turn
+- 统一持久化 user / assistant / system 消息
+- 聚合流式文本和结构化 message parts
+- 广播 active turn 快照
+- 协调停止请求，并保留停止前已经产生的输出
+- 在 turn 运行期间排斥创建、重命名和模式切换等冲突操作
+
+## 局域网 Web 工作台
+
+局域网访问由三层组成：
+
+1. Android `LanNetworkMonitor` 只枚举 Wi-Fi / 以太网的私有 IPv4 地址，并通过 EventChannel 推送地址变化。
+2. `LanAccessController` 持久化开关与端口，根据网络状态启动、重绑或停止 `LanHttpServer`，同时维护 `connectedDevice` 前台服务通知。
+3. `LanHttpServer` 提供打包在 APK 内的原生 HTML/CSS/ES Modules、JSON API 和 WebSocket 事件，并把会话操作交给共享 store 与 `SessionTurnCoordinator`。
+
+Android `Application` 持有缓存的单个 `FlutterEngine`。`MainActivity` 销毁时不销毁 engine，因此页面退到后台或锁屏后，HTTP 监听和 Codex turn 不依赖 Activity 生命周期。持久化开关开启时，进程重新创建或 LAN 地址恢复会重新监听；不注册开机广播。
+
+安全边界包括一次性 6 位配对码、内存 Cookie token、独立 CSRF token、精确 Origin 校验、来源 IP 限流、请求大小限制和脱敏 DTO。服务只绑定选定的 LAN 地址，不监听 `0.0.0.0`、蜂窝或 VPN。HTTP 本身不加密，完整约束见 [`lan-web.md`](lan-web.md)。
 
 ## 工作区与会话代码模型
 
@@ -100,6 +124,6 @@
 - MCP 仅支持：
   - `Streamable HTTP/HTTP`
   - `Rust stdio (aarch64 build)`
-- 同一时间只允许一个 Codex turn 运行，运行期间不能切换到其他会话
+- 同一时间只允许一个 Codex turn 运行；手机端和网页端都显示同一个 active turn，并可停止当前轮次
 - 主工作区发生冲突时，当前没有专用 Codex 冲突处理会话，需要在后续版本补充对应流程
 - 真机 `arm64` 验收仍待执行

@@ -38,6 +38,20 @@ class CodexSessionRunner {
   final CodexRuntimeBridge _runtimeBridge;
   final bool Function() _platformIsAndroid;
   final DateTime Function() _now;
+  final Map<String, JsonRpcClient> _activeRpcClients =
+      <String, JsonRpcClient>{};
+
+  Future<void> cancelActiveRuns() async {
+    final active = _activeRpcClients.entries.toList(growable: false);
+    for (final entry in active) {
+      entry.value.rejectAllPending(StateError('Codex turn cancelled'));
+      try {
+        await _runtimeBridge.stopRuntime(runtimeId: entry.key);
+      } catch (_) {
+        // The normal run cleanup handles an already-stopped runtime.
+      }
+    }
+  }
 
   Stream<CodexTurnEvent> run({
     required Workspace workspace,
@@ -133,6 +147,7 @@ class CodexSessionRunner {
     final rpc = JsonRpcClient((line) {
       return _runtimeBridge.sendRuntimeLine(runtimeId: runtimeId, line: line);
     });
+    _activeRpcClients[runtimeId] = rpc;
     final notificationSubscription = rpc.notifications.listen(
       notificationQueue.push,
     );
@@ -591,6 +606,7 @@ class CodexSessionRunner {
       );
       yield mappedError(messageForUser);
     } finally {
+      _activeRpcClients.remove(runtimeId);
       pumpRunning = false;
       lineQueue.close();
       notificationQueue.close();

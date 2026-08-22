@@ -186,11 +186,17 @@ extension _SessionsPageActions on _SessionsPageState {
       return;
     }
     await _runAction('正在创建会话...', () async {
-      final session = await _codeWorkspaceService.createSession(
-        workspace,
-        title: name.trim().isEmpty ? '新会话' : name.trim(),
-        sourceSession: sourceSession,
-      );
+      final title = name.trim().isEmpty ? '新会话' : name.trim();
+      final session = sourceSession == null
+          ? await _turnCoordinator.createSession(
+              workspaceId: workspace.id,
+              title: title,
+            )
+          : await _codeWorkspaceService.createSession(
+              workspace,
+              title: title,
+              sourceSession: sourceSession,
+            );
       _selectedSessionId = session.id;
       return '已创建会话：${session.title}';
     });
@@ -469,7 +475,11 @@ extension _SessionsPageActions on _SessionsPageState {
       return;
     }
     await _runAction('正在保存会话名称...', () async {
-      await _sessionStore.renameSession(workspace.id, session.id, name);
+      await _turnCoordinator.renameSession(
+        workspaceId: workspace.id,
+        sessionId: session.id,
+        title: name,
+      );
       return '已更新会话名称。';
     });
   }
@@ -1042,10 +1052,10 @@ extension _SessionsPageActions on _SessionsPageState {
         pendingStatus: '正在切换会话模式...',
         action: () async {
           final session = await _ensureSession(titleHint: '主会话');
-          await _sessionStore.setSessionCodexCollaborationMode(
-            session.workspaceId,
-            session.id,
-            nextMode.wireValue,
+          await _turnCoordinator.setSessionMode(
+            workspaceId: session.workspaceId,
+            sessionId: session.id,
+            mode: nextMode,
           );
           return nextMode == CodexCollaborationMode.plan
               ? '已切换到计划模式。'
@@ -1504,7 +1514,7 @@ extension _SessionsPageActions on _SessionsPageState {
     List<CodexRpcCall>? rpcCalls,
     CodexCollaborationMode? collaborationModeOverride,
   }) async {
-    if (_running || _busy) {
+    if (_turnCoordinator.activeTurn != null || _busy) {
       return;
     }
 
@@ -1512,181 +1522,46 @@ extension _SessionsPageActions on _SessionsPageState {
     if (workspace == null) {
       return;
     }
-    if (!_settings.enabled) {
-      _updateView(() {
-        _status = '当前已暂停 Codex 运行，请先到设置页启用。';
-      });
-      return;
-    }
-    if (!_hasApiKey) {
-      _updateView(() {
-        _status = '还未设置访问令牌，请先到设置页完成配置。';
-      });
-      return;
-    }
-
-    final startedAt = DateTime.now().millisecondsSinceEpoch;
-    final accumulator = AssistantPartAccumulator();
-    String? errorMessage;
-    Session? session;
-
-    _updateView(() {
-      _running = true;
-      _pendingAssistantText = '';
-      _pendingAssistantParts = const <ChatMessagePart>[];
-      _pendingStartedAt = startedAt;
-      _runtimeStatus = null;
-      _runtimeStatusIsRetrying = false;
-      _status = pendingStatus;
-    });
-    _emitActivityState();
-
     try {
       final ensuredSession = await _ensureSession(titleHint: titleHint);
-      session = ensuredSession;
-      final message = userMessage?.blankAsNull;
-      if (message != null) {
-        final displayMessage = await _displayTextForActiveWorkspace(message);
-        await _sessionStore.appendMessage(
-          workspace.id,
-          ensuredSession.id,
-          role: 'user',
-          content: displayMessage,
-        );
-      }
-
-      await _refresh(status: pendingStatus);
-      if (!mounted) {
-        return;
-      }
-
       final collaborationMode =
           collaborationModeOverride ??
           (_selectedSession?.codexCollaborationMode == 'plan'
               ? CodexCollaborationMode.plan
               : CodexCollaborationMode.standard);
-
+      final displayMessage = userMessage?.blankAsNull == null
+          ? null
+          : await _displayTextForActiveWorkspace(userMessage!);
       _scrollToBottom(animated: false, force: true);
-      await for (final event in _runner.run(
-        workspace: workspace,
-        sessionId: ensuredSession.id,
-        input: input,
-        kind: kind,
-        collaborationMode: collaborationMode,
-        rpcCalls: rpcCalls,
-      )) {
-        if (!mounted) {
-          return;
-        }
-
-        switch (event.type) {
-          case CodexTurnEventType.text:
-            accumulator.appendText(event.text ?? '');
-            _updateView(() {
-              _pendingAssistantText = accumulator.text;
-              _pendingAssistantParts = accumulator.parts;
-            });
-            _scrollToBottom(animated: false);
-          case CodexTurnEventType.messagePart:
-            accumulator.mergePart(
-              id: event.partId,
-              kind: event.partKind,
-              title: event.partTitle,
-              content: event.partContent ?? '',
-              status: event.partStatus,
-            );
-            _updateView(() {
-              _pendingAssistantParts = accumulator.parts;
-            });
-            _scrollToBottom(animated: false);
-          case CodexTurnEventType.status:
-            final message = event.message?.trim() ?? '';
-            _updateView(() {
-              _runtimeStatus = message.isEmpty
-                  ? (_running ? '已重新连接，继续生成...' : null)
-                  : message;
-              _runtimeStatusIsRetrying = message.isNotEmpty && event.isRetrying;
-            });
-          case CodexTurnEventType.error:
-            errorMessage = event.message ?? '运行失败。';
-            _updateView(() {
-              _runtimeStatus = null;
-              _runtimeStatusIsRetrying = false;
-              _status = errorMessage!;
-            });
-          case CodexTurnEventType.rpcResult:
-          case CodexTurnEventType.done:
-            _updateView(() {
-              _runtimeStatus = null;
-              _runtimeStatusIsRetrying = false;
-            });
-            break;
-        }
-      }
+      final result = await _turnCoordinator.runTurn(
+        CoordinatedTurnRequest(
+          workspace: workspace,
+          session: ensuredSession,
+          origin: TurnOrigin.mobile,
+          pendingStatus: pendingStatus,
+          successStatus: successStatus,
+          userMessage: displayMessage,
+          input: input,
+          kind: kind,
+          collaborationMode: collaborationMode,
+          rpcCalls: rpcCalls,
+        ),
+      );
+      await _refresh(status: result.status);
+    } on TurnBusyException catch (error) {
+      _updateView(() {
+        _status = error.toString();
+      });
     } catch (error) {
-      errorMessage = '$error';
+      final displayError = await _displayTextForActiveWorkspace('$error');
+      _updateView(() {
+        _status = displayError;
+      });
     }
+  }
 
-    ChatMessage? assistantMessage;
-    ChatMessage? systemMessage;
-    final activeSession = session;
-    final assistantText = accumulator.text.trimRight();
-    final assistantParts = accumulator.parts;
-    if (activeSession != null &&
-        (assistantText.isNotEmpty || assistantParts.isNotEmpty)) {
-      assistantMessage = await _sessionStore.appendMessage(
-        workspace.id,
-        activeSession.id,
-        role: 'assistant',
-        content: assistantText,
-        parts: assistantParts,
-        createdAt: startedAt,
-      );
-    }
-    if (activeSession != null && errorMessage?.trim().isNotEmpty == true) {
-      final displayError = await _displayTextForActiveWorkspace(
-        errorMessage!.trim(),
-      );
-      systemMessage = await _sessionStore.appendMessage(
-        workspace.id,
-        activeSession.id,
-        role: 'system',
-        content: displayError,
-      );
-      errorMessage = displayError;
-    }
-    final updatedSessions = activeSession == null
-        ? null
-        : await _sessionStore.listSessions(workspace.id);
-
-    if (!mounted) {
-      return;
-    }
-    final shouldUpdateVisibleMessages =
-        activeSession != null &&
-        _activeWorkspace?.id == workspace.id &&
-        _selectedSessionId == activeSession.id;
-    _updateView(() {
-      _running = false;
-      _pendingAssistantText = '';
-      _pendingAssistantParts = const <ChatMessagePart>[];
-      _pendingStartedAt = 0;
-      _runtimeStatus = null;
-      _runtimeStatusIsRetrying = false;
-      _status = errorMessage ?? successStatus;
-      if (updatedSessions != null && _activeWorkspace?.id == workspace.id) {
-        _sessions = updatedSessions;
-      }
-      if (shouldUpdateVisibleMessages) {
-        _messages = [..._messages, ?assistantMessage, ?systemMessage];
-      }
-    });
-    _emitActivityState();
-    if (shouldUpdateVisibleMessages) {
-      _scrollToBottom(animated: false);
-    } else {
-      await _refresh(status: errorMessage ?? successStatus);
-    }
+  Future<void> _stopCodexOperation() async {
+    await _turnCoordinator.cancelActiveTurn();
   }
 
   String _deriveSessionTitle(String input) {

@@ -5,13 +5,21 @@ import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/adaptive_breakpoints.dart';
 import '../../../../shared/widgets/app_ui.dart';
 import '../../../../shared/widgets/stitch_ui.dart';
+import '../../../lan_access/application/lan_access_controller.dart';
+import '../../../lan_access/presentation/lan_access_settings_section.dart';
 import '../../../mcp/application/mcp_models.dart';
 import '../../../mcp/application/mcp_store.dart';
 import '../../../update/presentation/update_page.dart';
 import '../../application/codex_settings_store.dart';
 part 'settings_page_sections.dart';
 
-enum _SettingsDestination { connection, appearance, interaction, advanced }
+enum _SettingsDestination {
+  connection,
+  lanAccess,
+  appearance,
+  interaction,
+  advanced,
+}
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({
@@ -19,11 +27,13 @@ class SettingsPage extends StatefulWidget {
     this.isActive = true,
     this.onLocalePreferenceChanged,
     this.onSettingsChanged,
+    this.lanAccessController,
   });
 
   final bool isActive;
   final ValueChanged<Locale?>? onLocalePreferenceChanged;
   final ValueChanged<CodexSettings>? onSettingsChanged;
+  final LanAccessController? lanAccessController;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -387,6 +397,7 @@ class _SettingsPageState extends State<SettingsPage> {
   ) {
     return switch (destination) {
       _SettingsDestination.connection => '连接与模型',
+      _SettingsDestination.lanAccess => '局域网访问',
       _SettingsDestination.appearance => l10n.settingsAppearanceSection,
       _SettingsDestination.interaction => l10n.settingsInteractionPreferences,
       _SettingsDestination.advanced => l10n.settingsAdvancedConfig,
@@ -441,6 +452,18 @@ class _SettingsPageState extends State<SettingsPage> {
                 _selectedDestination = _SettingsDestination.interaction;
               }),
             ),
+            if (widget.lanAccessController != null)
+              AppListTile(
+                title: '局域网访问',
+                subtitle: widget.lanAccessController!.state.enabled
+                    ? '已开启'
+                    : '已关闭',
+                leading: const Icon(Icons.lan_outlined),
+                selected: selected == _SettingsDestination.lanAccess,
+                onTap: () => setState(() {
+                  _selectedDestination = _SettingsDestination.lanAccess;
+                }),
+              ),
           ],
         ),
         AppListSection(
@@ -511,6 +534,9 @@ class _SettingsPageState extends State<SettingsPage> {
             syncRuntimeConfig: true,
           );
         },
+      ),
+      _SettingsDestination.lanAccess => LanAccessSettingsSection(
+        controller: widget.lanAccessController!,
       ),
       _SettingsDestination.appearance => _AppearanceSection(
         settings: _settings,

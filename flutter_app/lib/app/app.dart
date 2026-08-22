@@ -14,17 +14,21 @@ import '../features/workspaces/application/workspace_store.dart';
 import '../features/workspaces/presentation/pages/workspaces_page.dart';
 import '../l10n/app_localizations.dart';
 import '../shared/widgets/adaptive_breakpoints.dart';
+import 'app_services.dart';
 import 'theme/app_theme.dart';
 
 class CodexmFlutterApp extends StatefulWidget {
-  const CodexmFlutterApp({super.key});
+  const CodexmFlutterApp({super.key, this.services});
+
+  final CodexmAppServices? services;
 
   @override
   State<CodexmFlutterApp> createState() => _CodexmFlutterAppState();
 }
 
 class _CodexmFlutterAppState extends State<CodexmFlutterApp> {
-  final _settingsStore = CodexSettingsStore();
+  late final CodexmAppServices _services;
+  late final CodexSettingsStore _settingsStore;
 
   Locale? _locale;
   CodexSettings _settings = const CodexSettings();
@@ -32,6 +36,8 @@ class _CodexmFlutterAppState extends State<CodexmFlutterApp> {
   @override
   void initState() {
     super.initState();
+    _services = widget.services ?? CodexmAppServices.create();
+    _settingsStore = _services.settingsStore;
     unawaited(_loadLocalePreference());
   }
 
@@ -106,6 +112,7 @@ class _CodexmFlutterAppState extends State<CodexmFlutterApp> {
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: _AppShell(
+            services: _services,
             onLocalePreferenceChanged: _handleLocalePreferenceChanged,
             onSettingsChanged: _handleSettingsChanged,
           ),
@@ -117,10 +124,12 @@ class _CodexmFlutterAppState extends State<CodexmFlutterApp> {
 
 class _AppShell extends StatefulWidget {
   const _AppShell({
+    required this.services,
     required this.onLocalePreferenceChanged,
     required this.onSettingsChanged,
   });
 
+  final CodexmAppServices services;
   final ValueChanged<Locale?> onLocalePreferenceChanged;
   final ValueChanged<CodexSettings> onSettingsChanged;
 
@@ -128,8 +137,8 @@ class _AppShell extends StatefulWidget {
   State<_AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<_AppShell> {
-  final _workspaceStore = WorkspaceStore();
+class _AppShellState extends State<_AppShell> with WidgetsBindingObserver {
+  late final WorkspaceStore _workspaceStore;
   final _updateStartupChecker = AppUpdateStartupChecker();
 
   int _selectedIndex = 0;
@@ -143,14 +152,37 @@ class _AppShellState extends State<_AppShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _workspaceStore = widget.services.workspaceStore;
     _loadContext();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_startupUpdateCheckTriggered) {
-        return;
-      }
-      _startupUpdateCheckTriggered = true;
-      unawaited(_updateStartupChecker.checkOnLaunch(context));
+      _maybeCheckForUpdates();
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _maybeCheckForUpdates();
+    }
+  }
+
+  void _maybeCheckForUpdates() {
+    if (_startupUpdateCheckTriggered || !mounted) {
+      return;
+    }
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    if (lifecycleState != null && lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+    _startupUpdateCheckTriggered = true;
+    unawaited(_updateStartupChecker.checkOnLaunch(context));
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _loadContext() async {
@@ -205,6 +237,7 @@ class _AppShellState extends State<_AppShell> {
               },
             ),
             SessionsPage(
+              turnCoordinator: widget.services.turnCoordinator,
               isActive: _selectedIndex == 0 && _workspaceSessionsVisible,
               activeWorkspaceId: _activeWorkspace?.id,
               selectedSessionId: _selectedSession?.id,
@@ -244,6 +277,7 @@ class _AppShellState extends State<_AppShell> {
       ),
       const McpPage(),
       SettingsPage(
+        lanAccessController: widget.services.lanAccessController,
         isActive: _selectedIndex == 2,
         onLocalePreferenceChanged: widget.onLocalePreferenceChanged,
         onSettingsChanged: widget.onSettingsChanged,

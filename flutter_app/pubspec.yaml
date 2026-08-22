@@ -39,7 +39,12 @@ dependencies:
   flutter_highlight: ^0.7.0
   intl: any
   path_provider: ^2.1.5
+  crypto: ^3.0.7
+  shelf: ^1.4.2
+  shelf_router: ^1.1.4
+  shelf_web_socket: ^3.0.0
   uuid: ^4.5.1
+  web_socket_channel: ^3.0.3
   xml: ^6.5.0
 
   # The following adds the Cupertino Icons font to your application.
@@ -63,6 +68,11 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
   generate: true
+
+  assets:
+    - assets/lan_web/
+    - assets/lan_web/vendor/
+    - android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
